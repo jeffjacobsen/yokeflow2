@@ -227,12 +227,12 @@ export function TaskDetailModal({ projectId, taskId, isOpen, onClose }: TaskDeta
 // Test item component
 function TestItem({ test, getCategoryColor }: { test: Test; getCategoryColor: (category: string) => string }) {
   const [expanded, setExpanded] = useState(false);
-  const [showTestCode, setShowTestCode] = useState(false);
+  const [showRequirements, setShowRequirements] = useState(false);
 
   // Parse steps if they're a JSON string
   const steps = typeof test.steps === 'string' ? JSON.parse(test.steps || '[]') : test.steps || [];
   const hasSteps = Array.isArray(steps) && steps.length > 0;
-  const hasTestCode = test.test_code && test.test_code.trim().length > 0;
+  const hasRequirements = (test.requirements && test.requirements.trim().length > 0) || (test.success_criteria && test.success_criteria.trim().length > 0);
 
   return (
     <div className="bg-gray-800/50 rounded-lg border border-gray-700/50 overflow-hidden">
@@ -298,15 +298,15 @@ function TestItem({ test, getCategoryColor }: { test: Test; getCategoryColor: (c
                   {expanded ? '▼' : '▶'} {steps.length} step{steps.length !== 1 ? 's' : ''} {expanded ? '(click to collapse)' : '(click to expand)'}
                 </p>
               )}
-              {hasTestCode && (
+              {hasRequirements && (
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    setShowTestCode(!showTestCode);
+                    setShowRequirements(!showRequirements);
                   }}
                   className="text-xs text-blue-400 hover:text-blue-300"
                 >
-                  {showTestCode ? 'Hide' : 'Show'} test code
+                  {showRequirements ? 'Hide' : 'Show'} requirements
                 </button>
               )}
             </div>
@@ -327,13 +327,21 @@ function TestItem({ test, getCategoryColor }: { test: Test; getCategoryColor: (c
           </div>
         )}
 
-        {/* Test Code Section */}
-        {showTestCode && hasTestCode && (
+        {/* Requirements Section */}
+        {showRequirements && hasRequirements && (
           <div className="mt-4 pt-4 border-t border-gray-700">
-            <h4 className="text-xs font-medium text-gray-400 mb-2">Test Code:</h4>
-            <pre className="bg-gray-950 rounded p-3 text-xs text-gray-300 overflow-x-auto">
-              <code>{test.test_code}</code>
-            </pre>
+            {test.requirements && (
+              <div className="mb-3">
+                <h4 className="text-xs font-medium text-gray-400 mb-2">Requirements:</h4>
+                <p className="text-sm text-gray-300 whitespace-pre-wrap">{test.requirements}</p>
+              </div>
+            )}
+            {test.success_criteria && (
+              <div className="mb-3">
+                <h4 className="text-xs font-medium text-gray-400 mb-2">Success Criteria:</h4>
+                <p className="text-sm text-gray-300 whitespace-pre-wrap">{test.success_criteria}</p>
+              </div>
+            )}
             {test.execution_log && (
               <div className="mt-3">
                 <h4 className="text-xs font-medium text-gray-400 mb-2">Last Execution Log:</h4>

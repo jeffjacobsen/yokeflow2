@@ -200,9 +200,17 @@ class TaskDatabase:
             project = dict(row)
 
             # Extract local_path from metadata JSONB if present
-            if project.get('metadata') and isinstance(project['metadata'], dict):
-                if 'local_path' in project['metadata']:
-                    project['local_path'] = project['metadata']['local_path']
+            # asyncpg may return JSONB as either a dict or a JSON string
+            metadata = project.get('metadata')
+            if metadata:
+                if isinstance(metadata, str):
+                    try:
+                        metadata = json.loads(metadata)
+                        project['metadata'] = metadata
+                    except (json.JSONDecodeError, TypeError):
+                        metadata = {}
+                if isinstance(metadata, dict) and 'local_path' in metadata:
+                    project['local_path'] = metadata['local_path']
 
             return project
 
@@ -709,6 +717,9 @@ class TaskDatabase:
         """
         Get next session number for a project.
 
+        Only considers non-negative session numbers (0=initializer, 1+=coding).
+        Expansion sessions use negative numbers and are excluded.
+
         Args:
             project_id: Project UUID
 
@@ -721,10 +732,83 @@ class TaskDatabase:
                 SELECT COALESCE(MAX(session_number), -1) + 1
                 FROM sessions
                 WHERE project_id = $1
+                AND session_number >= 0
                 """,
                 project_id
             )
             return result
+
+    async def get_next_expansion_session_number(self, project_id: UUID) -> int:
+        """
+        Get next expansion session number for a project.
+
+        Expansion sessions use negative numbers (-1, -2, -3, ...) so they
+        don't interfere with regular session numbering (0 for initializer, 1+ for coding).
+
+        Args:
+            project_id: Project UUID
+
+        Returns:
+            Next negative session number for expansion workers
+        """
+        async with self.acquire() as conn:
+            result = await conn.fetchval(
+                """
+                SELECT COALESCE(MIN(session_number), 0) - 1
+                FROM sessions
+                WHERE project_id = $1
+                """,
+                project_id
+            )
+            return result
+
+    async def create_expansion_session(
+        self,
+        project_id: UUID,
+        session_type: str,
+        model: str,
+    ) -> Dict[str, Any]:
+        """
+        Atomically create an expansion session with the next negative session number.
+
+        Uses a PostgreSQL advisory lock within an explicit transaction to serialize
+        concurrent session creation for the same project. The INSERT...SELECT alone
+        is NOT safe under READ COMMITTED because multiple transactions can read the
+        same MIN(session_number) before any of them commit.
+
+        The advisory lock (keyed on project_id hash) ensures only one worker at a
+        time computes and claims a session number. The lock is released automatically
+        when the transaction commits.
+
+        Args:
+            project_id: Project UUID
+            session_type: Session type (e.g., 'expansion')
+            model: Model name
+
+        Returns:
+            Created session record
+        """
+        async with self.acquire() as conn:
+            async with conn.transaction():
+                # Advisory lock serializes concurrent session creation for this project
+                await conn.execute(
+                    "SELECT pg_advisory_xact_lock(hashtext($1::text))",
+                    str(project_id)
+                )
+                row = await conn.fetchrow(
+                    """
+                    INSERT INTO sessions
+                    (project_id, session_number, type, model, status)
+                    SELECT $1,
+                           COALESCE(MIN(session_number), 0) - 1,
+                           $2, $3, 'pending'
+                    FROM sessions
+                    WHERE project_id = $1
+                    RETURNING *
+                    """,
+                    project_id, session_type, model
+                )
+                return dict(row)
 
     async def get_session_history(
         self,
@@ -928,6 +1012,39 @@ class TaskDatabase:
             )
             return [dict(row) for row in rows]
 
+    async def is_expansion_complete(
+        self,
+        project_id: UUID
+    ) -> bool:
+        """
+        Check if all epics have been expanded (have at least one task).
+
+        Used to verify parallel expansion completed successfully before
+        allowing coding sessions to start.
+
+        Args:
+            project_id: Project UUID
+
+        Returns:
+            True if all epics have at least one task, False otherwise
+        """
+        async with self.acquire() as conn:
+            # Count epics that have zero tasks
+            unexpanded_count = await conn.fetchval(
+                """
+                SELECT COUNT(*) FROM (
+                    SELECT e.id
+                    FROM epics e
+                    LEFT JOIN tasks t ON e.id = t.epic_id
+                    WHERE e.project_id = $1
+                    GROUP BY e.id
+                    HAVING COUNT(t.id) = 0
+                ) AS unexpanded
+                """,
+                project_id
+            )
+            return (unexpanded_count or 0) == 0
+
     # =========================================================================
     # Task Operations
     # =========================================================================
@@ -992,6 +1109,72 @@ class TaskDatabase:
                     LIMIT 1
                     """,
                     project_id
+                )
+
+                if not task_row:
+                    return None
+
+                task = dict(task_row)
+
+                # Get tests for this task
+                test_rows = await conn.fetch(
+                    """
+                    SELECT * FROM task_tests
+                    WHERE task_id = $1
+                    ORDER BY id
+                    """,
+                    task['id']
+                )
+
+                task['tests'] = [dict(row) for row in test_rows]
+
+                return task
+
+    async def claim_next_task(
+        self,
+        project_id: UUID,
+        worker_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Atomically claim the next available task for a parallel worker.
+
+        Uses FOR UPDATE SKIP LOCKED to prevent duplicate claims when
+        multiple workers are running concurrently.
+
+        Args:
+            project_id: Project UUID
+            worker_id: Unique identifier for the claiming worker
+
+        Returns:
+            Claimed task with epic info and tests, or None if no tasks available
+        """
+        with PerformanceLogger("claim_next_task", {"project_id": str(project_id), "worker_id": worker_id}):
+            async with self.acquire() as conn:
+                # Atomic CTE: SELECT + UPDATE in one round-trip
+                # FOR UPDATE SKIP LOCKED prevents duplicate claims
+                task_row = await conn.fetchrow(
+                    """
+                    WITH next AS (
+                        SELECT t.id
+                        FROM tasks t
+                        JOIN epics e ON t.epic_id = e.id
+                        WHERE t.project_id = $1
+                            AND t.done = false
+                            AND t.session_notes IS NULL
+                            AND e.status != 'completed'
+                        ORDER BY e.priority, t.priority, t.id
+                        LIMIT 1
+                        FOR UPDATE OF t SKIP LOCKED
+                    )
+                    UPDATE tasks
+                    SET session_notes = $2 || ' claimed at ' || NOW()::text
+                    FROM next
+                    WHERE tasks.id = next.id
+                    RETURNING tasks.*,
+                        (SELECT name FROM epics WHERE id = tasks.epic_id) as epic_name,
+                        (SELECT description FROM epics WHERE id = tasks.epic_id) as epic_description
+                    """,
+                    project_id, worker_id
                 )
 
                 if not task_row:

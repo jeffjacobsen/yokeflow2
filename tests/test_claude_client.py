@@ -216,24 +216,20 @@ class TestClaudeClient:
         assert sdk_env["ANTHROPIC_API_KEY"] == ""  # Explicitly cleared
 
     def test_create_client_mcp_server_not_found(self, tmp_path, mock_oauth_token, mock_load_dotenv):
-        """Test that client creation fails if MCP server is not built."""
+        """Test that client creation fails if MCP server verification fails."""
         project_dir = tmp_path / "test_project"
         project_dir.mkdir()
 
         # Set DATABASE_URL
         os.environ["DATABASE_URL"] = "postgresql://test:test@localhost:5432/testdb"
 
-        # Mock the specific path check for MCP server
-        original_exists = Path.exists
-
-        def mock_path_exists(self):
-            # Return False only for the MCP server path
-            if 'mcp-task-manager' in str(self) and 'index.js' in str(self):
-                return False
-            # Use original exists for other paths
-            return original_exists(self)
-
-        with patch.object(Path, 'exists', mock_path_exists):
+        # Mock verify_mcp_server to return failure (simulates missing/broken build)
+        with patch("server.client.claude.verify_mcp_server") as mock_verify:
+            mock_verify.return_value = {
+                "ok": False,
+                "message": "MCP server not found at /fake/path",
+                "rebuilt": False,
+            }
             with pytest.raises(FileNotFoundError) as excinfo:
                 create_client(
                     project_dir=project_dir,
@@ -241,7 +237,7 @@ class TestClaudeClient:
                     project_id="test-uuid"
                 )
 
-            assert "MCP task manager server not found" in str(excinfo.value)
+            assert "verification failed" in str(excinfo.value)
             assert "npm install && npm run build" in str(excinfo.value)
 
     def test_create_client_hooks_configured(self, setup_environment, mock_oauth_token, mock_load_dotenv, mock_claude_sdk):

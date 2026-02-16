@@ -25,6 +25,7 @@ class SessionStatus(Enum):
 class SessionType(Enum):
     """Session type enumeration."""
     INITIALIZER = "initializer"  # First session that sets up project
+    EXPANSION = "expansion"  # Parallel expansion workers (tasks + tests)
     CODING = "coding"  # Regular coding session
     REVIEW = "review"  # Review session for quality analysis
 

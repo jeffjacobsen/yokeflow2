@@ -273,6 +273,14 @@ class ApiClient {
     return response.data;
   }
 
+  async cancelExpansion(projectId: string): Promise<{ status: string; message: string }> {
+    const response = await this.client.post<{ status: string; message: string }>(
+      `/api/projects/${projectId}/expansion/cancel`,
+      {}
+    );
+    return response.data;
+  }
+
   // Legacy session endpoint (deprecated - use initializeProject or startCodingSessions)
   async startSession(projectId: string, config?: SessionConfig): Promise<StartSessionResponse> {
     const response = await this.client.post<StartSessionResponse>(

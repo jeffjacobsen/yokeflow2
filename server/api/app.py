@@ -88,6 +88,7 @@ from server.utils.errors import YokeFlowError, DatabaseError, ValidationError
 from server.api.validation import (
     ProjectCreateRequest,
     SessionStartRequest as SessionStartValidated,
+    ParallelCodingRequest,
     ProjectRenameRequest,
     EnvConfigRequest,
     LoginRequest as LoginRequestValidated,
@@ -2078,6 +2079,7 @@ async def reset_project_endpoint(project_id: str):
 async def initialize_project(
     project_id: str,
     initializer_model: Optional[str] = None,
+    parallel_expansion: Optional[bool] = None,
     background_tasks: BackgroundTasks = None
 ):
     """
@@ -2118,7 +2120,8 @@ async def initialize_project(
                 session = await orchestrator.start_initialization(
                     project_id=project_uuid,
                     initializer_model=initializer_model,
-                    progress_callback=progress_update
+                    progress_callback=progress_update,
+                    parallel_expansion=parallel_expansion,
                 )
 
                 # Send WebSocket notification
@@ -2250,6 +2253,69 @@ async def cancel_initialization(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/api/projects/{project_id}/expansion/cancel")
+async def cancel_expansion(
+    project_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Cancel running expansion sessions for a project.
+
+    Stops all expansion worker sessions and cleans up incomplete tasks/tests
+    that were created during expansion. Epics created during Session 0 are preserved.
+
+    Returns:
+        Status message with count of stopped workers
+
+    Raises:
+        400: No expansion sessions running
+        404: Project not found
+        500: Server error
+    """
+    try:
+        project_uuid = UUID(project_id)
+
+        async with DatabaseManager() as db:
+            project = await db.get_project(project_uuid)
+            if not project:
+                raise HTTPException(status_code=404, detail="Project not found")
+
+            # Find running expansion sessions
+            sessions = await db.get_session_history(project_uuid, limit=100)
+            expansion_sessions = [
+                s for s in sessions
+                if s.get('type') == 'expansion' and s.get('status') == 'running'
+            ]
+
+            if not expansion_sessions:
+                raise HTTPException(
+                    status_code=400,
+                    detail="No expansion sessions running. Nothing to cancel."
+                )
+
+            # Stop all expansion workers
+            stopped = 0
+            for session in expansion_sessions:
+                try:
+                    await orchestrator.stop_session(session['id'])
+                    stopped += 1
+                except Exception as e:
+                    logger.warning(f"Failed to stop expansion session {session['id']}: {e}")
+
+        return {
+            "status": "cancelled",
+            "message": f"Expansion cancelled. {stopped} worker(s) stopped.",
+            "project_id": project_id,
+            "stopped_workers": stopped,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to cancel expansion: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/api/projects/{project_id}/coding/start", response_model=SessionResponse)
 async def start_coding_sessions(
     project_id: str,
@@ -2338,6 +2404,84 @@ async def start_coding_sessions(
             raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Failed to start coding sessions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/projects/{project_id}/coding/parallel")
+async def start_parallel_coding(
+    project_id: str,
+    request: ParallelCodingRequest = Body(default=ParallelCodingRequest()),
+):
+    """
+    Start parallel coding with multiple concurrent agent workers.
+
+    Each worker independently claims and implements tasks using atomic
+    database locking to prevent duplicate work.
+
+    Args:
+        project_id: UUID of the project
+        request: ParallelCodingRequest with num_workers, coding_model, max_tasks_per_worker
+
+    Returns:
+        Status response with worker count and task info
+    """
+    try:
+        project_uuid = UUID(project_id)
+
+        from server.agent.parallel_orchestrator import ParallelOrchestrator
+
+        parallel_orchestrator = ParallelOrchestrator(
+            config=config,
+            event_callback=orchestrator.event_callback,
+        )
+
+        async def run_parallel():
+            try:
+                async def progress_update(event: Dict[str, Any]):
+                    await notify_project_update(str(project_uuid), {
+                        "type": "progress",
+                        "event": event
+                    })
+
+                result = await parallel_orchestrator.run_parallel_coding(
+                    project_id=project_uuid,
+                    num_workers=request.num_workers,
+                    coding_model=request.coding_model,
+                    max_tasks_per_worker=request.max_tasks_per_worker,
+                    progress_callback=progress_update,
+                )
+
+                await notify_project_update(str(project_uuid), {
+                    "type": "parallel_coding_complete",
+                    "result": result.to_dict()
+                })
+
+            except Exception as e:
+                logger.error(f"Parallel coding failed: {e}", exc_info=True)
+                await notify_project_update(str(project_uuid), {
+                    "type": "parallel_coding_error",
+                    "error": str(e)
+                })
+
+        # Store reference for potential stop
+        task = asyncio.create_task(run_parallel())
+        running_sessions[f"{project_id}_parallel"] = task
+
+        return {
+            "status": "started",
+            "project_id": project_id,
+            "num_workers": request.num_workers,
+            "coding_model": request.coding_model or config.models.coding,
+            "max_tasks_per_worker": request.max_tasks_per_worker,
+            "message": f"Parallel coding started with {request.num_workers} workers"
+        }
+
+    except ValueError as e:
+        if "not found" in str(e):
+            raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to start parallel coding: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -2501,6 +2645,11 @@ async def list_sessions(project_id: str):
                         session_dict[field] = session_dict[field].isoformat()
                     else:
                         session_dict[field] = str(session_dict[field])
+
+            # Map DB 'type' column to 'session_type' for frontend compatibility
+            # Frontend checks session.session_type (e.g., === 'expansion')
+            if 'type' in session_dict and 'session_type' not in session_dict:
+                session_dict['session_type'] = session_dict['type']
 
             # Parse metrics JSONB field (comes as string from asyncpg)
             if 'metrics' in session_dict:
@@ -2944,6 +3093,26 @@ async def websocket_endpoint(websocket: WebSocket, project_id: str):
 # Log Endpoints (Compatibility - logs are file-based)
 # =============================================================================
 
+def _parse_session_number_from_filename(stem: str) -> int | None:
+    """
+    Parse session number from a log filename stem.
+
+    Handles both positive (session_000_...) and negative (session_-01_...)
+    session numbers used by expansion workers.
+
+    Returns the session number as int, or None if parsing fails.
+    """
+    # stem is like "session_000_20260214_140523" or "session_-01_20260214_141054"
+    parts = stem.split('_')
+    if len(parts) < 2:
+        return None
+    # parts[1] could be "000", "-01", "-02", etc.
+    try:
+        return int(parts[1])
+    except ValueError:
+        return None
+
+
 @app.get("/api/projects/{project_id}/logs")
 async def list_logs(project_id: str):
     """List available log files for a project."""
@@ -2962,10 +3131,9 @@ async def list_logs(project_id: str):
         # Find all session log files
         log_files = []
         for log_file in sorted(logs_path.glob("session_*.txt")):
-            # Parse session number from filename
-            parts = log_file.stem.split('_')
-            if len(parts) >= 2 and parts[1].isdigit():
-                session_num = int(parts[1])
+            # Parse session number from filename (supports negative numbers like session_-01_...)
+            session_num = _parse_session_number_from_filename(log_file.stem)
+            if session_num is not None:
                 log_files.append({
                     "filename": log_file.name,
                     "session_number": session_num,
@@ -2976,9 +3144,8 @@ async def list_logs(project_id: str):
 
         # Also find JSONL logs
         for log_file in sorted(logs_path.glob("session_*.jsonl")):
-            parts = log_file.stem.split('_')
-            if len(parts) >= 2 and parts[1].isdigit():
-                session_num = int(parts[1])
+            session_num = _parse_session_number_from_filename(log_file.stem)
+            if session_num is not None:
                 log_files.append({
                     "filename": log_file.name,
                     "session_number": session_num,

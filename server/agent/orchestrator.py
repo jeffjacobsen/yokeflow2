@@ -36,6 +36,7 @@ if TYPE_CHECKING:
     from server.database.operations import TaskDatabase
 from server.client.prompts import (
     get_initializer_prompt,
+    get_expansion_prompt,
     get_coding_prompt,
     get_brownfield_coding_preamble,
     copy_spec_to_project,
@@ -92,6 +93,9 @@ class AgentOrchestrator:
 
         # Session managers for graceful shutdown
         self.session_managers: Dict[str, SessionManager] = {}
+
+        # Expansion worker tasks for cancellation (session_id -> asyncio.Task)
+        self._expansion_tasks: Dict[str, asyncio.Task] = {}
 
         # Session control flags (per-project)
         self.stop_after_current: Dict[str, bool] = {}  # project_id -> flag
@@ -536,20 +540,26 @@ class AgentOrchestrator:
         project_id: UUID,
         initializer_model: Optional[str] = None,
         progress_callback: Optional[Callable[[Dict[str, Any]], Awaitable[None]]] = None,
+        parallel_expansion: Optional[bool] = None,
     ) -> SessionInfo:
         """
-        Run initialization session (Session 1) for a project.
+        Run initialization session (Session 0) for a project.
 
         This method:
         - Creates the project structure (epics, tasks, tests)
         - Runs init.sh to setup the environment
-        - ALWAYS stops after Session 1 completes
+        - ALWAYS stops after Session 0 completes
         - Does NOT auto-continue to coding sessions
+
+        When parallel_expansion is enabled:
+        - Session 0 runs with planning-only prompt (creates epics, structure, git)
+        - After Session 0, parallel workers expand epics into tasks and tests
 
         Args:
             project_id: UUID of the project
             initializer_model: Model to use (defaults to config.models.initializer)
             progress_callback: Optional async callback for real-time progress updates
+            parallel_expansion: Override config.parallel.parallel_expansion setting
 
         Returns:
             SessionInfo for the completed initialization session
@@ -575,14 +585,91 @@ class AgentOrchestrator:
         if not initializer_model:
             initializer_model = self.config.models.initializer
 
-        # Run Session 1 (initialization only, no looping)
-        return await self.start_session(
+        # Determine parallel expansion setting
+        use_parallel = parallel_expansion if parallel_expansion is not None else self.config.parallel.parallel_expansion
+        planning_only = use_parallel
+
+        # Run Session 0 (with planning_only if parallel expansion enabled)
+        session_info = await self.start_session(
             project_id=project_id,
             initializer_model=initializer_model,
             coding_model=None,  # Not needed for initialization
             max_iterations=None,  # Not applicable
-            progress_callback=progress_callback
+            progress_callback=progress_callback,
+            planning_only=planning_only,
         )
+
+        # Notify that Session 0 is complete (so UI can update before expansion)
+        if self.event_callback:
+            await self.event_callback(project_id, "session_complete", {
+                "session": session_info.to_dict()
+            })
+
+        # If parallel expansion enabled, run expansion workers after Session 0
+        if use_parallel and session_info.status != SessionStatus.ERROR:
+            # Re-fetch project after Session 0 (local_path may have been set during start_session)
+            async with DatabaseManager() as db:
+                project = await db.get_project(project_id)
+            local_path = project.get('local_path', '')
+            if local_path:
+                project_path = Path(local_path)
+            else:
+                # Fallback: reconstruct from generations dir + project name
+                logger.warning(f"Project {project_id} has no local_path, reconstructing from project name")
+                project_name = project.get('name', str(project_id))
+                project_path = Path(self.config.project.default_generations_dir) / project_name
+            project_type = project.get('project_type', 'greenfield')
+
+            # Get sandbox type from project metadata
+            project_metadata = project.get('metadata', {})
+            if isinstance(project_metadata, str):
+                import json
+                project_metadata = json.loads(project_metadata)
+            project_sandbox_type = project_metadata.get('settings', {}).get('sandbox_type')
+            if not project_sandbox_type:
+                project_sandbox_type = self.config.sandbox.type
+
+            # Get codebase analysis for brownfield
+            codebase_analysis = None
+            if project_type == 'brownfield':
+                codebase_analysis = project.get('codebase_analysis', {})
+                if isinstance(codebase_analysis, str):
+                    import json as json_mod
+                    try:
+                        codebase_analysis = json_mod.loads(codebase_analysis)
+                    except (json_mod.JSONDecodeError, TypeError):
+                        codebase_analysis = {}
+
+            num_workers = self.config.parallel.max_expansion_workers
+            expansion_result = await self._run_parallel_expansion(
+                project_id=project_id,
+                project_path=project_path,
+                project_type=project_type,
+                project_sandbox_type=project_sandbox_type,
+                initializer_model=initializer_model,
+                num_workers=num_workers,
+                progress_callback=progress_callback,
+                codebase_analysis=codebase_analysis,
+            )
+
+            logger.info(
+                f"Parallel expansion complete: {expansion_result.get('epics_expanded', 0)} epics expanded "
+                f"by {expansion_result.get('workers', 0)} workers"
+            )
+
+            if expansion_result.get('errors'):
+                for error in expansion_result['errors']:
+                    logger.error(f"Expansion error: {error}")
+
+            # Run test coverage analysis now that tests exist (deferred from Session 0)
+            if expansion_result.get('epics_expanded', 0) > 0:
+                try:
+                    async with DatabaseManager() as db:
+                        await self.quality.run_test_coverage_analysis(project_id, db)
+                except Exception as e:
+                    logger.warning(f"Test coverage analysis failed after expansion: {e}")
+
+        return session_info
 
     async def start_coding_sessions(
         self,
@@ -809,6 +896,7 @@ class AgentOrchestrator:
         max_iterations: Optional[int] = None,
         progress_callback: Optional[Callable[[Dict[str, Any]], Awaitable[None]]] = None,
         resume_context: Optional[Dict[str, Any]] = None,
+        planning_only: bool = False,
     ) -> SessionInfo:
         """
         Start an agent session for a project.
@@ -1053,7 +1141,10 @@ class AgentOrchestrator:
                 project_type = project.get('project_type', 'greenfield')
 
                 if is_initializer:
-                    base_prompt = get_initializer_prompt(project_type=project_type)
+                    base_prompt = get_initializer_prompt(
+                        project_type=project_type,
+                        planning_only=planning_only,
+                    )
                     # Inject PROJECT_ID at the beginning of the prompt for easy access
                     prompt = f"PROJECT_ID: {project_id}\n\n{base_prompt}"
 
@@ -1285,7 +1376,8 @@ class AgentOrchestrator:
                     await self.quality.maybe_trigger_deep_review(session_id, project_path, quality_score)
 
                 # Test Coverage Analysis: Run after initialization session
-                if is_initializer and status != "error":
+                # Skip when planning_only=True (tests created by expansion workers later)
+                if is_initializer and status != "error" and not planning_only:
                     await self.quality.run_test_coverage_analysis(project_id, db)
 
                 # Clear logger from session manager
@@ -1388,9 +1480,343 @@ class AgentOrchestrator:
 
             return session_info
 
+    # ── Parallel Expansion ───────────────────────────────────────────
+
+    async def _run_parallel_expansion(
+        self,
+        project_id: UUID,
+        project_path: Path,
+        project_type: str,
+        project_sandbox_type: str,
+        initializer_model: str,
+        num_workers: int = 2,
+        progress_callback: Optional[Callable] = None,
+        codebase_analysis: Optional[Dict] = None,
+    ) -> Dict[str, Any]:
+        """
+        Spawn parallel workers to expand epics into tasks and tests.
+        Called after Session 0 creates epics with planning-only prompt.
+
+        Args:
+            project_id: Project UUID
+            project_path: Path to project directory
+            project_type: 'greenfield' or 'brownfield'
+            project_sandbox_type: Sandbox type from project metadata
+            initializer_model: Model to use for expansion (same as Session 0)
+            num_workers: Number of parallel expansion workers
+            progress_callback: Optional async callback for progress events
+            codebase_analysis: Codebase analysis dict for brownfield projects
+
+        Returns:
+            Dict with workers count, epics_expanded, and errors
+        """
+        import time as time_mod
+
+        start_time = time_mod.time()
+
+        async with DatabaseManager() as db:
+            unexpanded = await db.get_epics_needing_expansion(project_id)
+
+        if not unexpanded:
+            logger.info("All epics already expanded, skipping parallel expansion")
+            return {"workers": 0, "epics_expanded": 0, "errors": []}
+
+        # Auto-scale workers based on epic count (~6 epics per worker)
+        # Then cap at the configured maximum and number of epics
+        EPICS_PER_WORKER = 6
+        auto_workers = max(1, (len(unexpanded) + EPICS_PER_WORKER - 1) // EPICS_PER_WORKER)
+        num_workers = min(auto_workers, num_workers, len(unexpanded))
+
+        logger.info(
+            f"Starting parallel expansion: {num_workers} workers for "
+            f"{len(unexpanded)} unexpanded epics"
+        )
+
+        # Notify
+        if self.event_callback:
+            await self.event_callback(project_id, "expansion_started", {
+                "num_workers": num_workers,
+                "total_epics": len(unexpanded),
+            })
+
+        # Round-robin assign epics to workers
+        assignments: List[List[Dict]] = [[] for _ in range(num_workers)]
+        for i, epic in enumerate(unexpanded):
+            assignments[i % num_workers].append(epic)
+
+        # Launch workers concurrently
+        tasks = []
+        for i, epic_list in enumerate(assignments):
+            worker_id = f"expander-{i + 1}"
+            tasks.append(asyncio.create_task(
+                self._run_expansion_worker(
+                    worker_id=worker_id,
+                    project_id=project_id,
+                    project_path=project_path,
+                    project_type=project_type,
+                    project_sandbox_type=project_sandbox_type,
+                    model=initializer_model,
+                    assigned_epics=epic_list,
+                    progress_callback=progress_callback,
+                    codebase_analysis=codebase_analysis,
+                )
+            ))
+
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Collect errors
+        errors = []
+        for i, r in enumerate(results):
+            if isinstance(r, Exception):
+                error_msg = f"expander-{i + 1}: {str(r)}"
+                errors.append(error_msg)
+                logger.error(f"Expansion worker error: {error_msg}")
+
+        # Check for any unexpanded epics remaining
+        async with DatabaseManager() as db:
+            still_unexpanded = await db.get_epics_needing_expansion(project_id)
+
+        epics_expanded = len(unexpanded) - len(still_unexpanded)
+        duration = time_mod.time() - start_time
+
+        if still_unexpanded:
+            logger.warning(
+                f"{len(still_unexpanded)} epics still unexpanded after parallel expansion"
+            )
+
+        logger.info(
+            f"Parallel expansion complete: {epics_expanded}/{len(unexpanded)} epics expanded "
+            f"in {duration:.1f}s with {len(errors)} errors"
+        )
+
+        # Notify
+        if self.event_callback:
+            await self.event_callback(project_id, "expansion_complete", {
+                "total_epics_expanded": epics_expanded,
+                "total_epics": len(unexpanded),
+                "duration_seconds": duration,
+                "errors": errors,
+            })
+
+        return {
+            "workers": num_workers,
+            "epics_expanded": epics_expanded,
+            "duration_seconds": duration,
+            "errors": errors,
+        }
+
+    async def _run_expansion_worker(
+        self,
+        worker_id: str,
+        project_id: UUID,
+        project_path: Path,
+        project_type: str,
+        project_sandbox_type: str,
+        model: str,
+        assigned_epics: List[Dict],
+        progress_callback: Optional[Callable] = None,
+        codebase_analysis: Optional[Dict] = None,
+    ) -> None:
+        """
+        Single expansion worker: expand assigned epics into tasks + tests.
+
+        Each worker gets its own ClaudeSDKClient with MCP server access
+        and runs the expansion prompt for its assigned epics.
+
+        Args:
+            worker_id: Worker identifier (e.g., 'expander-1')
+            project_id: Project UUID
+            project_path: Path to project directory
+            project_type: 'greenfield' or 'brownfield'
+            project_sandbox_type: Sandbox type
+            model: Model to use (initializer model)
+            assigned_epics: List of epic dicts to expand
+            progress_callback: Optional progress callback
+            codebase_analysis: Codebase analysis for brownfield projects
+        """
+        epic_names = [e.get('name', 'unnamed') for e in assigned_epics]
+        logger.info(
+            f"[{worker_id}] Starting expansion worker for {len(assigned_epics)} epics: "
+            f"{', '.join(epic_names)}"
+        )
+
+        # Build epic list for prompt injection
+        epic_lines = []
+        for epic in assigned_epics:
+            epic_lines.append(
+                f"- **Epic ID**: `{epic['id']}`\n"
+                f"  **Name**: {epic.get('name', 'N/A')}\n"
+                f"  **Description**: {epic.get('description', 'N/A')}\n"
+                f"  **Priority**: {epic.get('priority', 0)}"
+            )
+
+        # Load expansion prompt and inject epic assignments + project ID
+        base_prompt = get_expansion_prompt()
+        prompt = (
+            f"PROJECT_ID: {project_id}\n\n"
+            f"## Your Assigned Epics ({len(assigned_epics)} epics)\n\n"
+            + "\n\n".join(epic_lines)
+            + f"\n\n{base_prompt}"
+        )
+
+        # For brownfield: inject codebase analysis
+        if project_type == 'brownfield' and codebase_analysis:
+            import json as json_mod
+            analysis_str = json_mod.dumps(codebase_analysis, indent=2)
+            prompt += (
+                f"\n\n## Codebase Analysis (Pre-computed)\n"
+                f"Use this to understand the existing codebase when creating tasks.\n"
+                f"Reference specific files and patterns in task descriptions.\n"
+                f"Include regression tests where changes affect existing behavior.\n"
+                f"```json\n{analysis_str}\n```"
+            )
+
+        # Create DB session for this worker
+        # Expansion sessions use negative numbers (-1, -2, ...) so they don't
+        # interfere with regular session numbering (0=initializer, 1+=coding)
+        # Uses atomic INSERT...SELECT to avoid race conditions between concurrent workers
+        session_id = None
+        session_number = None
+        try:
+            async with DatabaseManager() as db:
+                session = await db.create_expansion_session(
+                    project_id=project_id,
+                    session_type=SessionType.EXPANSION.value,
+                    model=model,
+                )
+
+                session_id = session['id']
+                session_number = session['session_number']
+                await db.start_session(session_id)
+
+            # Notify UI that expansion worker session has started
+            if self.event_callback:
+                await self.event_callback(project_id, "session_started", {
+                    "session": {
+                        "session_id": str(session_id),
+                        "session_number": session_number,
+                        "session_type": SessionType.EXPANSION.value,
+                        "model": model,
+                        "status": "running",
+                        "worker_id": worker_id,
+                    }
+                })
+
+            # Register session for cancellation support
+            current_task = asyncio.current_task()
+            if current_task and session_id:
+                self._expansion_tasks[str(session_id)] = current_task
+
+            # Create event callback for logger (sync wrapper for async callback)
+            def logger_event_callback(event_type: str, data: dict):
+                """Sync wrapper for async event callback."""
+                if self.event_callback:
+                    data['project_id'] = str(project_id)
+                    data['session_id'] = str(session_id)
+                    try:
+                        loop = asyncio.get_event_loop()
+                        if loop.is_running():
+                            asyncio.create_task(self.event_callback(project_id, event_type, data))
+                    except RuntimeError:
+                        pass
+
+            # Create session logger
+            session_logger = create_session_logger(
+                project_path, session_number, SessionType.EXPANSION.value,
+                model, sandbox_type="local",
+                event_callback=logger_event_callback,
+            )
+            session_logger.session_id = str(session_id)
+            session_logger.project_id = str(project_id)
+
+            # Create SDK client (no docker_container needed -- expansion is DB-only)
+            client = create_client(
+                project_path,
+                model,
+                project_id=str(project_id),
+            )
+
+            # Run agent session
+            session_status = SessionStatus.COMPLETED
+            error_msg = None
+            try:
+                async with client:
+                    status, response_text, _summary = await run_agent_session(
+                        client=client,
+                        message=prompt,
+                        project_dir=project_path,
+                        logger=session_logger,
+                        verbose=False,
+                        progress_callback=progress_callback,
+                    )
+
+                    if status == "error":
+                        session_status = SessionStatus.ERROR
+                        error_msg = response_text[:500] if response_text else "Unknown error"
+
+            except Exception as e:
+                session_status = SessionStatus.ERROR
+                error_msg = str(e)[:500]
+                logger.error(f"[{worker_id}] Expansion session error: {e}", exc_info=True)
+
+            # End session in DB
+            async with DatabaseManager() as db:
+                await db.end_session(
+                    session_id=session_id,
+                    status=session_status.value,
+                    error_message=error_msg,
+                    metrics={
+                        "worker_id": worker_id,
+                        "assigned_epics": [str(e['id']) for e in assigned_epics],
+                        "parallel_expansion": True,
+                    },
+                )
+
+            logger.info(
+                f"[{worker_id}] Expansion session {session_number} ended: {session_status.value}"
+            )
+
+            # Notify: expansion-specific event + generic session_complete for UI refresh
+            if self.event_callback:
+                await self.event_callback(project_id, "expansion_worker_complete", {
+                    "worker_id": worker_id,
+                    "session_number": session_number,
+                    "status": session_status.value,
+                    "epics_assigned": len(assigned_epics),
+                })
+                await self.event_callback(project_id, "session_complete", {
+                    "session_id": str(session_id),
+                    "session_number": session_number,
+                    "status": session_status.value,
+                })
+
+            if session_status == SessionStatus.ERROR:
+                raise RuntimeError(f"Expansion worker {worker_id} failed: {error_msg}")
+
+        except Exception as e:
+            # Ensure session is ended even on unexpected errors
+            if session_id:
+                try:
+                    async with DatabaseManager() as db:
+                        await db.end_session(
+                            session_id=session_id,
+                            status=SessionStatus.ERROR.value,
+                            error_message=str(e)[:500],
+                        )
+                except Exception:
+                    pass
+            raise
+        finally:
+            # Clean up expansion task reference
+            if session_id and str(session_id) in self._expansion_tasks:
+                del self._expansion_tasks[str(session_id)]
+
     async def stop_session(self, session_id: UUID, reason: str = "User requested stop") -> bool:
         """
         Stop an active session immediately.
+
+        Handles both regular sessions (via SessionManager) and expansion
+        worker sessions (via asyncio task cancellation).
 
         Args:
             session_id: UUID of the session to stop
@@ -1413,6 +1839,22 @@ class AgentOrchestrator:
                     interruption_reason=reason
                 )
 
+            return True
+
+        # Check if this is an expansion worker session
+        if session_id_str in self._expansion_tasks:
+            task = self._expansion_tasks[session_id_str]
+            task.cancel()
+
+            # Update database
+            async with DatabaseManager() as db:
+                await db.end_session(
+                    session_id,
+                    SessionStatus.INTERRUPTED.value,
+                    interruption_reason=reason
+                )
+
+            del self._expansion_tasks[session_id_str]
             return True
 
         return False

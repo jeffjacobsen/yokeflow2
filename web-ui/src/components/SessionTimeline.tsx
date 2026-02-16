@@ -33,11 +33,12 @@ export function SessionTimeline({ sessions, projectId, onSessionStopped }: Sessi
   const getDisplayMetrics = (session: Session): { label: string; value: number | string; highlight?: boolean }[] => {
     const metrics = session.metrics || {};
     const isInitialization = session.session_number === 0 || session.session_type === 'initializer';
+    const isExpansion = session.session_type === 'expansion';
 
     const result: { label: string; value: number | string; highlight?: boolean }[] = [];
 
-    if (isInitialization) {
-      // Initialization session: show what was created
+    if (isInitialization || isExpansion) {
+      // Initialization/expansion session: show what was created
       if (metrics.epics_created) result.push({ label: 'Epics Created', value: metrics.epics_created });
       if (metrics.tasks_created) result.push({ label: 'Tasks Created', value: metrics.tasks_created });
       if (metrics.tests_created) result.push({ label: 'Tests Created', value: metrics.tests_created });
@@ -158,7 +159,11 @@ export function SessionTimeline({ sessions, projectId, onSessionStopped }: Sessi
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-3">
                   <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                    {session.session_number === 0 ? 'Initialization' : `Session #${session.session_number}`}
+                    {session.session_number === 0
+                      ? 'Initialization'
+                      : session.session_type === 'expansion'
+                        ? `Expansion Worker ${Math.abs(session.session_number)}`
+                        : `Coding Session #${session.session_number}`}
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="px-2 py-0.5 text-xs rounded bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">

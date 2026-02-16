@@ -45,6 +45,7 @@ CREATE TYPE project_status AS ENUM (
 -- Session types
 CREATE TYPE session_type AS ENUM (
     'initializer',
+    'expansion',
     'coding',
     'review'
 );

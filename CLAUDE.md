@@ -6,15 +6,17 @@ This file provides guidance to Claude Code when working with this repository.
 
 **YokeFlow 2** - An autonomous AI development platform that uses Claude to build complete applications over multiple sessions.
 
-**Status**: Production Ready - v2.2.0 (February 2026) ✅ **Brownfield Support**
+**Status**: Production Ready - v2.3.0 (February 2026) ✅ **Parallel Expansion**
 
 **Architecture**: API-first platform with FastAPI + Next.js Web UI + PostgreSQL + MCP task management
 
-**Workflow**: Opus plans roadmap (Session 0) → Sonnet implements features (Sessions 1+)
+**Workflow**: Opus plans roadmap (Session 0) → Parallel workers expand epics → Sonnet implements features (Sessions 1+)
 
 **Latest Updates** (February 2026):
+- ✅ **Parallel Expansion**: Session 0 creates epics, then parallel workers expand into tasks/tests (~4x faster)
+- ✅ **MCP Pre-flight Check**: Auto-rebuilds stale MCP server, validates before sessions start
+- ✅ **Real-time Expansion UI**: WebSocket events for expansion progress, live session updates
 - ✅ **Brownfield Support**: Import existing codebases from local paths or GitHub, analyze, and modify (43 tests)
-- ✅ **Codebase Analysis**: Detects 20+ languages, 15+ frameworks, test/CI systems automatically
 - ✅ **REST API Complete**: 60+ endpoints with comprehensive validation
 - ✅ **Quality System**: 8-phase quality system with test tracking and epic re-testing
 - ✅ **Production Hardening**: Database retry logic, intervention system, session checkpointing
@@ -22,18 +24,21 @@ This file provides guidance to Claude Code when working with this repository.
 
 ## Core Workflow
 
-**Greenfield Session 0**: Reads `app_spec.txt` → Creates epics/tasks/tests in PostgreSQL → Runs `init.sh`
+**Greenfield Session 0**: Reads `app_spec.txt` → Creates epics in PostgreSQL → Runs `init.sh` → Parallel workers expand epics into tasks/tests
 
-**Brownfield Session 0**: Explores imported codebase → Reads `change_spec.md` → Creates scoped epics/tasks for modifications
+**Brownfield Session 0**: Explores imported codebase → Reads `change_spec.md` → Creates scoped epics → Parallel workers expand
+
+**Parallel Expansion**: After Session 0, up to 4 workers expand epics concurrently (~6 epics/worker, auto-scaled). Uses negative session numbers (-1, -2, ...) and advisory locks for safe concurrent DB access.
 
 **Sessions 1+ (Coding)**: Get next task → Implement → Browser verify (with Playwright) → Update database → Git commit → Auto-continue
 
 **Key Files**:
-- `server/agent/orchestrator.py` - Session lifecycle management (greenfield + brownfield)
+- `server/agent/orchestrator.py` - Session lifecycle + parallel expansion (greenfield + brownfield)
 - `server/agent/codebase_import.py` - Codebase import and analysis (brownfield)
 - `server/agent/agent.py` - Agent loop and session logic
-- `server/database/operations.py` - PostgreSQL abstraction (async) + retry logic
+- `server/database/operations.py` - PostgreSQL abstraction (async) + retry logic + atomic session creation
 - `server/database/retry.py` - Retry logic with exponential backoff (30 tests)
+- `server/client/claude.py` - Claude SDK client + MCP pre-flight check/auto-rebuild
 - `server/agent/checkpoint.py` - Session checkpointing and recovery (19 tests)
 - `server/agent/session_manager.py` - Intervention system with DB persistence (15 tests)
 - `server/utils/logging.py` - Structured logging with JSON/dev formatters (19 tests)
@@ -41,7 +46,7 @@ This file provides guidance to Claude Code when working with this repository.
 - `server/api/app.py` - REST API + WebSocket
 - `server/utils/observability.py` - Session logging (JSONL + TXT)
 - `server/utils/security.py` - Blocklist validation
-- `prompts/` - Agent instructions
+- `prompts/` - Agent instructions (including `expansion_prompt.md`)
 
 
 ## Database
@@ -82,6 +87,8 @@ Must build before use: `cd mcp-task-manager && npm run build`
 - `models.initializer` / `models.coding` - Override default Opus/Sonnet models
 - `timing.auto_continue_delay` - Seconds between sessions (default 3)
 - `project.max_iterations` - Limit session count (null = unlimited)
+- `parallel.parallel_expansion` - Enable parallel epic expansion (default: true)
+- `parallel.max_expansion_workers` - Max concurrent expansion workers (default: 4, auto-scales based on epic count)
 - `brownfield.default_feature_branch_prefix` - Branch prefix (default: `yokeflow/`)
 - `brownfield.run_existing_tests_before_changes` / `after_changes` - Regression safety (default: true)
 
@@ -133,7 +140,7 @@ yokeflow2/
 ├── server/                  # All server code (reorganized)
 │   ├── agent/               # Session orchestration & lifecycle
 │   │   ├── agent.py         # Agent loop and session logic
-│   │   ├── orchestrator.py  # Session lifecycle management (greenfield + brownfield)
+│   │   ├── orchestrator.py  # Session lifecycle + parallel expansion
 │   │   ├── codebase_import.py  # Codebase import & analysis (brownfield)
 │   │   ├── session_manager.py  # Intervention system (DB persistence)
 │   │   ├── checkpoint.py    # Session checkpointing and recovery
@@ -228,7 +235,7 @@ yokeflow2/
 ## Testing
 
 **Test Suite Status** (February 2026):
-- ✅ **~255 total tests** across all test files (including 43 brownfield tests)
+- ✅ **533+ total tests** across all test files (46 parallel expansion, 13 MCP pre-flight, 43 brownfield)
 - ✅ **70% coverage achieved** (target met)
 - ✅ **Production ready** with comprehensive test infrastructure
 
@@ -247,6 +254,9 @@ pytest --cov=server --cov-report=html --cov-report=term-missing
 **Key Test Files**:
 ```bash
 pytest tests/test_orchestrator.py            # Session lifecycle (17 tests)
+pytest tests/test_parallel_expansion.py      # Parallel expansion (46 tests)
+pytest tests/test_parallel_orchestrator.py   # Parallel orchestrator (varies)
+pytest tests/test_mcp_preflight.py           # MCP pre-flight check (13 tests)
 pytest tests/test_codebase_import.py         # Brownfield import & analysis (19 tests)
 pytest tests/test_brownfield_orchestrator.py # Brownfield orchestration (10 tests)
 pytest tests/test_brownfield_validation.py   # Brownfield validation (14 tests)
@@ -400,6 +410,17 @@ state = await recovery.restore_from_checkpoint(checkpoint_id)
 
 ## Recent Changes
 
+**February 15, 2026 - v2.3.0 Parallel Expansion & Reliability**:
+- ✅ **Parallel Expansion**: Session 0 creates epics (planning-only), then up to 4 workers expand concurrently
+- ✅ **Auto-scaling Workers**: ~6 epics/worker, capped at `max_expansion_workers` config
+- ✅ **Advisory Lock**: `pg_advisory_xact_lock` serializes concurrent session creation (prevents duplicate key races)
+- ✅ **MCP Pre-flight Check**: Validates build exists, detects stale builds, auto-rebuilds, syntax checks
+- ✅ **Real-time Expansion UI**: WebSocket events (`expansion_started`, `expansion_worker_complete`, `expansion_complete`)
+- ✅ **Expansion Session Labels**: UI shows "Expansion Worker N" in History, Logs, and Current Session
+- ✅ **Negative Session Numbers**: Expansion workers use -1, -2, ... to avoid colliding with coding sessions
+- ✅ **Bug Fixes**: Metadata JSON parsing, log directory path fallback, `isdigit()` for negative numbers
+- ✅ **Tests**: 46 parallel expansion tests, 13 MCP pre-flight tests (533 total, 0 failures)
+
 **February 11, 2026 - v2.2.0 Brownfield Support**:
 - ✅ **Codebase Import**: Import from local paths or GitHub URLs (public + private repos)
 - ✅ **Codebase Analysis**: Detects languages, frameworks, test systems, CI, patterns (670-line module)
@@ -494,16 +515,17 @@ state = await recovery.restore_from_checkpoint(checkpoint_id)
 
 ## Release Status
 
-**Current State**: Production Ready - v2.2.0
+**Current State**: Production Ready - v2.3.0
 
-**v2.2 Release Highlights**:
-- ✅ **Brownfield Support**: Import and modify existing codebases (local or GitHub)
-- ✅ **Codebase Analysis**: 20+ languages, 15+ frameworks, test/CI auto-detection
-- ✅ **Brownfield Prompts**: Specialized initializer and coding preamble for modifications
-- ✅ **Feature Branch Workflow**: Safe modifications with one-click rollback
-- ✅ **43 Brownfield Tests**: Comprehensive coverage for import, orchestration, and validation
+**v2.3 Release Highlights**:
+- ✅ **Parallel Expansion**: Up to 4 workers expand epics concurrently (~4x faster initialization)
+- ✅ **MCP Pre-flight Check**: Auto-rebuilds stale MCP server, validates before sessions
+- ✅ **Real-time Expansion UI**: WebSocket events for live expansion progress
+- ✅ **Advisory Lock Concurrency**: PostgreSQL advisory locks prevent race conditions
+- ✅ **533+ Tests**: 46 parallel expansion + 13 MCP pre-flight tests added
 
 **Previous Releases**:
+- v2.2: Brownfield support (import/modify existing codebases, 43 tests)
 - v2.1: Quality system (8 phases), 60+ API endpoints, 20+ MCP tools
 - v2.0: REST API, verification system, production hardening, clean architecture
 

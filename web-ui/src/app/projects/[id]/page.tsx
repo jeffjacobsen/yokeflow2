@@ -33,6 +33,7 @@ export default function ProjectDetailPage() {
   const [isInitializing, setIsInitializing] = useState(false);
   const [isStartingCoding, setIsStartingCoding] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [isCancellingExpansion, setIsCancellingExpansion] = useState(false);
   const [activeTab, setActiveTab] = useState<'current' | 'history' | 'quality' | 'logs' | 'screenshots' | 'interventions'>('current');
   const [isStopping, setIsStopping] = useState(false);
   const [isStoppingAfterCurrent, setIsStoppingAfterCurrent] = useState(false);
@@ -44,6 +45,7 @@ export default function ProjectDetailPage() {
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [showCancelInitDialog, setShowCancelInitDialog] = useState(false);
   const [showDeleteProjectDialog, setShowDeleteProjectDialog] = useState(false);
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
 
   // Panel State: 'session' or 'project' (shows Session Details by default)
   const [activePanel, setActivePanel] = useState<'session' | 'project'>('session');
@@ -79,6 +81,20 @@ export default function ProjectDetailPage() {
       // Reload project to get updated progress when a test result changes
       console.log(`[ProjectDetail] Test ${testId} updated: passes=${passes}`);
       loadProject();
+    },
+    onExpansionStarted: (numWorkers, totalEpics) => {
+      console.log(`[ProjectDetail] Expansion started: ${numWorkers} workers, ${totalEpics} epics`);
+      loadSessions();
+    },
+    onExpansionWorkerComplete: (workerId, _sessionNumber, status) => {
+      console.log(`[ProjectDetail] Expansion worker ${workerId} complete: ${status}`);
+      loadSessions();
+      loadProject();  // Refresh progress counters
+    },
+    onExpansionComplete: (totalExpanded, totalEpics, _errors) => {
+      console.log(`[ProjectDetail] Expansion complete: ${totalExpanded}/${totalEpics} epics`);
+      loadSessions();
+      loadProject();  // Refresh progress counters
     },
   });
 
@@ -130,6 +146,13 @@ export default function ProjectDetailPage() {
         if (!hasRunning) {
           setIsStopping(false);
           setIsStoppingAfterCurrent(false);
+          setSelectedSessionId(null);
+        } else if (selectedSessionId) {
+          // Clear selection if the selected session is no longer running
+          const selectedStillRunning = data.some((s: any) => s.session_id === selectedSessionId && s.status === 'running');
+          if (!selectedStillRunning) {
+            setSelectedSessionId(null);
+          }
         }
       }
     } catch (err) {
@@ -221,17 +244,38 @@ export default function ProjectDetailPage() {
     }
   }
 
+  async function handleCancelExpansion() {
+    setIsCancellingExpansion(true);
+    setError(null);
+    try {
+      await api.cancelExpansion(projectId);
+      await Promise.all([loadProject(), loadSessions()]);
+      toast.success('Expansion cancelled', {
+        description: 'Expansion workers have been stopped'
+      });
+    } catch (err: any) {
+      console.error('Failed to cancel expansion:', err);
+      const errorMsg = err.response?.data?.detail || err.message || 'Unknown error';
+      toast.error(`Failed to cancel expansion: ${errorMsg}`);
+    } finally {
+      setIsCancellingExpansion(false);
+    }
+  }
+
   async function handleStopSession() {
-    const runningSession = sessions.find(s => s.status === 'running');
-    if (!runningSession) return;
+    const allRunning = sessions.filter(s => s.status === 'running');
+    if (allRunning.length === 0) return;
 
     setIsStopping(true);
     try {
-      await api.stopSession(projectId, runningSession.session_id);
+      // Stop all running sessions in parallel
+      await Promise.all(
+        allRunning.map(s => api.stopSession(projectId, s.session_id))
+      );
       await loadSessions();
     } catch (err: any) {
-      console.error('Failed to stop session:', err);
-      setError(`Failed to stop session: ${err.response?.data?.detail || err.message}`);
+      console.error('Failed to stop session(s):', err);
+      setError(`Failed to stop session(s): ${err.response?.data?.detail || err.message}`);
       setIsStopping(false);
     }
   }
@@ -365,19 +409,35 @@ export default function ProjectDetailPage() {
   const { progress, next_task, is_initialized } = project;
   const isComplete = progress.completed_tasks === progress.total_tasks && progress.total_tasks > 0;
   const hasRunningSession = sessions.some(s => s.status === 'running' || s.status === 'pending');
-  const hasCodingSessions = sessions.some(s => s.session_number > 0);
+  const hasCodingSessions = sessions.some(s => s.session_number > 0 && s.session_type !== 'expansion');
 
-  // Check if there's a running initialization session
+  // All currently running/pending sessions
+  const runningSessions = sessions.filter(s => s.status === 'running' || s.status === 'pending');
+
+  // Check if there's a running initialization or expansion session
   const runningInitSession = sessions.find(s =>
     (s.status === 'running' || s.status === 'pending') &&
     (s.type === 'initializer' || s.session_type === 'initializer')
   );
+  const runningExpansionSessions = sessions.filter(s =>
+    (s.status === 'running' || s.status === 'pending') &&
+    (s.type === 'expansion' || s.session_type === 'expansion')
+  );
+  const isExpanding = runningExpansionSessions.length > 0;
 
   // Check if there's a running coding session
   const runningCodingSession = sessions.find(s =>
     (s.status === 'running' || s.status === 'pending') &&
     (s.type === 'coding' || s.session_type === 'coding')
   );
+
+  // For Current Session tab: show user-selected session, or the most relevant running session
+  // Priority: user selection > coding > initializer > expansion (first one)
+  const selectedSession = selectedSessionId ? runningSessions.find(s => s.session_id === selectedSessionId) : null;
+  const currentSession = selectedSession || runningCodingSession || runningInitSession || runningSessions[0] || sessions[0] || null;
+
+  // For History tab: only show completed/ended sessions (not currently running)
+  const historySessions = sessions.filter(s => s.status !== 'running' && s.status !== 'pending');
 
   return (
     <div className="max-w-6xl mx-auto">
@@ -482,7 +542,7 @@ export default function ProjectDetailPage() {
             )}
           </button>
           {/* Conditional buttons based on initialization state */}
-          {!is_initialized && !runningInitSession && (
+          {!is_initialized && !runningInitSession && !isExpanding && (
             <button
               onClick={() => {
                 setActivePanel('session');
@@ -507,7 +567,28 @@ export default function ProjectDetailPage() {
             </button>
           )}
 
-          {is_initialized && !runningCodingSession && !isComplete && (
+          {isExpanding && (
+            <>
+              <button
+                disabled
+                className="px-4 py-2 bg-blue-800 cursor-not-allowed text-white rounded-lg transition-colors font-medium flex items-center gap-2"
+                title={`${runningExpansionSessions.length} expansion workers creating tasks and tests`}
+              >
+                <span className="w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></span>
+                Expanding Epics...
+              </button>
+              <button
+                onClick={handleCancelExpansion}
+                disabled={isCancellingExpansion}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-800 disabled:cursor-not-allowed text-white rounded-lg transition-colors font-medium"
+                title="Stop all expansion workers"
+              >
+                {isCancellingExpansion ? 'Cancelling...' : 'Cancel Expansion'}
+              </button>
+            </>
+          )}
+
+          {is_initialized && !runningCodingSession && !isExpanding && !isComplete && (
             <button
               onClick={() => {
                 setActivePanel('session');
@@ -640,19 +721,6 @@ export default function ProjectDetailPage() {
 
         <div className="bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-800 rounded-lg p-4">
           <div className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-1">
-            {progress.completed_tasks}/{progress.total_tasks}
-          </div>
-          <div className="text-xs text-gray-700 dark:text-gray-500 mb-3">Tasks Completed</div>
-          <ProgressBar
-            value={progress.task_completion_pct}
-            className="h-2"
-            color={progress.task_completion_pct === 100 ? 'green' : 'blue'}
-            showPercentage={false}
-          />
-        </div>
-
-        <div className="bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-800 rounded-lg p-4">
-          <div className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-1">
             {progress.passing_epic_tests || 0}/{progress.total_epic_tests || 0}
           </div>
           <div className="text-xs text-gray-700 dark:text-gray-500 mb-3">Epic Tests Passing</div>
@@ -660,6 +728,19 @@ export default function ProjectDetailPage() {
             value={progress.total_epic_tests ? (progress.passing_epic_tests || 0) / progress.total_epic_tests * 100 : 0}
             className="h-2"
             color={progress.passing_epic_tests === progress.total_epic_tests ? 'green' : progress.passing_epic_tests ? 'yellow' : 'red'}
+            showPercentage={false}
+          />
+        </div>
+
+        <div className="bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-800 rounded-lg p-4">
+          <div className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-1">
+            {progress.completed_tasks}/{progress.total_tasks}
+          </div>
+          <div className="text-xs text-gray-700 dark:text-gray-500 mb-3">Tasks Completed</div>
+          <ProgressBar
+            value={progress.task_completion_pct}
+            className="h-2"
+            color={progress.task_completion_pct === 100 ? 'green' : 'blue'}
             showPercentage={false}
           />
         </div>
@@ -692,6 +773,9 @@ export default function ProjectDetailPage() {
               }`}
             >
               Current Session
+              {runningSessions.length > 1 && (
+                <span className="ml-2 px-1.5 py-0.5 text-xs rounded-full bg-blue-600 text-white">{runningSessions.length}</span>
+              )}
             </button>
             <button
               onClick={() => setActiveTab('history')}
@@ -702,7 +786,7 @@ export default function ProjectDetailPage() {
               }`}
             >
               History
-              <span className="ml-2 text-sm text-gray-700 dark:text-gray-500">({sessions.length})</span>
+              <span className="ml-2 text-sm text-gray-700 dark:text-gray-500">({historySessions.length})</span>
             </button>
             <button
               onClick={() => setActiveTab('quality')}
@@ -754,11 +838,13 @@ export default function ProjectDetailPage() {
           <div className="p-6">
             {activeTab === 'current' && (
               <CurrentSession
-                session={sessions[0] || null}
+                session={currentSession}
+                runningSessions={runningSessions}
                 nextTask={next_task}
                 onStopSession={handleStopSession}
                 onStopAfterCurrent={handleStopAfterCurrent}
                 onRefreshSessions={handleRefreshSessions}
+                onSelectSession={setSelectedSessionId}
                 isStopping={isStopping}
                 isStoppingAfterCurrent={isStoppingAfterCurrent}
                 isRefreshingSessions={isRefreshingSessions}
@@ -768,12 +854,13 @@ export default function ProjectDetailPage() {
                 isInitialized={is_initialized}
                 isInitializing={isInitializing}
                 isStartingCoding={isStartingCoding}
+                isExpanding={isExpanding}
               />
             )}
 
             {activeTab === 'history' && (
               <SessionTimeline
-                sessions={sessions}
+                sessions={historySessions}
                 projectId={projectId}
                 onSessionStopped={loadSessions}
               />

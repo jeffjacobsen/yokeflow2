@@ -30,7 +30,23 @@ if not is_postgresql_configured():
     print("3. Initialize database: python scripts/init_database.py --docker")
     print("="*60 + "\n")
 
-print("Starting API server on http://localhost:8000")
+# Pre-flight check: Verify MCP task-manager server
+from server.client.claude import verify_mcp_server
+
+print("Checking MCP task-manager server...")
+mcp_check = verify_mcp_server(auto_rebuild=True)
+if mcp_check["ok"]:
+    status = "OK"
+    if mcp_check["rebuilt"]:
+        status = "OK (rebuilt)"
+    print(f"  MCP server: {status} - {mcp_check['message']}")
+else:
+    print(f"\n{'='*60}")
+    print("WARNING: MCP task-manager server check failed!")
+    print(f"  {mcp_check['message']}")
+    print(f"{'='*60}\n")
+
+print("\nStarting API server on http://localhost:8000")
 print("API documentation available at http://localhost:8000/docs")
 print("\n[!]  Auto-reload is DISABLED")
 print("   You must manually restart the server to see code changes")

@@ -6,6 +6,7 @@ import { Clock, CheckCircle, XCircle, AlertCircle, Activity, FileText, AlertTria
 
 interface CurrentSessionProps {
   session: Session | null;
+  runningSessions?: Session[];
   nextTask: {
     description: string;
     epic_name?: string;
@@ -13,6 +14,7 @@ interface CurrentSessionProps {
   onStopSession?: () => void;
   onStopAfterCurrent?: () => void;
   onRefreshSessions?: () => void;
+  onSelectSession?: (sessionId: string) => void;
   isStopping?: boolean;
   isStoppingAfterCurrent?: boolean;
   isRefreshingSessions?: boolean;
@@ -25,14 +27,17 @@ interface CurrentSessionProps {
   // Loading states for session startup
   isInitializing?: boolean;
   isStartingCoding?: boolean;
+  isExpanding?: boolean;
 }
 
 export function CurrentSession({
   session,
+  runningSessions = [],
   nextTask,
   onStopSession,
   onStopAfterCurrent,
   onRefreshSessions,
+  onSelectSession,
   isStopping = false,
   isStoppingAfterCurrent = false,
   isRefreshingSessions = false,
@@ -41,23 +46,26 @@ export function CurrentSession({
   assistantMessages = [],
   isInitialized = false,
   isInitializing = false,
-  isStartingCoding = false
+  isStartingCoding = false,
+  isExpanding = false,
 }: CurrentSessionProps) {
   const [activeTab, setActiveTab] = useState<'overview' | 'activity' | 'details'>('overview');
 
   if (!session && !nextTask) {
     // Show loading state when starting a session
-    if (isInitializing || isStartingCoding) {
+    if (isInitializing || isStartingCoding || isExpanding) {
       return (
         <div className="text-center py-12">
           <div className="flex flex-col items-center gap-4">
             <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
             <div className="space-y-2">
               <p className="text-gray-300 font-medium">
-                {isInitializing ? 'Starting Initializer...' : 'Starting Coding Session...'}
+                {isInitializing ? 'Starting Initializer...' : isExpanding ? 'Expanding Epics...' : 'Starting Coding Session...'}
               </p>
               <p className="text-sm text-gray-700 dark:text-gray-500">
-                This may take up to 60 seconds while the agent session starts
+                {isExpanding
+                  ? `${runningSessions.length} expansion worker${runningSessions.length !== 1 ? 's' : ''} creating tasks and tests`
+                  : 'This may take up to 60 seconds while the agent session starts'}
               </p>
             </div>
           </div>
@@ -145,6 +153,8 @@ export function CurrentSession({
     const sessionType = session.type || session.session_type;
     if (sessionType === 'initializer') {
       return 'Initialization';
+    } else if (sessionType === 'expansion') {
+      return `Expansion Worker ${Math.abs(session.session_number)}`;
     } else if (sessionType === 'coding') {
       // Session numbers: 0 = Initialization, 1+ = Coding 1, Coding 2, etc.
       return `Coding ${session.session_number}`;
@@ -154,6 +164,42 @@ export function CurrentSession({
 
   return (
     <div className="space-y-4">
+      {/* Parallel Sessions Banner */}
+      {runningSessions.length > 1 && (
+        <div className="bg-blue-900/30 border border-blue-700/50 rounded-lg p-3">
+          <div className="flex items-center gap-2 text-sm text-blue-300">
+            <Activity className="w-4 h-4 animate-pulse" />
+            <span className="font-medium">
+              {runningSessions.length} parallel sessions running
+            </span>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {runningSessions.map((s) => {
+              const sType = s.type || s.session_type;
+              const label = sType === 'expansion'
+                ? `Expansion Worker ${Math.abs(s.session_number)}`
+                : sType === 'initializer'
+                  ? 'Initialization'
+                  : `Coding ${s.session_number}`;
+              const isSelected = session?.session_id === s.session_id;
+              return (
+                <button
+                  key={s.session_id}
+                  onClick={() => onSelectSession?.(s.session_id)}
+                  className={`px-2 py-1 text-xs rounded border transition-colors ${
+                    isSelected
+                      ? 'bg-blue-600/50 text-white border-blue-500 font-medium'
+                      : 'bg-blue-800/50 text-blue-200 border-blue-700/50 hover:bg-blue-700/50 hover:border-blue-600/50'
+                  }`}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Session Status Card */}
       {session && (
         <div className="bg-gray-800 border border-gray-700 rounded-lg overflow-hidden">

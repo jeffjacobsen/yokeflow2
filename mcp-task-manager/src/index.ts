@@ -417,6 +417,20 @@ const tools: Tool[] = [
     }
   },
   {
+    name: 'claim_next_task',
+    description: 'Atomically claim the next available task for a worker. Uses row-level locking to prevent duplicate claims in parallel execution. Returns the claimed task or null if no tasks available.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        worker_id: {
+          type: 'string',
+          description: 'Unique identifier for the worker claiming the task (e.g. "worker-1")'
+        }
+      },
+      required: ['worker_id']
+    }
+  },
+  {
     name: 'update_task_test_result',
     description: 'Mark a task test as passing or failing',
     inputSchema: {
@@ -934,6 +948,27 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             {
               type: 'text',
               text: `Task ${args?.task_id} marked as started`
+            }
+          ]
+        };
+
+      case 'claim_next_task':
+        const claimedTask = await db.claimNextTask(args?.worker_id as string);
+        if (!claimedTask) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: 'No tasks available to claim'
+              }
+            ]
+          };
+        }
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(claimedTask, null, 2)
             }
           ]
         };

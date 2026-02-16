@@ -6,10 +6,12 @@ Build complete applications using Claude across multiple autonomous sessions.
 
 YokeFlow 2 is an autonomous coding platform that uses Claude to build applications from specifications.
 
-**Status**: Production Ready - v2.2.0 (February 2026) ✅
+**Status**: Production Ready - v2.3.0 (February 2026) ✅
 
 **Core Features:**
-- ✅ **Brownfield support** - Import existing codebases, analyze, and modify on feature branches ⭐ NEW v2.2
+- ✅ **Parallel expansion** - Up to 4 workers expand epics concurrently (~4x faster initialization) ⭐ NEW v2.3
+- ✅ **MCP pre-flight check** - Auto-detects stale builds, rebuilds before sessions start ⭐ NEW v2.3
+- ✅ **Brownfield support** - Import existing codebases, analyze, and modify on feature branches
 - ✅ **Autonomous multi-session development** - Opus plans, Sonnet implements
 - ✅ **REST API (60+ endpoints)** - Complete control with comprehensive validation
 - ✅ **Input validation framework** - 20 Pydantic models with 66 tests
@@ -20,7 +22,32 @@ YokeFlow 2 is an autonomous coding platform that uses Claude to build applicatio
 - ✅ **Docker sandbox** - Secure execution with Playwright browser automation
 - ✅ **MCP Integration (20+ tools)** - Enhanced task management with quality tools
 - ✅ **Production hardening** - Session checkpointing, intervention system, database retry logic
-- ✅ **Enterprise ready** - 70% test coverage (255 tests), structured logging, error hierarchy
+- ✅ **Enterprise ready** - 70% test coverage (533+ tests), structured logging, error hierarchy
+
+## What's New in v2.3 (February 2026)
+
+**Parallel Expansion** — initialize projects ~4x faster:
+
+- **Parallel workers**: After Session 0 creates epics, up to 4 concurrent workers expand them into tasks and tests
+- **Auto-scaling**: Worker count auto-scales based on epic count (~6 epics/worker)
+- **Advisory lock concurrency**: PostgreSQL `pg_advisory_xact_lock` prevents duplicate session races
+- **MCP pre-flight check**: Validates MCP server build exists, detects stale builds, auto-rebuilds
+- **Real-time UI**: WebSocket events for expansion progress, live session tracking
+- **Expansion session labels**: "Expansion Worker N" in History, Logs, and Current Session views
+- **59 new tests**: 46 parallel expansion + 13 MCP pre-flight (533 total)
+
+**Key Files:**
+- `server/agent/orchestrator.py` - Parallel expansion in `_run_parallel_expansion()` and `_run_expansion_worker()`
+- `server/database/operations.py` - `create_expansion_session()` with advisory lock
+- `server/client/claude.py` - `verify_mcp_server()` pre-flight check
+- `prompts/expansion_prompt.md` - Expansion worker prompt
+
+**Configuration** (`.yokeflow.yaml`):
+```yaml
+parallel:
+  parallel_expansion: true    # Enable/disable (default: true)
+  max_expansion_workers: 4    # Max concurrent workers (default: 4)
+```
 
 ## What's New in v2.2 (February 2026)
 
@@ -33,11 +60,6 @@ YokeFlow 2 is an autonomous coding platform that uses Claude to build applicatio
 - **Feature branches**: All modifications on `yokeflow/` branches with one-click rollback
 - **Full Web UI**: "Import Codebase" mode on project creation page
 - **43 new tests**: Comprehensive coverage for import, orchestration, and validation
-
-**Key Files:**
-- `server/agent/codebase_import.py` - Import & analysis engine (670 lines)
-- `prompts/initializer_prompt_brownfield.md` - Brownfield initializer prompt
-- `prompts/coding_preamble_brownfield.md` - Brownfield coding preamble
 
 See [YOKEFLOW_FUTURE_PLAN.md](YOKEFLOW_FUTURE_PLAN.md) for remaining roadmap (GitHub push/PR automation, non-UI project support).
 
@@ -69,13 +91,15 @@ See [QUICKSTART.md](QUICKSTART.md) for setup instructions.
 ## How It Works
 
 **Greenfield** (new projects):
-1. **Session 0 (Planning)**: Reads `app_spec.txt` → Creates roadmap (epics/tasks/tests) in database
-2. **Sessions 1+ (Coding)**: Gets next task → Implements → Tests → Commits → Auto-continues
+1. **Session 0 (Planning)**: Reads `app_spec.txt` → Creates epics in database → Runs `init.sh`
+2. **Parallel Expansion**: Up to 4 workers expand epics into tasks and tests concurrently
+3. **Sessions 1+ (Coding)**: Gets next task → Implements → Tests → Commits → Auto-continues
 
 **Brownfield** (existing codebases):
 1. **Import**: Clone from GitHub or copy from local path → Analyze codebase → Create feature branch
-2. **Session 0 (Planning)**: Explores existing code → Reads `change_spec.md` → Creates scoped epics/tasks
-3. **Sessions 1+ (Coding)**: Gets next task → Modifies existing code → Regression tests → Commits
+2. **Session 0 (Planning)**: Explores existing code → Reads `change_spec.md` → Creates scoped epics
+3. **Parallel Expansion**: Workers expand epics into modification tasks with regression tests
+4. **Sessions 1+ (Coding)**: Gets next task → Modifies existing code → Regression tests → Commits
 
 The system uses a hierarchical task structure:
 - Epics (high-level features)
@@ -95,6 +119,11 @@ models:
 
 timing:
   auto_continue_delay: 3
+
+# ⭐ NEW v2.3: Parallel Expansion
+parallel:
+  parallel_expansion: true    # Enable parallel epic expansion (default: true)
+  max_expansion_workers: 4    # Max concurrent workers (default: 4, auto-scales)
 
 # ⭐ NEW v2.1: Epic Testing Configuration
 epic_testing:
@@ -125,7 +154,7 @@ YokeFlow 2 uses a clean, modular architecture with all server code under `server
 ```
 server/
 ├── agent/               # Session orchestration & lifecycle
-│   ├── orchestrator.py  # Session lifecycle management (greenfield + brownfield)
+│   ├── orchestrator.py  # Session lifecycle + parallel expansion
 │   ├── codebase_import.py  # Codebase import & analysis ⭐ v2.2
 │   ├── agent.py         # Agent loop and session logic
 │   ├── session_manager.py  # Intervention system
@@ -223,7 +252,7 @@ pytest --cov=server --cov-report=html --cov-report=term-missing
 ```
 
 **Test Status** (February 2026):
-- ✅ **~255 total tests** across all files (including 43 brownfield tests)
+- ✅ **533+ total tests** across all files (46 parallel expansion, 13 MCP pre-flight, 43 brownfield)
 - ✅ **70% coverage achieved** (target met)
 - ✅ **Production ready** test infrastructure
 

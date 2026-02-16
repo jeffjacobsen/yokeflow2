@@ -34,6 +34,10 @@ interface UseProjectWebSocketOptions {
   onDeepReviewStarted?: (sessionId: string, sessionNumber: number) => void;
   onDeepReviewCompleted?: (sessionId: string, sessionNumber: number) => void;
   onDeepReviewFailed?: (sessionId: string, sessionNumber: number, error: string) => void;
+  // Expansion callbacks
+  onExpansionStarted?: (numWorkers: number, totalEpics: number) => void;
+  onExpansionWorkerComplete?: (workerId: string, sessionNumber: number, status: string) => void;
+  onExpansionComplete?: (totalExpanded: number, totalEpics: number, errors: string[]) => void;
 }
 
 export function useProjectWebSocket(
@@ -63,6 +67,9 @@ export function useProjectWebSocket(
   const onDeepReviewStartedRef = useRef(options?.onDeepReviewStarted);
   const onDeepReviewCompletedRef = useRef(options?.onDeepReviewCompleted);
   const onDeepReviewFailedRef = useRef(options?.onDeepReviewFailed);
+  const onExpansionStartedRef = useRef(options?.onExpansionStarted);
+  const onExpansionWorkerCompleteRef = useRef(options?.onExpansionWorkerComplete);
+  const onExpansionCompleteRef = useRef(options?.onExpansionComplete);
 
   useEffect(() => {
     onSessionCompleteRef.current = options?.onSessionComplete;
@@ -76,7 +83,10 @@ export function useProjectWebSocket(
     onDeepReviewStartedRef.current = options?.onDeepReviewStarted;
     onDeepReviewCompletedRef.current = options?.onDeepReviewCompleted;
     onDeepReviewFailedRef.current = options?.onDeepReviewFailed;
-  }, [options?.onSessionComplete, options?.onSessionStarted, options?.onAssistantMessage, options?.onToolUse, options?.onTaskUpdated, options?.onTestUpdated, options?.onPromptImprovementComplete, options?.onPromptImprovementFailed, options?.onDeepReviewStarted, options?.onDeepReviewCompleted, options?.onDeepReviewFailed]);
+    onExpansionStartedRef.current = options?.onExpansionStarted;
+    onExpansionWorkerCompleteRef.current = options?.onExpansionWorkerComplete;
+    onExpansionCompleteRef.current = options?.onExpansionComplete;
+  }, [options?.onSessionComplete, options?.onSessionStarted, options?.onAssistantMessage, options?.onToolUse, options?.onTaskUpdated, options?.onTestUpdated, options?.onPromptImprovementComplete, options?.onPromptImprovementFailed, options?.onDeepReviewStarted, options?.onDeepReviewCompleted, options?.onDeepReviewFailed, options?.onExpansionStarted, options?.onExpansionWorkerComplete, options?.onExpansionComplete]);
 
   const connect = useCallback(() => {
     if (!projectId) return;
@@ -131,9 +141,12 @@ export function useProjectWebSocket(
 
             case 'session_started':
               console.log(`[WebSocket] New session started:`, data.session);
-              // Reset real-time counters for new session
-              setToolCount(0);
-              setAssistantMessages([]);
+              // Reset real-time counters for new session, but not during parallel expansion
+              // (multiple workers start concurrently - resetting would wipe earlier workers' data)
+              if (data.session?.session_type !== 'expansion') {
+                setToolCount(0);
+                setAssistantMessages([]);
+              }
               // Trigger callback if provided
               if (onSessionStartedRef.current && data.session) {
                 onSessionStartedRef.current(data.session);
@@ -264,6 +277,36 @@ export function useProjectWebSocket(
               console.error(`[WebSocket] Deep review failed for session ${data.session_number}:`, data.error);
               if (onDeepReviewFailedRef.current && data.session_id && data.session_number) {
                 onDeepReviewFailedRef.current(data.session_id, data.session_number, data.error || 'Unknown error');
+              }
+              break;
+
+            // Expansion events
+            case 'expansion_started':
+              console.log(`[WebSocket] Expansion started: ${data.num_workers} workers, ${data.total_epics} epics`);
+              if (onExpansionStartedRef.current) {
+                onExpansionStartedRef.current(data.num_workers || 0, data.total_epics || 0);
+              }
+              break;
+
+            case 'expansion_worker_complete':
+              console.log(`[WebSocket] Expansion worker ${data.worker_id} complete`);
+              if (onExpansionWorkerCompleteRef.current) {
+                onExpansionWorkerCompleteRef.current(
+                  data.worker_id || 'unknown',
+                  data.session_number || 0,
+                  data.status || 'completed'
+                );
+              }
+              break;
+
+            case 'expansion_complete':
+              console.log(`[WebSocket] Expansion complete: ${data.total_epics_expanded}/${data.total_epics} epics expanded`);
+              if (onExpansionCompleteRef.current) {
+                onExpansionCompleteRef.current(
+                  data.total_epics_expanded || 0,
+                  data.total_epics || 0,
+                  data.errors || []
+                );
               }
               break;
           }

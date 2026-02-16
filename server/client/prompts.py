@@ -24,7 +24,7 @@ def load_prompt(name: str) -> str:
     return prompt_path.read_text()
 
 
-def get_initializer_prompt(project_type: str = "greenfield") -> str:
+def get_initializer_prompt(project_type: str = "greenfield", planning_only: bool = False) -> str:
     """
     Load the initializer prompt.
 
@@ -32,12 +32,21 @@ def get_initializer_prompt(project_type: str = "greenfield") -> str:
     For brownfield projects, uses a specialized prompt that focuses on
     understanding existing code and planning modifications.
 
+    When planning_only=True, loads a stripped-down prompt that only creates
+    epics (skipping task/test expansion). Used for parallel initialization
+    where expansion workers handle tasks and tests.
+
     Args:
         project_type: 'greenfield' or 'brownfield'
+        planning_only: If True, load planning-only prompt (no task/test creation)
 
     Returns:
         Complete initializer prompt content as string
     """
+    if planning_only:
+        if project_type == "brownfield":
+            return load_prompt("initializer_prompt_brownfield_planning")
+        return load_prompt("initializer_prompt_planning")
     if project_type == "brownfield":
         return load_prompt("initializer_prompt_brownfield")
     return load_prompt("initializer_prompt")
@@ -63,6 +72,18 @@ def get_coding_prompt(sandbox_type: str = "local") -> str:
         prompt_name = "coding_prompt_local"
 
     return load_prompt(prompt_name)
+
+
+def get_expansion_prompt() -> str:
+    """Load the epic expansion worker prompt.
+
+    Used by parallel expansion workers to expand assigned epics
+    into detailed tasks and test requirements.
+
+    Returns:
+        Expansion prompt content as string
+    """
+    return load_prompt("expansion_prompt")
 
 
 def get_brownfield_coding_preamble() -> str:

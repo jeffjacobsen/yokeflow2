@@ -150,7 +150,11 @@ export function SessionLogsViewer({ projectId }: SessionLogsViewerProps) {
             >
               {/* Session Header */}
               <div className="font-medium text-gray-200 mb-2">
-                {session.sessionNumber === 0 ? 'Initialization' : `Session #${session.sessionNumber}`}
+                {session.sessionNumber === 0
+                  ? 'Initialization'
+                  : session.sessionNumber < 0
+                    ? `Expansion Worker ${Math.abs(session.sessionNumber)}`
+                    : `Session #${session.sessionNumber}`}
               </div>
               <div className="text-xs text-gray-500 mb-3">
                 {new Date(session.timestamp).toLocaleString()}

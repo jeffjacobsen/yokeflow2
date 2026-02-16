@@ -35,9 +35,13 @@ export class TaskDatabase {
       connectionTimeoutMillis: 2000, // Return an error after 2 seconds if connection could not be established
     });
 
-    // Test connection on startup
-    this.pool.query('SELECT NOW()').catch((err) => {
-      throw new Error(`Failed to connect to PostgreSQL: ${err.message}`);
+    // Test connection on startup (log-only, don't crash the process)
+    // The pool will retry connections automatically on subsequent queries
+    this.pool.query('SELECT NOW()').then(() => {
+      console.error('[MCP] PostgreSQL connection verified');
+    }).catch((err) => {
+      console.error(`[MCP] Warning: Initial PostgreSQL connection failed: ${err.message}`);
+      console.error('[MCP] The server will retry connections on subsequent queries');
     });
   }
 
@@ -663,56 +667,88 @@ export class TaskDatabase {
   }
 
   async updateTaskStatus(taskId: string | number, done: boolean): Promise<Task | null> {
-    // CRITICAL: If marking task as complete, validate all tests are passing
-    if (done === true) {
-      const tests = await this.listTests(taskId);
+    // Use a dedicated client for transactional consistency:
+    // test validation + status update + epic completion check all in one transaction
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
 
-      if (tests.length > 0) {
-        const failingTests = tests.filter(t => t.passes !== true);
+      // CRITICAL: If marking task as complete, validate all tests are passing
+      if (done === true) {
+        const testResult = await client.query(
+          `SELECT id::text, description, passes FROM task_tests WHERE task_id = $1`,
+          [String(taskId)]
+        );
+        const tests = testResult.rows;
 
-        if (failingTests.length > 0) {
-          throw new Error(
-            `Cannot mark task ${taskId} as complete: ${failingTests.length} of ${tests.length} test(s) not passing.\n` +
-            `Failing tests:\n${failingTests.map(t => `  - Test ${t.id}: ${t.description}`).join('\n')}\n\n` +
-            `All tests must pass before marking task complete. Use update_task_test_result to mark tests as passing.`
-          );
+        if (tests.length > 0) {
+          const failingTests = tests.filter((t: any) => t.passes !== true);
+
+          if (failingTests.length > 0) {
+            await client.query('ROLLBACK');
+            throw new Error(
+              `Cannot mark task ${taskId} as complete: ${failingTests.length} of ${tests.length} test(s) not passing.\n` +
+              `Failing tests:\n${failingTests.map((t: any) => `  - Test ${t.id}: ${t.description}`).join('\n')}\n\n` +
+              `All tests must pass before marking task complete. Use update_task_test_result to mark tests as passing.`
+            );
+          }
         }
       }
-    }
 
-    const completedAt = done ? 'NOW()' : 'NULL';
+      const completedAt = done ? 'NOW()' : 'NULL';
 
-    await this.exec(`
-      UPDATE tasks
-      SET done = $1, completed_at = ${completedAt}
-      WHERE id = $2 AND project_id = $3
-    `, [done, String(taskId), this.projectId]);
+      await client.query(`
+        UPDATE tasks
+        SET done = $1, completed_at = ${completedAt}
+        WHERE id = $2 AND project_id = $3
+      `, [done, String(taskId), this.projectId]);
 
-    // Check if all tasks in epic are done and update epic status
-    if (done) {
-      const task = await this.getTask(taskId);
-      if (task) {
-        await this.checkEpicCompletion(task.epic_id);
+      // Check if all tasks in epic are done and update epic status
+      if (done) {
+        const taskResult = await client.query(
+          `SELECT epic_id::text FROM tasks WHERE id = $1 AND project_id = $2`,
+          [String(taskId), this.projectId]
+        );
+        if (taskResult.rows[0]) {
+          // Inline epic completion check within the transaction
+          const epicId = taskResult.rows[0].epic_id;
+          const pendingResult = await client.query(
+            `SELECT COUNT(*)::int as pending FROM tasks WHERE epic_id = $1 AND done = false`,
+            [epicId]
+          );
+          if (pendingResult.rows[0]?.pending === 0) {
+            await client.query(
+              `UPDATE epics SET status = 'completed' WHERE id = $1 AND project_id = $2`,
+              [epicId, this.projectId]
+            );
+          }
+        }
       }
+
+      const result = await client.query(`
+        SELECT
+          id::text,
+          epic_id::text,
+          description,
+          action,
+          'pending' as status,
+          priority,
+          created_at,
+          completed_at,
+          session_notes,
+          CASE WHEN done = true THEN 1 ELSE 0 END as done
+        FROM tasks
+        WHERE id = $1 AND project_id = $2
+      `, [String(taskId), this.projectId]);
+
+      await client.query('COMMIT');
+      return result.rows[0] || null;
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw error;
+    } finally {
+      client.release();
     }
-
-    const result = await this.query<Task>(`
-      SELECT
-        id::text,
-        epic_id::text,
-        description,
-        action,
-        'pending' as status,
-        priority,
-        created_at,
-        completed_at,
-        session_notes,
-        CASE WHEN done = true THEN 1 ELSE 0 END as done
-      FROM tasks
-      WHERE id = $1 AND project_id = $2
-    `, [String(taskId), this.projectId]);
-
-    return result[0] || null;
   }
 
   async updateTestResult(
@@ -749,6 +785,41 @@ export class TaskDatabase {
       SET session_notes = 'Started at ' || NOW()::text
       WHERE id = $1 AND project_id = $2 AND session_notes IS NULL
     `, [String(taskId), this.projectId]);
+  }
+
+  async claimNextTask(workerId: string): Promise<TaskWithEpic | null> {
+    // Atomic CTE: SELECT + UPDATE in one round-trip
+    // FOR UPDATE SKIP LOCKED: if worker A locks row 1, worker B skips to row 2
+    const result = await this.query<TaskWithEpic>(`
+      WITH next AS (
+        SELECT t.id
+        FROM tasks t
+        JOIN epics e ON t.epic_id = e.id
+        WHERE t.project_id = $1
+          AND t.done = false
+          AND t.session_notes IS NULL
+          AND e.status != 'completed'
+        ORDER BY e.priority, t.priority, t.id
+        LIMIT 1
+        FOR UPDATE OF t SKIP LOCKED
+      )
+      UPDATE tasks
+      SET session_notes = $2 || ' claimed at ' || NOW()::text
+      FROM next
+      WHERE tasks.id = next.id
+      RETURNING tasks.id::text, tasks.epic_id::text, tasks.description,
+                tasks.action, tasks.priority, tasks.session_notes,
+                tasks.created_at, tasks.completed_at,
+                CASE WHEN tasks.done THEN 1 ELSE 0 END as done
+    `, [this.projectId, workerId]);
+
+    if (!result[0]) return null;
+
+    // Get epic name
+    const epicResult = await this.query<{name: string}>(
+      `SELECT name FROM epics WHERE id = $1`, [result[0].epic_id]
+    );
+    return { ...result[0], epic_name: epicResult[0]?.name || '' };
   }
 
   // Helper methods

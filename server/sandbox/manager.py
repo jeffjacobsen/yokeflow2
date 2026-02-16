@@ -229,8 +229,12 @@ class DockerSandbox(Sandbox):
                 logger.info("Using docker.from_env() for client")
                 self.client = docker.from_env()
 
-            # Generate unique container name
-            self.container_name = f"yokeflow-{self.project_dir.name}"
+            # Generate unique container name (with optional worker_id for parallel execution)
+            worker_id = self.config.get("worker_id")
+            if worker_id:
+                self.container_name = f"yokeflow-{self.project_dir.name}-{worker_id}"
+            else:
+                self.container_name = f"yokeflow-{self.project_dir.name}"
 
             # Container reuse strategy: Reuse for coding sessions, recreate for initializer
             existing_container = None
@@ -585,12 +589,13 @@ class SandboxManager:
             )
 
     @staticmethod
-    def stop_docker_container(project_name: str) -> bool:
+    def stop_docker_container(project_name: str, worker_id: Optional[str] = None) -> bool:
         """
         Stop a Docker container associated with a project (without deleting it).
 
         Args:
             project_name: Name of the project (used to generate container name)
+            worker_id: Optional worker ID for parallel execution containers
 
         Returns:
             True if container was stopped, False if container didn't exist or was already stopped
@@ -618,7 +623,7 @@ class SandboxManager:
                 client = docker.from_env()
 
             # Generate container name (same format as DockerSandbox.start())
-            container_name = f"yokeflow-{project_name}"
+            container_name = f"yokeflow-{project_name}-{worker_id}" if worker_id else f"yokeflow-{project_name}"
             logger.debug(f"Looking for Docker container: {container_name}")
 
             # Try to get and stop the container
@@ -642,12 +647,13 @@ class SandboxManager:
             raise
 
     @staticmethod
-    def start_docker_container(project_name: str) -> bool:
+    def start_docker_container(project_name: str, worker_id: Optional[str] = None) -> bool:
         """
         Start a Docker container associated with a project.
 
         Args:
             project_name: Name of the project (used to generate container name)
+            worker_id: Optional worker ID for parallel execution containers
 
         Returns:
             True if container was started, False if container didn't exist or was already running
@@ -675,7 +681,7 @@ class SandboxManager:
                 client = docker.from_env()
 
             # Generate container name (same format as DockerSandbox.start())
-            container_name = f"yokeflow-{project_name}"
+            container_name = f"yokeflow-{project_name}-{worker_id}" if worker_id else f"yokeflow-{project_name}"
             logger.debug(f"Looking for Docker container: {container_name}")
 
             # Try to get and start the container
@@ -699,7 +705,7 @@ class SandboxManager:
             raise
 
     @staticmethod
-    def get_docker_container_status(project_name: str) -> Optional[Dict[str, Any]]:
+    def get_docker_container_status(project_name: str, worker_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """
         Get the status of a Docker container associated with a project.
 
@@ -726,7 +732,7 @@ class SandboxManager:
                 client = docker.from_env()
 
             # Generate container name
-            container_name = f"yokeflow-{project_name}"
+            container_name = f"yokeflow-{project_name}-{worker_id}" if worker_id else f"yokeflow-{project_name}"
 
             # Try to get container info
             try:
@@ -745,12 +751,13 @@ class SandboxManager:
             return None
 
     @staticmethod
-    def delete_docker_container(project_name: str) -> bool:
+    def delete_docker_container(project_name: str, worker_id: Optional[str] = None) -> bool:
         """
         Delete a Docker container associated with a project.
 
         Args:
             project_name: Name of the project (used to generate container name)
+            worker_id: Optional worker ID for parallel execution containers
 
         Returns:
             True if container was deleted, False if container didn't exist
@@ -778,7 +785,7 @@ class SandboxManager:
                 client = docker.from_env()
 
             # Generate container name (same format as DockerSandbox.start())
-            container_name = f"yokeflow-{project_name}"
+            container_name = f"yokeflow-{project_name}-{worker_id}" if worker_id else f"yokeflow-{project_name}"
             logger.debug(f"Looking for Docker container: {container_name}")
 
             # Try to get and remove the container

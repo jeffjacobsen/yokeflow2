@@ -7,7 +7,9 @@ since Playwright now runs inside the Docker container directly.
 """
 
 import json
+import logging
 import os
+import subprocess
 from pathlib import Path
 
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient, HookMatcher
@@ -15,6 +17,8 @@ from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient, HookMatcher
 from server.utils.security import bash_security_hook
 from server.sandbox.hooks import set_active_sandbox, clear_active_sandbox
 from server.utils.auth import get_oauth_token
+
+logger = logging.getLogger(__name__)
 
 
 def get_mcp_env(project_dir: Path, project_id: str = None, docker_container: str = None) -> dict:
@@ -115,11 +119,16 @@ def create_client(project_dir: Path, model: str, project_id: str = None, docker_
     # Path is relative to yokeflow root (3 levels up from this file)
     # /Users/jeff/code/yokeflow2/server/client/claude.py -> /Users/jeff/code/yokeflow2
     mcp_server_path = Path(__file__).parent.parent.parent / "mcp-task-manager" / "dist" / "index.js"
-    if not mcp_server_path.exists():
+
+    # Pre-flight check: verify build exists, is fresh, and parses correctly
+    check = verify_mcp_server(auto_rebuild=True)
+    if not check["ok"]:
         raise FileNotFoundError(
-            f"MCP task manager server not found at {mcp_server_path}. "
+            f"MCP task manager server verification failed: {check['message']}. "
             f"Run 'cd mcp-task-manager && npm install && npm run build' to build it."
         )
+    if check["rebuilt"]:
+        logger.info(f"[MCP] Server was auto-rebuilt: {check['message']}")
 
     # Configure MCP servers
     mcp_env = get_mcp_env(project_dir, project_id, docker_container)
@@ -196,3 +205,104 @@ def create_client(project_dir: Path, model: str, project_id: str = None, docker_
             env=sdk_env  # Explicitly set environment to prevent .env leakage
         )
     )
+
+
+def get_mcp_server_path() -> Path:
+    """Get the path to the MCP task-manager server's compiled output."""
+    return Path(__file__).parent.parent.parent / "mcp-task-manager" / "dist" / "index.js"
+
+
+def get_mcp_source_dir() -> Path:
+    """Get the path to the MCP task-manager source directory."""
+    return Path(__file__).parent.parent.parent / "mcp-task-manager" / "src"
+
+
+def verify_mcp_server(auto_rebuild: bool = True) -> dict:
+    """
+    Pre-flight check for the MCP task-manager server.
+
+    Validates:
+    1. The compiled dist/index.js exists
+    2. The build is not stale (source files are not newer than dist)
+    3. The server can be parsed by Node.js without crashing
+
+    Args:
+        auto_rebuild: If True, automatically rebuild when build is stale or missing
+
+    Returns:
+        dict with keys: ok (bool), message (str), rebuilt (bool)
+    """
+    mcp_root = Path(__file__).parent.parent.parent / "mcp-task-manager"
+    dist_path = mcp_root / "dist" / "index.js"
+    src_dir = mcp_root / "src"
+
+    # Check 1: Does dist/index.js exist?
+    if not dist_path.exists():
+        if auto_rebuild:
+            logger.info("[MCP Preflight] dist/index.js missing, rebuilding...")
+            rebuilt = _rebuild_mcp_server(mcp_root)
+            if rebuilt:
+                return {"ok": True, "message": "MCP server rebuilt successfully (was missing)", "rebuilt": True}
+            return {"ok": False, "message": "MCP server build failed. Run 'cd mcp-task-manager && npm run build' manually.", "rebuilt": False}
+        return {"ok": False, "message": f"MCP server not found at {dist_path}. Run 'cd mcp-task-manager && npm run build'.", "rebuilt": False}
+
+    # Check 2: Is the build stale? (any .ts source file newer than dist/index.js)
+    dist_mtime = dist_path.stat().st_mtime
+    stale = False
+    stale_files = []
+    for ts_file in src_dir.glob("*.ts"):
+        if ts_file.stat().st_mtime > dist_mtime:
+            stale = True
+            stale_files.append(ts_file.name)
+
+    if stale:
+        if auto_rebuild:
+            logger.info(f"[MCP Preflight] Build stale (modified: {', '.join(stale_files)}), rebuilding...")
+            rebuilt = _rebuild_mcp_server(mcp_root)
+            if rebuilt:
+                return {"ok": True, "message": f"MCP server rebuilt (stale files: {', '.join(stale_files)})", "rebuilt": True}
+            return {"ok": False, "message": "MCP server rebuild failed after detecting stale build.", "rebuilt": False}
+        return {"ok": False, "message": f"MCP server build is stale. Files changed: {', '.join(stale_files)}", "rebuilt": False}
+
+    # Check 3: Can Node.js parse the server without crashing?
+    # Use --check flag for syntax validation (doesn't execute the code)
+    try:
+        result = subprocess.run(
+            ["node", "--check", str(dist_path)],
+            capture_output=True, text=True, timeout=10
+        )
+        if result.returncode != 0:
+            if auto_rebuild:
+                logger.warning(f"[MCP Preflight] Syntax check failed: {result.stderr.strip()}, rebuilding...")
+                rebuilt = _rebuild_mcp_server(mcp_root)
+                if rebuilt:
+                    return {"ok": True, "message": "MCP server rebuilt (syntax check failed on old build)", "rebuilt": True}
+                return {"ok": False, "message": f"MCP server has syntax errors and rebuild failed: {result.stderr.strip()}", "rebuilt": False}
+            return {"ok": False, "message": f"MCP server syntax check failed: {result.stderr.strip()}", "rebuilt": False}
+    except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+        return {"ok": False, "message": f"Node.js check failed: {e}", "rebuilt": False}
+
+    return {"ok": True, "message": "MCP server verified", "rebuilt": False}
+
+
+def _rebuild_mcp_server(mcp_root: Path) -> bool:
+    """
+    Rebuild the MCP task-manager server by running `npm run build`.
+
+    Returns True on success, False on failure.
+    """
+    try:
+        result = subprocess.run(
+            ["npm", "run", "build"],
+            cwd=str(mcp_root),
+            capture_output=True, text=True, timeout=30
+        )
+        if result.returncode == 0:
+            logger.info("[MCP Preflight] Rebuild successful")
+            return True
+        else:
+            logger.error(f"[MCP Preflight] Rebuild failed: {result.stderr.strip()}")
+            return False
+    except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+        logger.error(f"[MCP Preflight] Rebuild error: {e}")
+        return False

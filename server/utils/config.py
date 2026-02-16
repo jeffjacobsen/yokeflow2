@@ -190,6 +190,16 @@ class BrownfieldConfig:
 
 
 @dataclass
+class ParallelConfig:
+    """Configuration for parallel agent execution."""
+    enabled: bool = False           # Opt-in, disabled by default
+    max_workers: int = 2            # Default 2 concurrent workers, hard cap at 4
+    max_tasks_per_worker: Optional[int] = None  # None = unlimited (worker loops until no tasks)
+    parallel_expansion: bool = True  # Enable parallel epic expansion during initialization
+    max_expansion_workers: int = 4   # Max expansion workers; actual count auto-scales (~6 epics/worker)
+
+
+@dataclass
 class Config:
     """Main configuration class."""
     models: ModelConfig = field(default_factory=ModelConfig)
@@ -203,6 +213,7 @@ class Config:
     verification: VerificationConfig = field(default_factory=VerificationConfig)
     epic_testing: EpicTestingConfig = field(default_factory=EpicTestingConfig)
     brownfield: BrownfieldConfig = field(default_factory=BrownfieldConfig)
+    parallel: ParallelConfig = field(default_factory=ParallelConfig)
 
     @classmethod
     def load_from_file(cls, config_path: Path) -> 'Config':
@@ -304,6 +315,23 @@ class Config:
                 config.brownfield.run_existing_tests_before_changes = data['brownfield']['run_existing_tests_before_changes']
             if 'run_existing_tests_after_changes' in data['brownfield']:
                 config.brownfield.run_existing_tests_after_changes = data['brownfield']['run_existing_tests_after_changes']
+
+        # Override parallel settings
+        if 'parallel' in data:
+            if 'enabled' in data['parallel']:
+                config.parallel.enabled = data['parallel']['enabled']
+            if 'max_workers' in data['parallel']:
+                config.parallel.max_workers = min(int(data['parallel']['max_workers']), 4)  # Hard cap at 4
+            if 'max_tasks_per_worker' in data['parallel']:
+                val = data['parallel']['max_tasks_per_worker']
+                config.parallel.max_tasks_per_worker = int(val) if val is not None else None
+            if 'parallel_expansion' in data['parallel']:
+                config.parallel.parallel_expansion = data['parallel']['parallel_expansion']
+            if 'max_expansion_workers' in data['parallel']:
+                config.parallel.max_expansion_workers = min(int(data['parallel']['max_expansion_workers']), 4)
+            elif 'expansion_workers' in data['parallel']:
+                # Backward compat for old config key
+                config.parallel.max_expansion_workers = min(int(data['parallel']['expansion_workers']), 4)
 
         return config
 

@@ -125,7 +125,7 @@ export interface Project {
   project_path?: string;  // Deprecated
 }
 
-export type SessionType = 'initializer' | 'coding';
+export type SessionType = 'initializer' | 'expansion' | 'coding';
 export type SessionStatus = 'pending' | 'running' | 'completed' | 'error' | 'interrupted';
 
 export interface SessionMetrics {
@@ -209,7 +209,10 @@ export interface WebSocketMessage {
     | 'prompt_improvement_failed'  // Prompt improvement analysis failed
     | 'deep_review_started'  // Deep review started for a session
     | 'deep_review_completed'  // Deep review completed successfully
-    | 'deep_review_failed';  // Deep review failed with error
+    | 'deep_review_failed'  // Deep review failed with error
+    | 'expansion_started'  // Parallel expansion started
+    | 'expansion_worker_complete'  // An expansion worker finished
+    | 'expansion_complete';  // All expansion workers finished
   progress?: Progress;
   session_id?: string;
   status?: SessionStatus;
@@ -240,6 +243,12 @@ export interface WebSocketMessage {
     is_error?: boolean;
   };
   project_id?: string;  // For all events
+  // Expansion event fields
+  num_workers?: number;  // For expansion_started
+  total_epics?: number;  // For expansion_started and expansion_complete
+  worker_id?: string;  // For expansion_worker_complete
+  total_epics_expanded?: number;  // For expansion_complete
+  errors?: string[];  // For expansion_complete
 }
 
 export interface HealthResponse {

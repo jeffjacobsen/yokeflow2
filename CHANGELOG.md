@@ -5,6 +5,57 @@ All notable changes to YokeFlow will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] 2026-02-15
+
+### Added
+
+#### Parallel Expansion (February 14-15, 2026)
+- **Parallel epic expansion**: After Session 0 creates epics, up to 4 concurrent workers expand them into tasks and tests
+- **Auto-scaling workers**: Worker count auto-scales based on epic count (~6 epics per worker, capped at `max_expansion_workers`)
+- **Planning-only prompt**: Session 0 runs with a planning-only prompt that creates epics, project structure, and git init (forbids `expand_epic`)
+- **Expansion worker prompt**: Dedicated prompt for expansion workers (`prompts/expansion_prompt.md`)
+- **Configuration**: `parallel.parallel_expansion` (default: true) and `parallel.max_expansion_workers` (default: 4) in `.yokeflow.yaml`
+- **API parameter**: `parallel_expansion` parameter on `POST /api/projects/{id}/initialize`
+- **Expansion session labels**: UI shows "Expansion Worker N" in History, Logs, and Current Session
+- **46 tests**: Prompt loading, config, auto-scaling, epic assignment, session numbering, atomic creation, orchestrator integration, stop support, API params
+
+#### MCP Pre-flight Check (February 14, 2026)
+- **Pre-flight validation**: `verify_mcp_server()` checks build exists, detects stale builds (source newer than dist), validates with `node --check`
+- **Auto-rebuild**: Automatically runs `npm run build` when stale or missing builds detected
+- **API startup check**: MCP server verified during API startup (`server/api/start.py`)
+- **Client integration**: Pre-flight runs before every `create_client()` call
+- **13 tests**: Real build verification, mock staleness detection, Node.js syntax checks
+
+#### Real-time Expansion UI (February 15, 2026)
+- **WebSocket events**: `expansion_started`, `expansion_worker_complete`, `expansion_complete` events
+- **Session events**: `session_started` and `session_complete` events for expansion workers
+- **Frontend handlers**: WebSocket handler processes expansion events, triggers session/project reloads
+- **Parallel session banner**: Shows count and labels of all running expansion workers
+- **Progress refresh**: Progress counters update after Session 0 and each expansion worker completes
+
+### Fixed
+
+#### Race Condition in Expansion Session Creation (February 15, 2026)
+- **Root cause**: `INSERT...SELECT` under PostgreSQL READ COMMITTED is not serializable — multiple concurrent transactions read same `MIN(session_number)` before any commit
+- **Fix**: Wrapped in explicit transaction with `pg_advisory_xact_lock(hashtext(project_id))` to serialize concurrent session creation per project
+- **Impact**: All expansion workers now get unique session numbers (-1, -2, -3, -4) without duplicate key violations
+
+#### MCP Server Intermittent Startup Failures (February 14, 2026)
+- **Root cause**: `throw new Error()` inside `.catch()` in `mcp-task-manager/src/database.ts` created unhandled promise rejection, crashing Node.js
+- **Fix**: Changed to `console.error()` with retry-on-next-query approach
+
+#### Expansion Session Log Directory (February 14, 2026)
+- **Root cause**: `get_project()` only parsed metadata as dict, not JSON string; `Path('')` resolved to CWD when `local_path` was empty
+- **Fix**: Added JSON string parsing for metadata + fallback path reconstruction from project name
+
+#### Expansion Logs Not Showing in UI (February 14, 2026)
+- **Root cause**: `str.isdigit()` returns False for negative numbers like `-01`
+- **Fix**: New `_parse_session_number_from_filename()` helper using `int()` parsing
+
+#### API `session_type` Mapping (February 15, 2026)
+- **Root cause**: `list_sessions` API returned DB `type` column but frontend expected `session_type`
+- **Fix**: Added `session_dict['session_type'] = session_dict['type']` mapping in endpoint
+
 ## [Unreleased]
 
 ### Added
