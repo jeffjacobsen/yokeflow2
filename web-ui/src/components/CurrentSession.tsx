@@ -8,7 +8,7 @@ interface CurrentSessionProps {
   session: Session | null;
   runningSessions?: Session[];
   nextTask: {
-    description: string;
+    name: string;
     epic_name?: string;
   } | null;
   onStopSession?: () => void;
@@ -27,7 +27,6 @@ interface CurrentSessionProps {
   // Loading states for session startup
   isInitializing?: boolean;
   isStartingCoding?: boolean;
-  isExpanding?: boolean;
 }
 
 export function CurrentSession({
@@ -47,25 +46,22 @@ export function CurrentSession({
   isInitialized = false,
   isInitializing = false,
   isStartingCoding = false,
-  isExpanding = false,
 }: CurrentSessionProps) {
   const [activeTab, setActiveTab] = useState<'overview' | 'activity' | 'details'>('overview');
 
   if (!session && !nextTask) {
     // Show loading state when starting a session
-    if (isInitializing || isStartingCoding || isExpanding) {
+    if (isInitializing || isStartingCoding) {
       return (
         <div className="text-center py-12">
           <div className="flex flex-col items-center gap-4">
             <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
             <div className="space-y-2">
               <p className="text-gray-300 font-medium">
-                {isInitializing ? 'Starting Initializer...' : isExpanding ? 'Expanding Epics...' : 'Starting Coding Session...'}
+                {isInitializing ? 'Starting Initializer...' : 'Starting Coding Session...'}
               </p>
               <p className="text-sm text-gray-700 dark:text-gray-500">
-                {isExpanding
-                  ? `${runningSessions.length} expansion worker${runningSessions.length !== 1 ? 's' : ''} creating tasks and tests`
-                  : 'This may take up to 60 seconds while the agent session starts'}
+                This may take up to 60 seconds while the agent session starts
               </p>
             </div>
           </div>
@@ -153,8 +149,6 @@ export function CurrentSession({
     const sessionType = session.type || session.session_type;
     if (sessionType === 'initializer') {
       return 'Initialization';
-    } else if (sessionType === 'expansion') {
-      return `Expansion Worker ${Math.abs(session.session_number)}`;
     } else if (sessionType === 'coding') {
       // Session numbers: 0 = Initialization, 1+ = Coding 1, Coding 2, etc.
       return `Coding ${session.session_number}`;
@@ -176,11 +170,9 @@ export function CurrentSession({
           <div className="mt-2 flex flex-wrap gap-2">
             {runningSessions.map((s) => {
               const sType = s.type || s.session_type;
-              const label = sType === 'expansion'
-                ? `Expansion Worker ${Math.abs(s.session_number)}`
-                : sType === 'initializer'
-                  ? 'Initialization'
-                  : `Coding ${s.session_number}`;
+              const label = sType === 'initializer'
+                ? 'Initialization'
+                : `Coding ${s.session_number}`;
               const isSelected = session?.session_id === s.session_id;
               return (
                 <button
@@ -501,7 +493,7 @@ export function CurrentSession({
       {nextTask && (
         <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
           <h3 className="text-lg font-semibold text-gray-100 mb-3">Next Task</h3>
-          <div className="text-gray-300 mb-2">{nextTask.description}</div>
+          <div className="text-gray-300 mb-2">{nextTask.name}</div>
           {nextTask.epic_name && (
             <div className="text-sm text-gray-700 dark:text-gray-500">Epic: {nextTask.epic_name}</div>
           )}

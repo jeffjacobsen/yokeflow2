@@ -231,7 +231,7 @@ function TaskRow({ task, onTaskClick }: { task: TaskWithTestCount; onTaskClick: 
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-3 mb-1">
           <p className={`text-sm ${task.done ? 'text-gray-300' : 'text-gray-100'} group-hover:text-blue-400 transition-colors`}>
-            {task.description}
+            {task.name}
           </p>
         </div>
 

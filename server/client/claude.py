@@ -1,34 +1,57 @@
 """
-Claude SDK Client Configuration with Playwright Docker Support
-==============================================================
+Claude SDK Client Configuration
+================================
 
-This version removes the external Playwright MCP server when using Docker sandbox,
-since Playwright now runs inside the Docker container directly.
+Creates Claude Agent SDK clients with MCP task-manager integration
+and security hooks for autonomous agent operation.
 """
 
 import json
 import logging
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient, HookMatcher
 
 from server.utils.security import bash_security_hook
-from server.sandbox.hooks import set_active_sandbox, clear_active_sandbox
 from server.utils.auth import get_oauth_token
 
 logger = logging.getLogger(__name__)
 
 
-def get_mcp_env(project_dir: Path, project_id: str = None, docker_container: str = None) -> dict:
+def copy_agent_skills(project_dir: Path) -> None:
+    """
+    Copy agent skill files from yokeflow2/claude/ to the project's .claude/ directory.
+
+    Only copies specific subdirectories (commands/, skills/) — not settings files
+    or other yokeflow2-specific state. This keeps the agent's skill access separate
+    from yokeflow2's own .claude/ configuration.
+    """
+    agent_root = Path(__file__).parent.parent.parent  # yokeflow2/
+    source_claude_dir = agent_root / "claude"
+    dest_claude_dir = project_dir / ".claude"
+
+    # Only copy these subdirectories (add "skills" when that directory exists)
+    dirs_to_copy = ["scripts", "skills"]
+
+    for subdir in dirs_to_copy:
+        src = source_claude_dir / subdir
+        if not src.exists():
+            continue
+        dst = dest_claude_dir / subdir
+        shutil.copytree(src, dst, dirs_exist_ok=True)
+        logger.info(f"[Skills] Copied {subdir}/ to {dst}")
+
+
+def get_mcp_env(project_dir: Path, project_id: str = None) -> dict:
     """
     Get environment variables for MCP task-manager server.
 
     Args:
         project_dir: Project directory path
         project_id: UUID of the project in the database (optional, will be generated if not provided)
-        docker_container: Docker container name for bash_docker tool (optional)
     """
     import os
     import uuid
@@ -47,20 +70,13 @@ def get_mcp_env(project_dir: Path, project_id: str = None, docker_container: str
         project_name = project_dir.name
         print(f"[DEBUG] MCP task-manager using PostgreSQL for project: {project_name} (ID: {project_id})")
 
-    env = {
+    return {
         "DATABASE_URL": database_url,
         "PROJECT_ID": project_id
     }
 
-    # Add Docker container name if provided (for bash_docker tool)
-    if docker_container:
-        env["DOCKER_CONTAINER_NAME"] = docker_container
-        print(f"[DEBUG] MCP task-manager configured for Docker sandbox: {docker_container}")
 
-    return env
-
-
-def create_client(project_dir: Path, model: str, project_id: str = None, docker_container: str = None, use_docker_playwright: bool = True) -> ClaudeSDKClient:
+def create_client(project_dir: Path, model: str, project_id: str = None) -> ClaudeSDKClient:
     """
     Create a Claude Agent SDK client with multi-layered security.
 
@@ -68,8 +84,6 @@ def create_client(project_dir: Path, model: str, project_id: str = None, docker_
         project_dir: Directory for the project
         model: Claude model to use
         project_id: UUID of the project in the database (optional)
-        docker_container: Docker container name for sandbox execution (optional)
-        use_docker_playwright: If True and docker_container is set, skip external Playwright MCP
 
     Returns:
         Configured ClaudeSDKClient
@@ -79,8 +93,7 @@ def create_client(project_dir: Path, model: str, project_id: str = None, docker_
     2. Security hooks - Bash commands validated against a blocklist
        (see security.py for BLOCKED_COMMANDS)
 
-    This configuration is designed for containerized environments where the agent
-    needs broad command access to work autonomously without constant permission prompts.
+    The agent runs locally and needs broad command access to work autonomously.
     """
 
     # Ensure authentication is properly configured
@@ -131,7 +144,7 @@ def create_client(project_dir: Path, model: str, project_id: str = None, docker_
         logger.info(f"[MCP] Server was auto-rebuilt: {check['message']}")
 
     # Configure MCP servers
-    mcp_env = get_mcp_env(project_dir, project_id, docker_container)
+    mcp_env = get_mcp_env(project_dir, project_id)
     print(f"[DEBUG] MCP server path: {mcp_server_path.absolute()}")
     print(f"[DEBUG] MCP environment: DATABASE_URL={mcp_env.get('DATABASE_URL', 'NOT SET')}, PROJECT_ID={mcp_env.get('PROJECT_ID', 'NOT SET')}")
 
@@ -143,25 +156,8 @@ def create_client(project_dir: Path, model: str, project_id: str = None, docker_
         }
     }
 
-    # Only add external Playwright MCP if NOT using Docker with Playwright support
-    # When using Docker, Playwright runs inside the container via bash_docker
-    if not (docker_container and use_docker_playwright):
-        print("[DEBUG] Adding external Playwright MCP server (non-Docker mode or disabled)")
-        mcp_servers["playwright"] = {
-            "command": "npx",
-            "args": [
-                "@playwright/mcp@latest",
-                "--browser", "chrome",
-                "--headless",
-                "--snapshot-mode", "incremental"  # Reduce snapshot size to avoid buffer overflow
-            ]
-        }
-    else:
-        print(f"[DEBUG] Skipping external Playwright MCP - using Docker Playwright in container: {docker_container}")
-
     # Build system prompt
-    # NOTE: Sandbox-specific guidance (tool selection) is now prepended to prompts
-    # in prompts.py (get_initializer_prompt/get_coding_prompt with sandbox_type parameter)
+    # Session-specific guidance is loaded from prompts.py
     # This base prompt is minimal and generic
     system_prompt = "You are an expert full-stack developer building a production-quality web application."
 
@@ -184,6 +180,14 @@ def create_client(project_dir: Path, model: str, project_id: str = None, docker_
     # Setting to empty string tells the SDK not to use an API key.
     sdk_env["ANTHROPIC_API_KEY"] = ""
 
+    # Capture stderr from the Claude Code subprocess for MCP server diagnostics
+    def _stderr_handler(line: str) -> None:
+        # Log MCP-related stderr at warning level for visibility
+        if "[MCP]" in line or "task-manager" in line.lower():
+            logger.warning(f"[SDK stderr] {line}")
+        else:
+            logger.debug(f"[SDK stderr] {line}")
+
     return ClaudeSDKClient(
         options=ClaudeAgentOptions(
             model=model,
@@ -193,16 +197,15 @@ def create_client(project_dir: Path, model: str, project_id: str = None, docker_
             hooks={
                 "PreToolUse": [
                     # Security hook validates Bash commands against blocklist
-                    # NOTE: Container command execution is handled by MCP bash_docker tool,
-                    # not through hooks. The agent is instructed to use bash_docker instead
-                    # of regular Bash when a Docker sandbox is active.
                     HookMatcher(matcher="Bash", hooks=[bash_security_hook]),
                 ],
             },
+            setting_sources=["project"],
             max_turns=1000,
-            max_buffer_size=10485760,  # 10MB (10x default of 1MB) - prevents Playwright snapshot crashes
+            max_buffer_size=10485760,  # 10MB (10x default of 1MB) - prevents large snapshot crashes
             cwd=str(project_dir.resolve()),
-            env=sdk_env  # Explicitly set environment to prevent .env leakage
+            env=sdk_env,  # Explicitly set environment to prevent .env leakage
+            stderr=_stderr_handler,  # Capture subprocess stderr for MCP diagnostics
         )
     )
 

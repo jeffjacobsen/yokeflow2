@@ -5,7 +5,6 @@ Tests the Claude client configuration including:
 - MCP environment setup
 - Client creation with various configurations
 - Security hook integration
-- Docker sandbox support
 - Authentication handling
 """
 
@@ -53,17 +52,6 @@ class TestMCPEnvironment:
             # Restore DATABASE_URL if it existed
             if original:
                 os.environ["DATABASE_URL"] = original
-
-    def test_get_mcp_env_with_docker_container(self, tmp_path):
-        """Test MCP environment with Docker container name."""
-        os.environ["DATABASE_URL"] = "postgresql://test:test@localhost:5432/testdb"
-        project_dir = tmp_path / "test_project"
-        project_dir.mkdir()
-
-        env = get_mcp_env(project_dir, project_id="test-uuid", docker_container="test-container")
-
-        assert env["DOCKER_CONTAINER_NAME"] == "test-container"
-        assert env["PROJECT_ID"] == "test-uuid"
 
     def test_get_mcp_env_generates_project_id(self, tmp_path):
         """Test that MCP environment generates project ID from project name."""
@@ -127,7 +115,7 @@ class TestClaudeClient:
 
         client = create_client(
             project_dir=project_dir,
-            model="claude-3-sonnet-20241022",
+            model="claude-sonnet-4-6",
             project_id="test-uuid"
         )
 
@@ -138,22 +126,20 @@ class TestClaudeClient:
         call_args = mock_claude_sdk.call_args
         options = call_args.kwargs['options']
 
-        assert options.model == "claude-3-sonnet-20241022"
+        assert options.model == "claude-sonnet-4-6"
         assert options.permission_mode == "bypassPermissions"
         assert options.max_turns == 1000
         assert options.max_buffer_size == 10485760  # 10MB
         assert str(project_dir.resolve()) in str(options.cwd)
 
-    def test_create_client_with_docker(self, setup_environment, mock_oauth_token, mock_load_dotenv, mock_claude_sdk):
-        """Test client creation with Docker container."""
+    def test_create_client_mcp_servers(self, setup_environment, mock_oauth_token, mock_load_dotenv, mock_claude_sdk):
+        """Test client creation configures MCP servers correctly."""
         project_dir = setup_environment
 
         client = create_client(
             project_dir=project_dir,
-            model="claude-3-sonnet-20241022",
+            model="claude-sonnet-4-6",
             project_id="test-uuid",
-            docker_container="test-container",
-            use_docker_playwright=True
         )
 
         # Verify ClaudeSDKClient was called
@@ -164,30 +150,8 @@ class TestClaudeClient:
         options = call_args.kwargs['options']
         mcp_servers = options.mcp_servers
 
-        # Should have task-manager but not playwright (Docker mode)
+        # Should have task-manager only
         assert "task-manager" in mcp_servers
-        assert "playwright" not in mcp_servers  # Skipped in Docker mode
-
-    def test_create_client_without_docker_playwright(self, setup_environment, mock_oauth_token, mock_load_dotenv, mock_claude_sdk):
-        """Test client creation without Docker Playwright support."""
-        project_dir = setup_environment
-
-        client = create_client(
-            project_dir=project_dir,
-            model="claude-3-sonnet-20241022",
-            project_id="test-uuid",
-            docker_container=None,
-            use_docker_playwright=False
-        )
-
-        # Verify MCP servers configuration
-        call_args = mock_claude_sdk.call_args
-        options = call_args.kwargs['options']
-        mcp_servers = options.mcp_servers
-
-        # Should have both task-manager and playwright
-        assert "task-manager" in mcp_servers
-        assert "playwright" in mcp_servers
 
     def test_create_client_removes_api_key(self, setup_environment, mock_oauth_token, mock_load_dotenv, mock_claude_sdk):
         """Test that client creation removes ANTHROPIC_API_KEY if set."""
@@ -199,7 +163,7 @@ class TestClaudeClient:
         # Should succeed and remove the key
         client = create_client(
             project_dir=project_dir,
-            model="claude-3-sonnet-20241022",
+            model="claude-sonnet-4-6",
             project_id="test-uuid"
         )
 
@@ -233,7 +197,7 @@ class TestClaudeClient:
             with pytest.raises(FileNotFoundError) as excinfo:
                 create_client(
                     project_dir=project_dir,
-                    model="claude-3-sonnet-20241022",
+                    model="claude-sonnet-4-6",
                     project_id="test-uuid"
                 )
 
@@ -246,7 +210,7 @@ class TestClaudeClient:
 
         client = create_client(
             project_dir=project_dir,
-            model="claude-3-sonnet-20241022",
+            model="claude-sonnet-4-6",
             project_id="test-uuid"
         )
 
@@ -274,7 +238,7 @@ class TestClaudeClient:
 
         client = create_client(
             project_dir=project_dir,
-            model="claude-3-sonnet-20241022",
+            model="claude-sonnet-4-6",
             project_id="test-uuid"
         )
 
@@ -295,7 +259,7 @@ class TestClaudeClient:
 
         client = create_client(
             project_dir=project_dir,
-            model="claude-3-sonnet-20241022",
+            model="claude-sonnet-4-6",
             project_id="test-uuid"
         )
 

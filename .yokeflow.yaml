@@ -1,24 +1,18 @@
-# YokeFlow Configuration - Playwright Docker Enabled
+# YokeFlow Configuration
 
 models:
-  initializer: claude-opus-4-5-20251101
-  coding: claude-sonnet-4-5-20250929
+  initializer: claude-opus-4-6
+  coding: claude-sonnet-4-6
+  review: claude-sonnet-4-6
+  prompt_improvement: claude-opus-4-6
 
 timing:
   auto_continue_delay: 3
   web_ui_poll_interval: 5
 
-sandbox:
-  type: docker
-  docker_image: yokeflow-playwright:latest  # Using Playwright-enabled image
-  docker_network: bridge
-  docker_memory_limit: 3g  # Increased for browser operations
-  docker_cpu_limit: 2.0
-  docker_ports: []  # No port forwarding needed - Playwright runs inside container!
-
 project:
-  default_generations_dir: generations
+  default_projects_dir: projects
   max_iterations: null  # unlimited
 
 review:
-  min_reviews_for_analysis: 3 # Minimum deep reviews required for prompt improvement analysis
+  min_reviews_for_analysis: 1 # Minimum deep reviews required for prompt improvement analysis

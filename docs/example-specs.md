@@ -65,7 +65,7 @@ These examples show how to structure complex project specifications using multip
 **Description:** Output directory showing what YokeFlow's initializer created from the multi-file prp-test specification.
 
 **Contents:**
-- `claude-progress.md` - Session 0 completion summary showing:
+- `yokeflow/agent-progress.md` - Session 0 completion summary showing:
   - 18 epics created
   - 129 tasks generated
   - 129 test cases defined

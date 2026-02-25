@@ -9,7 +9,7 @@ YokeFlow has a comprehensive test suite with **402 passing tests** across multip
 ## Test Suite Status (v2.1.0)
 
 - **Total Tests**: 402 passing, 10 skipped
-- **Test Runtime**: < 3 seconds for fast tests (excludes slow Docker tests)
+- **Test Runtime**: < 3 seconds for fast tests
 - **Coverage**: 70% overall target achieved ✅
 - **Status**: All tests passing after v2.1 cleanup ✅
 
@@ -68,7 +68,6 @@ pytest -m "not slow"
 | Test File | Tests | Focus | Runtime |
 |-----------|-------|-------|---------|
 | `test_orchestrator.py` | 17 | Session lifecycle, orchestration | < 1s |
-| `test_sandbox_manager.py` | 17 | Docker sandbox (mocked) | < 1s |
 | `test_security.py` | 2 | Security validation (64 assertions) | < 1s |
 | `test_database_retry.py` | 30 | Database retry with exponential backoff | < 1s |
 | `test_checkpoint.py` | 19 | Session checkpointing and recovery | < 1s |
@@ -83,7 +82,6 @@ pytest -m "not slow"
 
 | Test File | Tests | Focus | Runtime | Prerequisites |
 |-----------|-------|-------|---------|---------------|
-| `test_sandbox_integration.py` | 6 | Real Docker containers | 5-10 min | Docker required |
 | `test_integration_*.py` | Various | Database, workflows | 1-5 min | PostgreSQL required |
 | `test_api_rest.py` | 17 passing, 2 skipped | REST API endpoints | < 1s | None (test mode) |
 
@@ -165,9 +163,6 @@ pytest --cov=server --cov-fail-under=70
 ### Integration Tests
 
 ```bash
-# Run Docker integration tests (requires Docker running)
-pytest tests/test_sandbox_integration.py
-
 # Run all integration tests
 pytest -m "integration"
 
@@ -241,27 +236,6 @@ async def test_with_database():
     mock_db.acquire = MagicMock(return_value=mock_conn)
 ```
 
-### Mocking Docker Operations
-
-```python
-import docker.errors
-
-# Mock Docker client
-mock_client = MagicMock()
-mock_container = MagicMock()
-mock_container.id = "test-container-id"
-mock_container.status = "running"
-
-# Mock containers.get to raise NotFound
-mock_client.containers.get.side_effect = [
-    docker.errors.NotFound("Container not found"),
-    mock_container
-]
-
-# Mock exec_run with demux=True format
-mock_container.exec_run.return_value = (0, (b"stdout", b"stderr"))
-```
-
 ## Known Test Failures (v2.0.0)
 
 As of January 2026, with UI_PASSWORD unset, the following tests fail:
@@ -320,7 +294,6 @@ See `TEST_SUITE_REPORT.md` for detailed analysis and resolution steps.
 - `server/agent/orchestrator.py` - Session orchestration (complex workflows)
 - `server/agent/agent.py` - Agent execution logic (integration dependent)
 - `server/client/claude.py` - Claude SDK integration (external service)
-- `server/sandbox/manager.py` - Docker sandbox (covered by integration tests)
 
 ## Performance Tips
 
@@ -334,14 +307,11 @@ python scripts/test_quick.py
 
 ### 2. Run Integration Tests Separately
 
-Only run Docker/database tests when specifically testing that functionality:
+Only run database/integration tests when specifically testing that functionality:
 
 ```bash
 # Fast tests only
 pytest -m "not slow"
-
-# Docker tests only when needed
-pytest tests/test_sandbox_integration.py
 ```
 
 ### 3. Parallel Execution
@@ -372,16 +342,6 @@ pytest --ff  # failed first, then rest
 ```
 
 ## Troubleshooting
-
-### Docker Tests Failing
-
-**Symptoms**: Tests in `test_sandbox_integration.py` fail or hang
-
-**Solutions**:
-- Ensure Docker Desktop is running
-- Check Docker has sufficient resources (2GB+ memory, 20GB+ disk)
-- Clean up old containers: `docker system prune -a`
-- Check container logs: `docker logs <container-id>`
 
 ### Import Errors
 

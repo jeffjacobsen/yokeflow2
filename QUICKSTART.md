@@ -20,8 +20,7 @@ server/
 ├── database/     # PostgreSQL operations & retry logic
 ├── quality/      # Review system & quality gates
 ├── verification/ # Task & epic validation
-├── client/       # Claude & Playwright clients
-├── sandbox/      # Docker container management
+├── client/       # Claude SDK & prompt clients
 └── utils/        # Shared utilities & config
 ```
 
@@ -60,7 +59,17 @@ server/
    cd ..
    ```
 
-6. **Authentication Token**
+6. **Agent-Browser** (browser testing for coding sessions)
+   ```bash
+   # macOS (recommended)
+   brew install agent-browser
+   agent-browser install
+
+   # Or via npm (requires write access to global node_modules)
+   # npm install -g agent-browser && agent-browser install
+   ```
+
+7. **Authentication Token**
    ```bash
    # Install Claude Code CLI
    npm install -g @anthropic-ai/claude-code
@@ -81,10 +90,10 @@ server/
 python server/api/start.py
 
 # OR using uvicorn directly
-uvicorn server.api.app:app --host 0.0.0.0 --port 8000
+uvicorn server.api.app:app --host 0.0.0.0 --port 8010
 
 # For development with auto-reload
-uvicorn server.api.app:app --host 0.0.0.0 --port 8000 --reload
+uvicorn server.api.app:app --host 0.0.0.0 --port 8010 --reload
 ```
 
 **Terminal 2 - Start Web UI:**
@@ -111,18 +120,18 @@ npm run dev
 - Auto-recovers without human intervention
 - Essential for long-running coding sessions
 
-Then open http://localhost:3000 in your browser.
+Then open http://localhost:3010 in your browser.
 
 ## Common Issues
 
-### Issue: "API server not responding at localhost:8000"
+### Issue: "API server not responding at localhost:8010"
 
 **Problem:** You ran the API file directly instead of using uvicorn
 
 **Solution:** Use uvicorn to start the server:
 ```bash
 # Correct way to start the API
-uvicorn server.api.app:app --host 0.0.0.0 --port 8000 --reload
+uvicorn server.api.app:app --host 0.0.0.0 --port 8010 --reload
 
 # Or use the wrapper script
 python server/api/start.py
@@ -179,19 +188,19 @@ from server.quality.reviews import ReviewClient
 
 1. **Check API Health:**
    ```bash
-   curl http://localhost:8000/health
+   curl http://localhost:8010/health
    # Should return JSON with status and component checks
    ```
 
 2. **Check API Detailed Health:**
    ```bash
-   curl http://localhost:8000/health/detailed
+   curl http://localhost:8010/health/detailed
    # Should return JSON with database, mcp_server, disk, sessions status
    ```
 
 3. **Check API Projects Endpoint:**
    ```bash
-   curl http://localhost:8000/api/projects
+   curl http://localhost:8010/api/projects
    # Should return: []  (empty array if no projects yet)
    ```
 
@@ -208,10 +217,10 @@ from server.quality.reviews import ReviewClient
    ```
 
 6. **Check Web UI:**
-   Open http://localhost:3000 - you should see the YokeFlow dashboard
+   Open http://localhost:3010 - you should see the YokeFlow dashboard
 
 7. **Check API Documentation:**
-   Open http://localhost:8000/docs - interactive Swagger UI for all 17+ endpoints
+   Open http://localhost:8010/docs - interactive Swagger UI for all 17+ endpoints
 
 ## Next Steps
 
@@ -243,7 +252,7 @@ from server.quality.reviews import ReviewClient
 ## Getting Help
 
 - Check [CLAUDE.md](CLAUDE.md) Troubleshooting section
-- Review logs in `generations/[project]/logs/`
+- Review logs in `projects/[project]/yokeflow/logs/`
 - Open an issue on GitHub
 
 ## Pro Tips

@@ -10,7 +10,7 @@ RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 # Configuration
-PORT=3000
+PORT=3010
 MAX_RETRIES=3
 RETRY_DELAY=2
 

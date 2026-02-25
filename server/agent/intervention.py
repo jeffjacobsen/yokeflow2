@@ -290,7 +290,7 @@ class NotificationService:
 
 **Action Required:** Manual intervention needed to resolve infrastructure issue.
 
-View logs: `generations/{project_name}/logs/`
+View logs: `projects/{project_name}/yokeflow/logs/`
 """
         return message
 
@@ -340,22 +340,22 @@ class InterventionManager:
         self.session_id = session_id
         self.project_name = project_name
 
-    def set_current_task(self, task_id: str, task_description: str):
+    def set_current_task(self, task_id: str, task_name: str):
         """
         Set the current task being worked on.
 
         Args:
             task_id: Task identifier
-            task_description: Task description
+            task_name: Task name
         """
         self.current_task = {
             "id": task_id,
-            "description": task_description
+            "name": task_name
         }
 
         # Notify quality detector about new task
         if self.quality_detector:
-            self.quality_detector.start_task(task_id, task_description)
+            self.quality_detector.start_task(task_id, task_name)
 
     async def check_tool_use(
         self,
@@ -386,7 +386,7 @@ class InterventionManager:
 
         # Track verification attempts if this is a verification tool
         if self.quality_detector and self.current_task:
-            if "browser" in tool_name.lower() or "playwright" in tool_name.lower():
+            if "browser" in tool_name.lower() or "agent-browser" in tool_name.lower():
                 # This is a browser verification
                 self.quality_detector.track_verification_attempt(
                     self.current_task["id"],
@@ -468,7 +468,7 @@ class InterventionManager:
 
     def document_blocker(self, project_dir: Path, task_info: Dict, reason: str):
         """
-        Document a blocker in claude-progress.md.
+        Document a blocker in yokeflow/agent-progress.md.
 
         Args:
             project_dir: Project directory path
@@ -478,13 +478,15 @@ class InterventionManager:
         if self.blocker_documented:
             return
 
-        progress_file = project_dir / "claude-progress.md"
+        yokeflow_dir = project_dir / "yokeflow"
+        yokeflow_dir.mkdir(exist_ok=True)
+        progress_file = yokeflow_dir / "agent-progress.md"
 
         blocker_content = f"""
 
 ## BLOCKER - Session {self.session_id} - {datetime.now().isoformat()}
 
-**Task:** {task_info.get('id', 'Unknown')} - {task_info.get('description', 'Unknown task')}
+**Task:** {task_info.get('id', 'Unknown')} - {task_info.get('name', 'Unknown task')}
 **Issue:** {reason}
 **Root Cause:** Automated retry limit exceeded or critical infrastructure error detected
 

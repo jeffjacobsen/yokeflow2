@@ -32,7 +32,7 @@ You should understand:
   - Next.js Web UI (TypeScript/React, real-time monitoring)
   - PostgreSQL database (async operations, retry logic)
   - MCP (Model Context Protocol) task management
-  - Docker sandbox with Playwright browser testing
+  - agent-browser for browser testing
   - Automated verification system (test generation)
 
 ### Core Features
@@ -56,7 +56,7 @@ You should understand:
 
 ```bash
 # Start API
-uvicorn server.api.app:app --host 0.0.0.0 --port 8000 --reload
+uvicorn server.api.app:app --host 0.0.0.0 --port 8010 --reload
 
 # Start Web UI
 cd web-ui && npm run dev

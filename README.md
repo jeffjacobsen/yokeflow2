@@ -6,11 +6,10 @@ Build complete applications using Claude across multiple autonomous sessions.
 
 YokeFlow 2 is an autonomous coding platform that uses Claude to build applications from specifications.
 
-**Status**: Production Ready - v2.3.0 (February 2026) ✅
+**Status**: Production Ready - v2.4.0 (February 2026) ✅
 
 **Core Features:**
-- ✅ **Parallel expansion** - Up to 4 workers expand epics concurrently (~4x faster initialization) ⭐ NEW v2.3
-- ✅ **MCP pre-flight check** - Auto-detects stale builds, rebuilds before sessions start ⭐ NEW v2.3
+- ✅ **MCP pre-flight check** - Auto-detects stale builds, rebuilds before sessions start
 - ✅ **Brownfield support** - Import existing codebases, analyze, and modify on feature branches
 - ✅ **Autonomous multi-session development** - Opus plans, Sonnet implements
 - ✅ **REST API (60+ endpoints)** - Complete control with comprehensive validation
@@ -19,35 +18,9 @@ YokeFlow 2 is an autonomous coding platform that uses Claude to build applicatio
 - ✅ **Quality system (6 phases + 2 partial)** - Test tracking, epic re-testing, prompt improvements
 - ✅ **Web UI** - Real-time monitoring with Next.js + TypeScript
 - ✅ **PostgreSQL database** - Async operations with retry logic (21 tables, 19 views)
-- ✅ **Docker sandbox** - Secure execution with Playwright browser automation
 - ✅ **MCP Integration (20+ tools)** - Enhanced task management with quality tools
 - ✅ **Production hardening** - Session checkpointing, intervention system, database retry logic
-- ✅ **Enterprise ready** - 70% test coverage (533+ tests), structured logging, error hierarchy
-
-## What's New in v2.3 (February 2026)
-
-**Parallel Expansion** — initialize projects ~4x faster:
-
-- **Parallel workers**: After Session 0 creates epics, up to 4 concurrent workers expand them into tasks and tests
-- **Auto-scaling**: Worker count auto-scales based on epic count (~6 epics/worker)
-- **Advisory lock concurrency**: PostgreSQL `pg_advisory_xact_lock` prevents duplicate session races
-- **MCP pre-flight check**: Validates MCP server build exists, detects stale builds, auto-rebuilds
-- **Real-time UI**: WebSocket events for expansion progress, live session tracking
-- **Expansion session labels**: "Expansion Worker N" in History, Logs, and Current Session views
-- **59 new tests**: 46 parallel expansion + 13 MCP pre-flight (533 total)
-
-**Key Files:**
-- `server/agent/orchestrator.py` - Parallel expansion in `_run_parallel_expansion()` and `_run_expansion_worker()`
-- `server/database/operations.py` - `create_expansion_session()` with advisory lock
-- `server/client/claude.py` - `verify_mcp_server()` pre-flight check
-- `prompts/expansion_prompt.md` - Expansion worker prompt
-
-**Configuration** (`.yokeflow.yaml`):
-```yaml
-parallel:
-  parallel_expansion: true    # Enable/disable (default: true)
-  max_expansion_workers: 4    # Max concurrent workers (default: 4)
-```
+- ✅ **Enterprise ready** - 70% test coverage (497+ tests), structured logging, error hierarchy
 
 ## What's New in v2.2 (February 2026)
 
@@ -84,22 +57,19 @@ See [QUICKSTART.md](QUICKSTART.md) for setup instructions.
 
 - Node.js 20+
 - Python 3.9+
-- Docker
-- PostgreSQL (via Docker)
+- PostgreSQL (via Docker Compose)
 
 
 ## How It Works
 
 **Greenfield** (new projects):
-1. **Session 0 (Planning)**: Reads `app_spec.txt` → Creates epics in database → Runs `init.sh`
-2. **Parallel Expansion**: Up to 4 workers expand epics into tasks and tests concurrently
-3. **Sessions 1+ (Coding)**: Gets next task → Implements → Tests → Commits → Auto-continues
+1. **Session 0 (Initialization)**: Reads spec from `yokeflow/specs/` → Creates epics, tasks, and tests → Runs `init.sh`
+2. **Sessions 1+ (Coding)**: Gets next task → Implements → Tests → Commits → Auto-continues
 
 **Brownfield** (existing codebases):
 1. **Import**: Clone from GitHub or copy from local path → Analyze codebase → Create feature branch
-2. **Session 0 (Planning)**: Explores existing code → Reads `change_spec.md` → Creates scoped epics
-3. **Parallel Expansion**: Workers expand epics into modification tasks with regression tests
-4. **Sessions 1+ (Coding)**: Gets next task → Modifies existing code → Regression tests → Commits
+2. **Session 0 (Initialization)**: Explores existing code → Reads `yokeflow/specs/change_spec.md` → Creates scoped epics, tasks, and tests
+3. **Sessions 1+ (Coding)**: Gets next task → Modifies existing code → Regression tests → Commits
 
 The system uses a hierarchical task structure:
 - Epics (high-level features)
@@ -112,18 +82,13 @@ Configure via `.yokeflow.yaml`:
 
 ```yaml
 models:
-  initializer: claude-opus-4-5-20251101
-  coding: claude-sonnet-4-5-20250929
-  review: claude-sonnet-4-5-20250929           # ⭐ NEW v2.1
-  prompt_improvement: claude-opus-4-5-20251101 # ⭐ NEW v2.1
+  initializer: claude-opus-4-6
+  coding: claude-sonnet-4-6
+  review: claude-sonnet-4-6          # ⭐ NEW v2.1
+  prompt_improvement: claude-opus-4-6 # ⭐ NEW v2.1
 
 timing:
   auto_continue_delay: 3
-
-# ⭐ NEW v2.3: Parallel Expansion
-parallel:
-  parallel_expansion: true    # Enable parallel epic expansion (default: true)
-  max_expansion_workers: 4    # Max concurrent workers (default: 4, auto-scales)
 
 # ⭐ NEW v2.1: Epic Testing Configuration
 epic_testing:
@@ -137,8 +102,6 @@ epic_retesting:
   enabled: true
   trigger_frequency: 2  # Re-test every 2 completed epics
 
-docker:
-  enabled: true
 ```
 
 Environment variables in `.env`:
@@ -154,7 +117,7 @@ YokeFlow 2 uses a clean, modular architecture with all server code under `server
 ```
 server/
 ├── agent/               # Session orchestration & lifecycle
-│   ├── orchestrator.py  # Session lifecycle + parallel expansion
+│   ├── orchestrator.py  # Session lifecycle
 │   ├── codebase_import.py  # Codebase import & analysis ⭐ v2.2
 │   ├── agent.py         # Agent loop and session logic
 │   ├── session_manager.py  # Intervention system
@@ -178,19 +141,13 @@ server/
 │   ├── metrics.py       # Quick checks (Phase 1)
 │   ├── reviews.py       # Deep reviews (Phase 2)
 │   ├── integration.py   # Quality integration (Phase 6)
-│   ├── completion_analyzer.py  # Completion reviews (Phase 7)
 │   ├── spec_parser.py   # Specification parser (Phase 7)
-│   ├── requirement_matcher.py  # Requirement matching (Phase 7)
 │   ├── epic_retest_manager.py  # Epic re-testing (Phase 5)
 │   ├── test_compliance_analyzer.py  # Test compliance
 │   └── prompt_analyzer.py  # Prompt improvements (Phase 8)
 ├── client/              # External service clients
 │   ├── claude.py        # Claude SDK client
-│   ├── playwright.py    # Browser automation (Playwright)
 │   └── prompts.py       # Prompt loading
-├── sandbox/             # Docker management
-│   ├── manager.py       # Docker sandbox management
-│   └── hooks.py         # Sandbox hooks
 └── utils/               # Shared utilities
     ├── config.py        # Configuration management
     ├── logging.py       # Structured logging
@@ -202,7 +159,7 @@ server/
 
 **Key Components:**
 
-- **REST API**: 60+ endpoints for complete platform control (health, sessions, tasks, epics, quality, completion reviews, interventions, containers)
+- **REST API**: 60+ endpoints for complete platform control (health, sessions, tasks, epics, quality, completion reviews, interventions)
 - **Verification System**: Automated test generation for 5 test types (unit, API, browser, integration, E2E)
 - **Quality System (v2.1)**: 6-phase system (+ 2 partial) with test tracking, epic re-testing, prompt improvements
 - **Production Features**: Database retry logic, session checkpointing, intervention system, structured logging
@@ -211,30 +168,33 @@ server/
 ## Generated Project Structure
 
 ```
-generations/my_project/
-├── app_spec.txt              # Your specification
+projects/my_project/
 ├── init.sh                   # Generated setup script
-├── claude-progress.md        # Session notes
-├── logs/                     # Session logs (JSONL + TXT)
+├── yokeflow/                 # YokeFlow metadata (separate from app code)
+│   ├── specs/                # Specification files (original names preserved)
+│   ├── logs/                 # Session logs (JSONL + TXT)
+│   ├── agent-progress.md     # Cross-session context
+│   └── screenshots/          # Browser verification screenshots
 └── [application files]       # Generated code
 ```
 
 ## Running Generated Applications
 
 ```bash
-cd generations/my_project
+cd projects/my_project
 ./init.sh
 # Or: npm install && npm run dev
 ```
 
 ## Browser Automation
 
-YokeFlow uses different browser automation approaches optimized for each environment:
+YokeFlow uses [agent-browser](https://github.com/vercel-labs/agent-browser) for browser testing during coding sessions. Install it as a prerequisite:
 
-- **Docker Mode**: Uses [agent-browser](https://agent-browser.dev) - AI-optimized CLI with accessibility-first approach
-- **Local Mode**: Uses Playwright MCP - Full-featured browser automation with rich API
-
-This dual approach provides simple commands in containers while maintaining full capabilities for local development.
+```bash
+# macOS
+brew install agent-browser
+agent-browser install
+```
 
 ## Testing
 
@@ -252,7 +212,7 @@ pytest --cov=server --cov-report=html --cov-report=term-missing
 ```
 
 **Test Status** (February 2026):
-- ✅ **533+ total tests** across all files (46 parallel expansion, 13 MCP pre-flight, 43 brownfield)
+- ✅ **451+ total tests** across all files (13 MCP pre-flight, 43 brownfield), 10 skipped
 - ✅ **70% coverage achieved** (target met)
 - ✅ **Production ready** test infrastructure
 
@@ -315,7 +275,6 @@ YokeFlow 2.0 represents a major milestone with complete platform functionality:
 ### Systems
 - [docs/quality-system.md](docs/quality-system.md) - Automated testing
 - [docs/input-validation.md](docs/input-validation.md) - Validation framework
-- [docs/docker-sandbox-implementation.md](docs/docker-sandbox-implementation.md) - Docker integration
 
 ### Database
 - [docs/postgres-setup.md](docs/postgres-setup.md) - PostgreSQL setup and schema
@@ -336,7 +295,6 @@ YokeFlow is open for contributions! Areas of interest:
 - Authentication system implementation
 - GitHub push/PR automation for brownfield projects
 - Non-UI project support (APIs, libraries, CLI tools)
-- E2B sandbox integration
 - Performance optimizations
 - Test coverage improvements
 
@@ -354,7 +312,6 @@ Originally forked from Anthropic's autonomous coding demo. Evolved into YokeFlow
 - Production hardening features
 - Web UI with real-time monitoring
 - Quality review system
-- Docker sandbox integration
 
 **For support or questions, see [CLAUDE.md](CLAUDE.md) Troubleshooting section or open an issue.**
 

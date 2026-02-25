@@ -12,7 +12,7 @@ if [ -z "$PROJECT_NAME" ] || [ -z "$ACTION" ]; then
     exit 1
 fi
 
-PROJECT_DIR="generations/$PROJECT_NAME"
+PROJECT_DIR="projects/$PROJECT_NAME"
 
 case $ACTION in
     start)

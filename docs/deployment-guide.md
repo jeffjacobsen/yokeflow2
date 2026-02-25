@@ -33,19 +33,16 @@
 > - ✅ Database initialization works (manual step required - see Phase 5)
 > - ✅ Nginx reverse proxy configuration correct
 > - ✅ Docker container management operational
-> - ✅ Docker image build successful (yokeflow-playwright:latest)
 > - ✅ Project initialization confirmed working (Session 0 starts)
 > - ⚠️ **Full application workflow not thoroughly tested** (complete coding sessions, reviews, etc.)
 >
 > **v2.0.0 Known Issues (Resolved):**
 > - ✅ Database schema auto-initialization may fail silently on first run
 >   - **Solution:** Manually run schema.sql as documented in Phase 5
-> - ✅ Docker image name mismatch (yokeflow-sandbox vs yokeflow-playwright)
->   - **Solution:** Build as yokeflow-playwright:latest as documented in Phase 7
 >
 > **v2.0.0 Testing Needed:**
 > - Complete coding sessions (Sessions 1+) with real applications
-> - Browser verification with Playwright in production
+> - Browser verification with agent-browser in production
 > - WebSocket real-time updates during sessions
 > - Quality review system end-to-end
 > - Multi-project concurrent execution
@@ -111,7 +108,6 @@
 ## Overview
 
 This guide covers deploying YokeFlow to Digital Ocean with:
-- Docker sandboxing for agent sessions
 - PostgreSQL database (self-hosted or managed)
 - FastAPI REST API + Next.js Web UI
 - HTTPS with Let's Encrypt
@@ -125,8 +121,7 @@ This guide covers deploying YokeFlow to Digital Ocean with:
 2. [Prerequisites](#prerequisites)
 3. [Database Options](#database-options)
 4. [Deployment Steps](#deployment-steps)
-5. [Docker Sandboxing](#docker-sandboxing)
-6. [Generated Application Download](#generated-application-download)
+5. [Generated Application Download](#generated-application-download)
 7. [Security & Authentication](#security--authentication)
 8. [Backup & Monitoring](#backup--monitoring)
 9. [Cost Analysis](#cost-analysis)
@@ -144,21 +139,17 @@ This guide covers deploying YokeFlow to Digital Ocean with:
 ├─────────────────────────────────────────────────────┤
 │                                                      │
 │  Nginx (HTTPS reverse proxy)                        │
-│    ├─→ FastAPI (port 8000)                          │
-│    └─→ Next.js (port 3000)                          │
+│    ├─→ FastAPI (port 8010)                          │
+│    └─→ Next.js (port 3010)                          │
 │                                                      │
 │  Docker Compose Services:                           │
 │    ├─→ PostgreSQL (container)                       │
 │    ├─→ FastAPI (container)                          │
 │    └─→ Next.js (container)                          │
 │                                                      │
-│  Agent Sandboxes (Docker containers):               │
-│    └─→ Isolated project environments                │
-│        └─→ /workspace (mounted from host)           │
-│                                                      │
 │  Volumes:                                            │
 │    ├─→ postgres_data (database persistence)         │
-│    └─→ /var/yokeflow/generations                    │
+│    └─→ /var/yokeflow/projects                       │
 │                                                      │
 └─────────────────────────────────────────────────────┘
           │
@@ -341,23 +332,15 @@ cat > .yokeflow.yaml << 'EOF'
 # YokeFlow Configuration - Production Deployment
 
 models:
-  initializer: claude-opus-4-5-20251101
-  coding: claude-sonnet-4-5-20250929
+  initializer: claude-opus-4-6
+  coding: claude-sonnet-4-6
 
 timing:
   auto_continue_delay: 3
   web_ui_poll_interval: 5
 
-sandbox:
-  type: docker
-  docker_image: yokeflow-playwright:latest
-  docker_network: bridge
-  docker_memory_limit: 3g
-  docker_cpu_limit: 2.0
-  docker_ports: []
-
 project:
-  default_generations_dir: /var/YokeFlow/generations  # CRITICAL: Must be host path (where you cloned repo)
+  default_projects_dir: /var/YokeFlow/projects  # CRITICAL: Must be host path (where you cloned repo)
   max_iterations: null
 
 review:
@@ -365,13 +348,13 @@ review:
 EOF
 ```
 
-**IMPORTANT - Generations Directory Path:**
-- The `default_generations_dir` must be the **host filesystem path** (not container path)
+**IMPORTANT - Projects Directory Path:**
+- The `default_projects_dir` must be the **host filesystem path** (not container path)
 - This is the directory where you cloned the YokeFlow repository
 - The GitHub repository is named `YokeFlow` (capital Y, F), so `git clone` creates `/var/YokeFlow/`
-- Use the exact path: `/var/YokeFlow/generations` (match the capitalization from git clone)
+- Use the exact path: `/var/YokeFlow/projects` (match the capitalization from git clone)
 - Both API and agent containers will mount this host path correctly via Docker volumes
-- **Do NOT use `/app/generations`** - that's the container internal path, not the host path
+- **Do NOT use `/app/projects`** - that's the container internal path, not the host path
 
 #### 3.2: Configure Environment Variables
 
@@ -396,7 +379,7 @@ CLAUDE_CODE_OAUTH_TOKEN=your_claude_oauth_token_here
 
 # API Configuration
 API_HOST=0.0.0.0
-API_PORT=8000
+API_PORT=8010
 
 # Next.js Web UI Settings
 # IMPORTANT: Use your public domain (HTTPS), NOT localhost
@@ -409,12 +392,6 @@ SECRET_KEY=your_secret_key_here
 
 # UI Authentication (required for production deployment)
 UI_PASSWORD=your_secure_password_here
-
-# Sandbox Configuration
-SANDBOX_TYPE=docker  # docker, local, or e2b
-DOCKER_IMAGE=node:20-slim
-DOCKER_MEMORY_LIMIT=2g
-DOCKER_CPU_LIMIT=2.0
 
 # Optional: Digital Ocean Spaces for backups
 SPACES_KEY=your_spaces_key
@@ -589,7 +566,7 @@ server {
 
     # API endpoints
     location /api {
-        proxy_pass http://localhost:8000;
+        proxy_pass http://localhost:8010;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -603,7 +580,7 @@ server {
 
     # WebSocket for real-time updates
     location /api/ws {
-        proxy_pass http://localhost:8000;
+        proxy_pass http://localhost:8010;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection $connection_upgrade;
@@ -619,7 +596,7 @@ server {
 
     # Next.js Web UI
     location / {
-        proxy_pass http://localhost:3000;
+        proxy_pass http://localhost:3010;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -666,10 +643,9 @@ services:
       - SECRET_KEY=${SECRET_KEY}
       - UI_PASSWORD=${UI_PASSWORD}
     ports:
-      - "8000:8000"
+      - "8010:8010"
     volumes:
-      - /var/YokeFlow/generations:/var/YokeFlow/generations
-      - /var/run/docker.sock:/var/run/docker.sock  # For Docker sandboxing
+      - /var/YokeFlow/projects:/var/YokeFlow/projects
     depends_on:
       - postgres
     restart: unless-stopped
@@ -689,7 +665,7 @@ services:
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
       - NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}
     ports:
-      - "3000:3000"
+      - "3010:3010"
     restart: unless-stopped
     networks:
       - yokeflow_network
@@ -781,37 +757,10 @@ RUN chown -R appuser:appuser /app
 USER appuser
 
 # Expose API port
-EXPOSE 8000
+EXPOSE 8010
 
 # Start API server
-CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
-EOF
-
-# Agent Sandbox Dockerfile
-cat > Dockerfile.agent-sandbox <<'EOF'
-FROM node:20-bookworm
-
-# Install system dependencies for Playwright
-# Playwright requires many libraries for Chromium/Chrome
-RUN apt-get update && apt-get install -y \
-    git \
-    build-essential \
-    libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 \
-    libcups2 libdrm2 libdbus-1-3 libxkbcommon0 \
-    libxcomposite1 libxdamage1 libxfixes3 libxrandr2 \
-    libgbm1 libasound2 libpangocairo-1.0-0 libpango-1.0-0 \
-    libcairo2 libatspi2.0-0 libxshmfence1 \
-    fonts-liberation fonts-noto-color-emoji \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Playwright and browsers
-RUN npm install -g playwright@latest \
-    && npx playwright install chrome chromium \
-    && npx playwright install-deps
-
-WORKDIR /workspace
-
-CMD ["tail", "-f", "/dev/null"]
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8010"]
 EOF
 
 # Web UI Dockerfile
@@ -838,36 +787,20 @@ ENV NEXT_PUBLIC_WS_URL=$NEXT_PUBLIC_WS_URL
 RUN npm run build
 
 # Expose web port
-EXPOSE 3000
+EXPOSE 3010
 
 # Start Next.js server
 CMD ["npm", "start"]
 EOF
 ```
 
-Build the agent sandbox image (with Playwright):
-
-```bash
-# Build custom agent sandbox image with Playwright pre-installed
-# This image is used by agent sessions for browser testing
-docker build -f Dockerfile.agent-sandbox -t yokeflow-playwright:latest .
-
-# This build takes 3-5 minutes and ~2GB disk space
-# But it only needs to be done once (or when updating)
-
-# Note: If you have a .yokeflow.yaml file in your project root,
-# it should reference this image name:
-# sandbox:
-#   docker_image: yokeflow-playwright:latest
-```
-
 Start production services:
 
 ```bash
-# Create generations directory with correct permissions
+# Create projects directory with correct permissions
 # The API runs as non-root user (appuser, UID 999) for security
-mkdir -p generations
-chmod -R 777 generations  # Or: chown -R 999:999 generations
+mkdir -p projects
+chmod -R 777 projects  # Or: chown -R 999:999 projects
 
 # Build and start services
 docker compose -f docker-compose.prod.yml up -d --build
@@ -879,10 +812,10 @@ docker compose -f docker-compose.prod.yml logs -f
 docker compose ps
 
 # Test API endpoint
-curl http://localhost:8000/api/health
+curl http://localhost:8010/api/health
 
 # Test Web UI
-curl http://localhost:3000
+curl http://localhost:3010
 ```
 
 **Wait for services to be fully running before proceeding to SSL setup.**
@@ -1010,87 +943,6 @@ nginx -t && systemctl start nginx
 
 ---
 
-## Docker Sandboxing
-
-### How It Works
-
-Each agent session runs in an isolated Docker container:
-
-```
-Host Machine (Droplet)
-├── Docker Engine
-│   ├── Agent Session Container 1 (Project A)
-│   │   └── /workspace → mounted from /var/yokeflow/generations/project-a
-│   ├── Agent Session Container 2 (Project B)
-│   │   └── /workspace → mounted from /var/yokeflow/generations/project-b
-│   └── ...
-```
-
-### Configuration
-
-**Security Limits** (already configured in `config.py`):
-
-```python
-# Default Docker sandbox settings
-docker_image = "node:20-slim"
-docker_memory_limit = "2g"      # 2GB RAM per container
-docker_cpu_limit = "2.0"        # 2 CPU cores per container
-docker_network = "bridge"       # Isolated network
-```
-
-**Security Hardening:**
-
-```yaml
-# docker-compose.prod.yml - Agent containers
-security_opt:
-  - no-new-privileges:true  # Prevent privilege escalation
-cap_drop:
-  - ALL                     # Drop all capabilities
-cap_add:
-  - NET_BIND_SERVICE        # Only allow binding to ports (for dev servers)
-read_only: false             # Allow writes to /workspace
-tmpfs:
-  - /tmp                    # Temporary files in memory
-```
-
-### Resource Management
-
-Monitor Docker resource usage:
-
-```bash
-# View running containers
-docker ps
-
-# Check resource usage
-docker stats
-
-# Kill stuck containers
-docker kill <container_id>
-
-# Clean up stopped containers
-docker container prune -f
-
-# Clean up unused images (weekly)
-docker image prune -a -f
-```
-
-### Docker-in-Docker on Digital Ocean
-
-✅ **Fully Supported** - Digital Ocean Droplets support nested Docker without issues.
-
-**Benefits:**
-- Strong isolation between projects
-- Resource limits enforced by Docker
-- Easy cleanup after sessions
-- Prevents host contamination
-
-**Limitations:**
-- Overhead: ~200MB RAM per container
-- Startup time: ~2-3 seconds per container
-- Network complexity for port forwarding
-
----
-
 ## Generated Application Download
 
 ### Option 1: ZIP Download API (Recommended for Start)
@@ -1116,7 +968,7 @@ async def download_project(project_id: str):
     """
     try:
         project = await db.get_project(project_id)
-        project_path = Path(project['generations_path'])
+        project_path = Path(project['projects_path'])
 
         if not project_path.exists():
             raise HTTPException(status_code=404, detail="Project directory not found")
@@ -1212,7 +1064,7 @@ async def publish_to_github(
     """
     try:
         project = await db.get_project(project_id)
-        project_path = Path(project['generations_path'])
+        project_path = Path(project['projects_path'])
 
         # Authenticate with GitHub
         g = Github(github_token)
@@ -1630,7 +1482,7 @@ tail -f /var/log/nginx/error.log
 # Press Ctrl+C to exit
 
 # View agent session logs (inside project directory)
-cd generations/<project-name>/logs
+cd projects/<project-name>/logs
 ls -lah  # List all session logs
 
 # View human-readable session log
@@ -1643,7 +1495,6 @@ cat session_001_20251219_120000.jsonl | jq '.'
 **Session Log Features (December 2025):**
 - ✅ **Dual-format logging**: Both human-readable (TXT) and structured (JSONL)
 - ✅ **Prompt file tracking**: Logs now record which prompt file was used (`initializer_prompt_local.md`, etc.)
-- ✅ **Sandbox type tracking**: Clear indication of whether local or docker sandbox was used
 - ✅ **Real-time progress**: WebSocket updates for live session monitoring
 - ✅ **Session metadata**: Model used, session type, duration, tool usage counts
 
@@ -1653,7 +1504,7 @@ cat session_001_20251219_120000.jsonl | jq '.'
 AUTONOMOUS CODING AGENT - SESSION 1
 ================================================================================
 Session Type: CODING
-Model: claude-sonnet-4-5-20250929
+Model: claude-sonnet-4-6
 Prompt File: coding_prompt_docker.md
 Started: 2025-12-19 12:00:00
 ================================================================================
@@ -1694,7 +1545,7 @@ curl -sSL https://repos.insights.digitalocean.com/install.sh | bash
 
 | Component | Option | Monthly Cost | Notes |
 |-----------|--------|--------------|-------|
-| **Droplet** | 8GB RAM / 4 vCPU | $48 | Required for Docker sandboxing |
+| **Droplet** | 8GB RAM / 4 vCPU | $48 | Required for platform hosting |
 | **Database** | Self-hosted (in Droplet) | $0 | Included in Droplet cost |
 | **Database** | Managed PostgreSQL (alt) | $15 | High availability option |
 | **Spaces** | 250GB storage | $5 | For backups/archives |
@@ -1727,7 +1578,6 @@ curl -sSL https://repos.insights.digitalocean.com/install.sh | bash
 **Current setup is sufficient:**
 - 8GB RAM Droplet
 - Self-hosted PostgreSQL
-- Docker sandboxing
 - Nginx reverse proxy
 
 **Capacity:**
@@ -1868,173 +1718,6 @@ docker compose -f docker-compose.prod.yml logs -f api
 - After session completes, refresh browser to see all epics/tasks created
 
 **Future enhancement:** Planned feature to stream session logs via WebSocket
-
----
-
-#### 0b. Docker Image Not Found - yokeflow-playwright
-
-**Symptom:**
-```
-Failed to start Docker sandbox: 404 Client Error for http+docker://localhost/v1.51/images/create?tag=latest&fromImage=yokeflow-playwright: Not Found ("pull access denied for yokeflow-playwright, repository does not exist or may require 'docker login': denied: requested access to the resource is denied")
-```
-
-**Cause:** The `yokeflow-playwright:latest` Docker image has not been built on the server. This image is required for browser testing with Playwright.
-
-**Solution:**
-
-```bash
-# Build the Playwright-enabled agent sandbox image
-cd /var/yokeflow
-docker build -f Dockerfile.agent-sandbox -t yokeflow-playwright:latest .
-
-# This build takes 3-5 minutes and installs:
-# - Node.js 20 LTS
-# - Playwright and Chromium browser
-# - All browser dependencies (~80 system packages)
-# - Git, build tools, Python
-
-# Verify image was built successfully
-docker images | grep yokeflow-playwright
-
-# Expected output:
-# yokeflow-playwright   latest   abc123def456   2 minutes ago   2.1GB
-
-# Now try initializing your project again - it should work
-```
-
-**Prevention:** Always build the agent sandbox image during Phase 7 of deployment, BEFORE trying to create any projects.
-
-**Note:** This image is only built locally on your server. It is NOT pulled from Docker Hub or any public registry. You must build it yourself using the Dockerfile created in Phase 7.
-
----
-
-#### 0c. Volume Mount Issue - Files Not Syncing to Container
-
-**Symptom:**
-```
-Agent reports:
-"The workspace is a separate disk mount"
-"The /workspace directory exists in the container but is empty"
-"The volume mount isn't connecting to the host files"
-
-Files exist on host at: /var/yokeflow/generations/project-name/
-Container shows empty: /workspace/
-
-Screenshots are never created in .playwright-mcp/ directory
-```
-
-**Cause:** The `.yokeflow.yaml` file uses a **container path** (`/app/generations`) instead of the **host filesystem path** (`/var/YokeFlow/generations`). This causes agent containers to mount from the wrong location, splitting files across two directories.
-
-**How it happens:**
-1. YokeFlow cloned to `/var/YokeFlow/` (capital Y, F - from GitHub repo name)
-2. Config has `default_generations_dir: /app/generations` (container path - WRONG!)
-3. Orchestrator (in API container) creates project at `/app/generations/claude_ai/`
-4. API's volume mount (`/var/YokeFlow/generations:/app/generations`) makes this accessible to API
-5. But sandbox_manager passes `/app/generations/claude_ai` to Docker for agent container mount
-6. Docker interprets this as a **host path** (not understanding it's a container path)
-7. Since `/app/generations/claude_ai` doesn't exist on host, Docker creates it as a new directory
-8. Result: Files split between `/var/YokeFlow/generations/` (from API) and `/app/generations/` (from agents)
-
-**Solution:**
-
-```bash
-# 1. Stop any running sessions
-cd /var/yokeflow
-docker compose -f docker-compose.prod.yml down
-
-# 2. Edit .yokeflow.yaml
-vim .yokeflow.yaml
-
-# 3. Change the generations directory to use the host path:
-# FROM:
-#   default_generations_dir: /app/generations
-# TO:
-#   default_generations_dir: /var/YokeFlow/generations
-#
-# IMPORTANT: Use the exact path where you cloned YokeFlow (capital Y, F)
-# The GitHub repo name is "YokeFlow" so git clone creates /var/YokeFlow/
-
-# 4. Clean up the wrong directory on host (if it exists)
-sudo rm -rf /app/generations
-
-# 5. Verify the change
-grep default_generations_dir .yokeflow.yaml
-# Should show: default_generations_dir: /var/YokeFlow/generations
-
-# 6. Restart services
-docker compose -f docker-compose.prod.yml up -d
-
-# 7. Delete any partially initialized projects and re-create them
-# Files were split across two locations, need fresh start
-```
-
-**Verification:**
-
-```bash
-# After changing config and restarting, initialize a test project
-# Then check if files sync:
-
-# On host (where you installed YokeFlow)
-ls -la /var/YokeFlow/generations/your-project/
-
-# In API container (should see files via volume mount)
-docker exec yokeflow_api ls -la /app/generations/your-project/
-
-# In agent container (while session is running, should see files via mount)
-docker exec yokeflow-your-project ls -la /workspace/
-
-# All three should show identical files!
-```
-
-**Prevention:** Always use the **host filesystem path** in `.yokeflow.yaml` for production deployments, not container paths. The path should match where you cloned the repository (e.g., `/var/YokeFlow/generations` if you cloned to `/var/YokeFlow/`). Follow Phase 3.1 configuration instructions carefully.
-
-**Why this matters:** When orchestrator creates agent containers, it passes the `project_dir` path to Docker for mounting. Docker interprets this as a host path. If you use a container path like `/app/generations`, Docker will try to mount from `/app/generations` on the **host** (which doesn't exist or is wrong), not from inside the API container.
-
----
-
-#### 0d. Playwright Browser Not Found in Agent Container
-
-**Symptom:**
-```
-Error: browserType.launchPersistentContext: Chromium distribution 'chrome' is not found
-Run "npx playwright install chrome"
-```
-
-**Cause:** Agent sandbox using default `node:20-slim` image without Playwright pre-installed
-
-**Solution:**
-
-```bash
-# 1. Build custom agent sandbox image (one-time, 3-5 minutes)
-cd /var/yokeflow
-docker build -f Dockerfile.agent-sandbox -t yokeflow-playwright:latest .
-
-# This installs:
-# - Playwright browsers (Chrome, Chromium)
-# - All browser dependencies (~80 system packages)
-# - Git, build tools
-
-# 2. Verify image built
-docker images | grep yokeflow
-
-# Expected output: yokeflow-playwright   latest   ...
-
-# 3. Next agent session will use new image automatically
-# (.yokeflow.yaml should specify: docker_image: yokeflow-playwright:latest)
-```
-
-**Prevention:** Always build agent sandbox image during initial deployment (Phase 7, before starting services)
-
-**Image details:**
-- Base: `node:20-bookworm` (Debian-based, better compatibility than Alpine)
-- Size: ~2GB (includes full Chrome browser + dependencies)
-- One-time build: Image is reused for all agent sessions
-
-**Verify Playwright works:**
-```bash
-# After starting a coding session
-docker exec yokeflow-<project-name> npx playwright --version
-```
 
 ---
 
@@ -2193,7 +1876,7 @@ systemctl restart docker
 
 ```bash
 # Find process using port
-lsof -i :8000
+lsof -i :8010
 
 # Kill process
 kill -9 <PID>
@@ -2251,7 +1934,7 @@ services:
 **Symptom:**
 ```
 # API returns [] but you know you have projects
-curl http://localhost:8000/api/projects
+curl http://localhost:8010/api/projects
 []
 
 # Or you see connection errors in logs:
@@ -2282,7 +1965,7 @@ DATABASE_URL=postgresql://agent:password@postgres:5432/yokeflow
 docker compose -f docker-compose.prod.yml restart api
 
 # Test connection
-curl http://localhost:8000/api/projects
+curl http://localhost:8010/api/projects
 ```
 
 **Verify the fix:**
@@ -2324,12 +2007,12 @@ ufw status
 - Go to: https://cloud.digitalocean.com/networking/firewalls
 - Ensure HTTP (80) and HTTPS (443) are allowed inbound
 
-#### 9. Web UI Still Uses localhost:8000 After Changing NEXT_PUBLIC_API_URL
+#### 9. Web UI Still Uses localhost:8010 After Changing NEXT_PUBLIC_API_URL
 
 **Symptom:**
 - `.env` has correct `NEXT_PUBLIC_API_URL=https://your-domain.com`
 - Docker container shows correct URL: `docker compose exec web env | grep NEXT_PUBLIC`
-- But browser DevTools shows API calls going to `http://localhost:8000`
+- But browser DevTools shows API calls going to `http://localhost:8010`
 - Problem persists even on different computers (not browser cache)
 
 **Cause:** Next.js builds environment variables **into the static files at build time**. The Dockerfile needs to accept the build argument.
@@ -2366,7 +2049,7 @@ docker compose -f docker-compose.prod.yml build --no-cache web
 docker compose -f docker-compose.prod.yml up -d web
 
 # 5. Verify the build used the correct URL
-docker compose -f docker-compose.prod.yml exec web grep -r "localhost:8000" /app/.next 2>/dev/null
+docker compose -f docker-compose.prod.yml exec web grep -r "localhost:8010" /app/.next 2>/dev/null
 # Should return nothing (no matches)
 ```
 
@@ -2393,7 +2076,7 @@ docker compose -f docker-compose.prod.yml logs -f api
 # Press Ctrl+C to exit
 
 # Option 2: Watch session log file directly
-tail -f generations/*/logs/session_001_*.txt
+tail -f projects/*/logs/session_001_*.txt
 # Press Ctrl+C to exit
 
 # Option 3: Poll logs via API
@@ -2451,7 +2134,7 @@ vim /etc/nginx/sites-available/autonomous-coding
 
 # The complete block should look like:
 #   location /api/ws {
-#       proxy_pass http://localhost:8000;
+#       proxy_pass http://localhost:8010;
 #       proxy_http_version 1.1;
 #       proxy_set_header Upgrade $http_upgrade;
 #       proxy_set_header Connection $connection_upgrade;
@@ -2550,7 +2233,6 @@ certbot certificates
 2. **Test Deployment:**
    - Create test project via Web UI
    - Run initialization session
-   - Monitor Docker sandboxing
    - Test download functionality
 
 3. **Enable Backups:**

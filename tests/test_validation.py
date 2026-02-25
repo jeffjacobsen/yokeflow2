@@ -20,7 +20,6 @@ from server.api.validation import (
     SecurityConfigValidator,
     DatabaseConfigValidator,
     ProjectConfigValidator,
-    SandboxConfigValidator,
     InterventionConfigValidator,
     VerificationConfigValidator,
     ConfigValidator,
@@ -30,8 +29,6 @@ from server.api.validation import (
     validate_config_dict,
     validate_spec_file_content,
     validate_project_name,
-    # Enums
-    SandboxType,
 )
 
 
@@ -130,8 +127,8 @@ class TestSessionStartRequest:
     def test_valid_session_start(self):
         """Test valid session start request."""
         request = SessionStartRequest(
-            initializer_model="claude-opus-4-5-20251101",
-            coding_model="claude-sonnet-4-5-20250929",
+            initializer_model="claude-opus-4-6",
+            coding_model="claude-sonnet-4-6",
             max_iterations=10,
             auto_continue=True
         )
@@ -141,12 +138,9 @@ class TestSessionStartRequest:
     def test_valid_model_names(self):
         """Test valid Claude model name formats."""
         valid_models = [
-            "claude-opus-4-5-20251101",
-            "claude-sonnet-4-5-20250929",
-            "claude-haiku-3-5-20240307",
-            "claude-3-opus",
-            "claude-3-sonnet",
-            "claude-3-5-opus",
+            "claude-opus-4-6",
+            "claude-sonnet-4-6",
+            "claude-haiku-4-5",
         ]
         for model in valid_models:
             request = SessionStartRequest(
@@ -241,10 +235,11 @@ class TestModelConfigValidator:
     def test_valid_model_config(self):
         """Test valid model configuration."""
         config = ModelConfigValidator(
-            initializer="claude-opus-4-5-20251101",
-            coding="claude-sonnet-4-5-20250929"
+            initializer="claude-opus-4-6",
+            coding="claude-sonnet-4-6"
         )
-        assert config.initializer == "claude-opus-4-5-20251101"
+        assert config.initializer == "claude-opus-4-6"
+        assert config.coding == "claude-sonnet-4-6"
 
     def test_defaults(self):
         """Test default model values."""
@@ -277,7 +272,7 @@ class TestTimingConfigValidator:
         config = TimingConfigValidator()
         assert config.auto_continue_delay == 3
         assert config.web_ui_poll_interval == 5
-        assert config.web_ui_port == 3000
+        assert config.web_ui_port == 3010
 
     def test_invalid_delays(self):
         """Test invalid delay values are rejected."""
@@ -324,77 +319,6 @@ class TestDatabaseConfigValidator:
         for url in invalid_urls:
             with pytest.raises(ValidationError):
                 DatabaseConfigValidator(database_url=url)
-
-
-class TestSandboxConfigValidator:
-    """Tests for SandboxConfigValidator."""
-
-    def test_valid_sandbox_config(self):
-        """Test valid sandbox configuration."""
-        config = SandboxConfigValidator(
-            type=SandboxType.DOCKER,
-            docker_image="custom:latest",
-            docker_memory_limit="4g",
-            docker_cpu_limit="4.0"
-        )
-        assert config.type == SandboxType.DOCKER
-        assert config.docker_memory_limit == "4g"
-
-    def test_defaults(self):
-        """Test default sandbox values."""
-        config = SandboxConfigValidator()
-        assert config.type == SandboxType.NONE
-        assert config.docker_image == "yokeflow-sandbox:latest"
-        assert config.docker_network == "bridge"
-
-    def test_valid_memory_limits(self):
-        """Test valid memory limit formats."""
-        valid_limits = ["512m", "1g", "2G", "100k", "4096M"]
-        for limit in valid_limits:
-            config = SandboxConfigValidator(docker_memory_limit=limit)
-            # Should be normalized to lowercase
-            assert config.docker_memory_limit.lower() == limit.lower()
-
-    def test_invalid_memory_limits(self):
-        """Test invalid memory limit formats."""
-        invalid_limits = ["2gb", "512", "1.5g", "invalid"]
-        for limit in invalid_limits:
-            with pytest.raises(ValidationError):
-                SandboxConfigValidator(docker_memory_limit=limit)
-
-    def test_valid_cpu_limits(self):
-        """Test valid CPU limit values."""
-        valid_limits = ["0.5", "1.0", "2.0", "16", "32.0"]
-        for limit in valid_limits:
-            config = SandboxConfigValidator(docker_cpu_limit=limit)
-            assert config.docker_cpu_limit == limit
-
-    def test_invalid_cpu_limits(self):
-        """Test invalid CPU limit values."""
-        invalid_limits = ["0", "-1", "33", "invalid", "100"]
-        for limit in invalid_limits:
-            with pytest.raises(ValidationError):
-                SandboxConfigValidator(docker_cpu_limit=limit)
-
-    def test_valid_port_mappings(self):
-        """Test valid port mapping formats."""
-        config = SandboxConfigValidator(
-            docker_ports=["3000:3000", "5173:5173", "8080:80"]
-        )
-        assert len(config.docker_ports) == 3
-
-    def test_invalid_port_mappings(self):
-        """Test invalid port mapping formats."""
-        invalid_mappings = [
-            ["3000"],  # Missing container port
-            ["3000:"],  # Empty container port
-            [":3000"],  # Empty host port
-            ["abc:def"],  # Non-numeric
-            ["3000-4000:3000"],  # Port range
-        ]
-        for mappings in invalid_mappings:
-            with pytest.raises(ValidationError):
-                SandboxConfigValidator(docker_ports=mappings)
 
 
 class TestVerificationConfigValidator:
@@ -464,7 +388,6 @@ class TestConfigValidator:
             models=ModelConfigValidator(),
             timing=TimingConfigValidator(),
             database=DatabaseConfigValidator(),
-            sandbox=SandboxConfigValidator()
         )
         assert config.models is not None
         assert config.timing is not None
@@ -474,20 +397,19 @@ class TestConfigValidator:
         config = ConfigValidator()
         assert config.models.initializer is not None
         assert config.timing.auto_continue_delay == 3
-        assert config.sandbox.type == SandboxType.NONE
 
     def test_partial_config(self):
         """Test partial configuration with defaults."""
         config_dict = {
             "models": {
-                "coding": "claude-sonnet-4-5-20250929"
+                "coding": "claude-sonnet-4-6"
             },
             "timing": {
                 "auto_continue_delay": 5
             }
         }
         config = validate_config_dict(config_dict)
-        assert config.models.coding == "claude-sonnet-4-5-20250929"
+        assert config.models.coding == "claude-sonnet-4-6"
         assert config.timing.auto_continue_delay == 5
         # Should still have defaults for other fields
         assert config.database.database_url is not None
@@ -599,14 +521,14 @@ class TestHelperFunctions:
         """Test validate_config_dict with valid dictionary."""
         config_dict = {
             "models": {
-                "initializer": "claude-opus-4-5-20251101"
+                "initializer": "claude-opus-4-6"
             },
             "timing": {
                 "auto_continue_delay": 5
             }
         }
         config = validate_config_dict(config_dict)
-        assert config.models.initializer == "claude-opus-4-5-20251101"
+        assert config.models.initializer == "claude-opus-4-6"
         assert config.timing.auto_continue_delay == 5
 
 
@@ -635,8 +557,8 @@ class TestValidationIntegration:
     def test_full_session_start_flow(self):
         """Test complete session start validation flow."""
         request = SessionStartRequest(
-            initializer_model="claude-opus-4-5-20251101",
-            coding_model="claude-sonnet-4-5-20250929",
+            initializer_model="claude-opus-4-6",
+            coding_model="claude-sonnet-4-6",
             max_iterations=10,
             auto_continue=True
         )
@@ -646,20 +568,14 @@ class TestValidationIntegration:
         """Test complete configuration validation flow."""
         config_dict = {
             "models": {
-                "initializer": "claude-opus-4-5-20251101",
-                "coding": "claude-sonnet-4-5-20250929"
+                "initializer": "claude-opus-4-6",
+                "coding": "claude-sonnet-4-6"
             },
             "timing": {
                 "auto_continue_delay": 5,
                 "web_ui_port": 3001
-            },
-            "sandbox": {
-                "type": "docker",
-                "docker_memory_limit": "4g",
-                "docker_cpu_limit": "4.0"
             }
         }
         config = validate_config_dict(config_dict)
-        assert config.models.initializer == "claude-opus-4-5-20251101"
-        assert config.sandbox.type == SandboxType.DOCKER
-        assert config.sandbox.docker_memory_limit == "4g"
+        assert config.models.initializer == "claude-opus-4-6"
+        assert config.timing.auto_continue_delay == 5

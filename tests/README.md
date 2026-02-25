@@ -331,7 +331,7 @@ python -m server.agent.orchestrator init --spec app_spec.txt
 python scripts/task_status.py
 
 # Check logs
-tail -f generations/project_name/logs/session_*.jsonl
+tail -f projects/project_name/yokeflow/logs/session_*.jsonl
 ```
 
 ### 2. API Testing
@@ -340,8 +340,8 @@ tail -f generations/project_name/logs/session_*.jsonl
 python -m server.api.start
 
 # Test endpoints
-curl http://localhost:8000/api/projects
-curl http://localhost:8000/api/sessions
+curl http://localhost:8010/api/projects
+curl http://localhost:8010/api/sessions
 ```
 
 ### 3. Database Operations

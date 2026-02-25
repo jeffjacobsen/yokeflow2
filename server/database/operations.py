@@ -300,7 +300,7 @@ class TaskDatabase:
         Rename a project (database name only).
 
         NOTE: This only updates the project name in the database.
-        The directory name in the generations/ folder is NOT changed.
+        The directory name in the projects/ folder is NOT changed.
         This is intentional to avoid breaking running sessions and
         maintain filesystem stability.
 
@@ -738,78 +738,6 @@ class TaskDatabase:
             )
             return result
 
-    async def get_next_expansion_session_number(self, project_id: UUID) -> int:
-        """
-        Get next expansion session number for a project.
-
-        Expansion sessions use negative numbers (-1, -2, -3, ...) so they
-        don't interfere with regular session numbering (0 for initializer, 1+ for coding).
-
-        Args:
-            project_id: Project UUID
-
-        Returns:
-            Next negative session number for expansion workers
-        """
-        async with self.acquire() as conn:
-            result = await conn.fetchval(
-                """
-                SELECT COALESCE(MIN(session_number), 0) - 1
-                FROM sessions
-                WHERE project_id = $1
-                """,
-                project_id
-            )
-            return result
-
-    async def create_expansion_session(
-        self,
-        project_id: UUID,
-        session_type: str,
-        model: str,
-    ) -> Dict[str, Any]:
-        """
-        Atomically create an expansion session with the next negative session number.
-
-        Uses a PostgreSQL advisory lock within an explicit transaction to serialize
-        concurrent session creation for the same project. The INSERT...SELECT alone
-        is NOT safe under READ COMMITTED because multiple transactions can read the
-        same MIN(session_number) before any of them commit.
-
-        The advisory lock (keyed on project_id hash) ensures only one worker at a
-        time computes and claims a session number. The lock is released automatically
-        when the transaction commits.
-
-        Args:
-            project_id: Project UUID
-            session_type: Session type (e.g., 'expansion')
-            model: Model name
-
-        Returns:
-            Created session record
-        """
-        async with self.acquire() as conn:
-            async with conn.transaction():
-                # Advisory lock serializes concurrent session creation for this project
-                await conn.execute(
-                    "SELECT pg_advisory_xact_lock(hashtext($1::text))",
-                    str(project_id)
-                )
-                row = await conn.fetchrow(
-                    """
-                    INSERT INTO sessions
-                    (project_id, session_number, type, model, status)
-                    SELECT $1,
-                           COALESCE(MIN(session_number), 0) - 1,
-                           $2, $3, 'pending'
-                    FROM sessions
-                    WHERE project_id = $1
-                    RETURNING *
-                    """,
-                    project_id, session_type, model
-                )
-                return dict(row)
-
     async def get_session_history(
         self,
         project_id: UUID,
@@ -984,67 +912,6 @@ class TaskDatabase:
             rows = await conn.fetch(query, project_id)
             return [dict(row) for row in rows]
 
-    async def get_epics_needing_expansion(
-        self,
-        project_id: UUID
-    ) -> List[Dict[str, Any]]:
-        """
-        Get epics that have no tasks yet.
-
-        Args:
-            project_id: Project UUID
-
-        Returns:
-            List of epics needing expansion
-        """
-        async with self.acquire() as conn:
-            rows = await conn.fetch(
-                """
-                SELECT e.*
-                FROM epics e
-                LEFT JOIN tasks t ON e.id = t.epic_id
-                WHERE e.project_id = $1
-                GROUP BY e.id
-                HAVING COUNT(t.id) = 0
-                ORDER BY e.priority
-                """,
-                project_id
-            )
-            return [dict(row) for row in rows]
-
-    async def is_expansion_complete(
-        self,
-        project_id: UUID
-    ) -> bool:
-        """
-        Check if all epics have been expanded (have at least one task).
-
-        Used to verify parallel expansion completed successfully before
-        allowing coding sessions to start.
-
-        Args:
-            project_id: Project UUID
-
-        Returns:
-            True if all epics have at least one task, False otherwise
-        """
-        async with self.acquire() as conn:
-            # Count epics that have zero tasks
-            unexpanded_count = await conn.fetchval(
-                """
-                SELECT COUNT(*) FROM (
-                    SELECT e.id
-                    FROM epics e
-                    LEFT JOIN tasks t ON e.id = t.epic_id
-                    WHERE e.project_id = $1
-                    GROUP BY e.id
-                    HAVING COUNT(t.id) = 0
-                ) AS unexpanded
-                """,
-                project_id
-            )
-            return (unexpanded_count or 0) == 0
-
     # =========================================================================
     # Task Operations
     # =========================================================================
@@ -1053,8 +920,8 @@ class TaskDatabase:
         self,
         epic_id: int,
         project_id: UUID,
-        description: str,
-        action: Optional[str] = None,
+        name: str,
+        description: Optional[str] = None,
         priority: int = 0
     ) -> Dict[str, Any]:
         """
@@ -1063,8 +930,8 @@ class TaskDatabase:
         Args:
             epic_id: Epic ID
             project_id: Project UUID
-            description: Task description
-            action: Implementation details
+            name: Task name
+            description: Implementation details
             priority: Task priority
 
         Returns:
@@ -1073,11 +940,11 @@ class TaskDatabase:
         async with self.acquire() as conn:
             row = await conn.fetchrow(
                 """
-                INSERT INTO tasks (epic_id, project_id, description, action, priority)
+                INSERT INTO tasks (epic_id, project_id, name, description, priority)
                 VALUES ($1, $2, $3, $4, $5)
                 RETURNING *
                 """,
-                epic_id, project_id, description, action, priority
+                epic_id, project_id, name, description, priority
             )
             return dict(row)
 
@@ -1764,7 +1631,7 @@ class TaskDatabase:
             'avg_quality_rating': None,
             'sessions_without_browser_verification': 0,
             'avg_error_rate_percent': None,
-            'avg_playwright_calls_per_session': None
+            'avg_browser_calls_per_session': None
         }
 
     async def list_deep_reviews(
@@ -3046,7 +2913,7 @@ class TaskDatabase:
 
         Args:
             project_id: Project UUID
-            review_data: Review data from CompletionAnalyzer
+            review_data: Review data dict (see COMPLETION_REVIEW.md for shape)
 
         Returns:
             UUID of created review

@@ -92,7 +92,7 @@ export function ProjectCard({ project }: ProjectCardProps) {
           <div className="pt-4 border-t border-gray-200 dark:border-gray-800">
             <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Next Task:</div>
             <div className="text-sm text-gray-700 dark:text-gray-300">
-              {truncate(next_task.description, 80)}
+              {truncate(next_task.name, 80)}
             </div>
           </div>
         )}

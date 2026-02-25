@@ -22,9 +22,8 @@ export default function CreateProjectPage() {
 
   // Common fields
   const [projectName, setProjectName] = useState('');
-  const [sandboxType, setSandboxType] = useState<'docker' | 'local'>('docker');
-  const [initializerModel, setInitializerModel] = useState('claude-opus-4-5-20251101');
-  const [codingModel, setCodingModel] = useState('claude-sonnet-4-5-20250929');
+const [initializerModel, setInitializerModel] = useState('claude-opus-4-6');
+  const [codingModel, setCodingModel] = useState('claude-sonnet-4-6');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [nameValidationError, setNameValidationError] = useState<string | null>(null);
 
@@ -153,7 +152,7 @@ export default function CreateProjectPage() {
       setGenerationProgress({ stage: 'generating', message: 'Generating specification...', percentage: 30 });
 
       // Send POST request to generate specification
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/generate-spec`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8010'}/api/generate-spec`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -233,7 +232,7 @@ export default function CreateProjectPage() {
   // Validate generated specification
   const validateGeneratedSpec = useCallback(async (spec: string) => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/validate-spec`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8010'}/api/validate-spec`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -317,7 +316,6 @@ export default function CreateProjectPage() {
           sourceType === 'local' ? sourcePath : null,
           sourceBranch,
           changeSpec || null,
-          sandboxType,
           initializerModel,
           codingModel
         );
@@ -327,7 +325,6 @@ export default function CreateProjectPage() {
           projectName,
           specFiles.length === 1 ? specFiles[0] : specFiles,
           false,
-          sandboxType,
           initializerModel,
           codingModel
         );
@@ -340,7 +337,6 @@ export default function CreateProjectPage() {
           projectName,
           specFile,
           false,
-          sandboxType,
           initializerModel,
           codingModel
         );
@@ -877,26 +873,6 @@ export default function CreateProjectPage() {
           </>
         )}
 
-        {/* Sandbox Type */}
-        <div>
-          <label htmlFor="sandboxType" className="block text-sm font-medium text-gray-300 mb-2">
-            Sandbox Type *
-          </label>
-          <select
-            id="sandboxType"
-            value={sandboxType}
-            onChange={(e) => setSandboxType(e.target.value as 'docker' | 'local')}
-            className="w-full px-4 py-3 bg-gray-900 border border-gray-800 rounded-lg text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            disabled={isCreating || isGenerating}
-          >
-            <option value="docker">Docker (isolated container, recommended)</option>
-            <option value="local">Local (direct filesystem access, faster)</option>
-          </select>
-          <p className="mt-1 text-sm text-gray-700 dark:text-gray-500">
-            Docker provides isolation but may be slower. Local is faster but runs on the host system.
-          </p>
-        </div>
-
         {/* Advanced Options */}
         <div>
           <button
@@ -922,8 +898,8 @@ export default function CreateProjectPage() {
                   className="w-full px-4 py-2 bg-gray-950 border border-gray-800 rounded-lg text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   disabled={isCreating || isGenerating}
                 >
-                  <option value="claude-opus-4-5-20251101">Claude Opus (better planning)</option>
-                  <option value="claude-sonnet-4-5-20250929">Claude Sonnet (faster)</option>
+                  <option value="claude-opus-4-6">Claude Opus (better planning)</option>
+                  <option value="claude-sonnet-4-6">Claude Sonnet (faster)</option>
                 </select>
                 <p className="mt-1 text-xs text-gray-700 dark:text-gray-500">
                   Model used for creating the project roadmap
@@ -942,8 +918,8 @@ export default function CreateProjectPage() {
                   className="w-full px-4 py-2 bg-gray-950 border border-gray-800 rounded-lg text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   disabled={isCreating || isGenerating}
                 >
-                  <option value="claude-sonnet-4-5-20250929">Claude Sonnet (recommended)</option>
-                  <option value="claude-opus-4-5-20251101">Claude Opus (more capable)</option>
+                  <option value="claude-sonnet-4-6">Claude Sonnet (recommended)</option>
+                  <option value="claude-opus-4-6">Claude Opus (more capable)</option>
                 </select>
                 <p className="mt-1 text-xs text-gray-700 dark:text-gray-500">
                   Model used for implementation sessions
@@ -1010,7 +986,7 @@ export default function CreateProjectPage() {
                 </>
               ) : mode === 'upload' ? (
                 <>
-                  <p>1. Project directory is created in generations/</p>
+                  <p>1. Project directory is created in projects/</p>
                   <p>2. Your spec file is saved as app_spec.txt</p>
                   <p>3. Initialization session starts automatically</p>
                   <p>4. The initializer creates epics, tasks, and tests</p>

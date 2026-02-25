@@ -184,7 +184,7 @@ def main():
         "git add . && git commit -m 'msg'",
         # Process management
         "ps aux",
-        "lsof -i :3000",
+        "lsof -i :3010",
         "sleep 2",
         # Allowed pkill patterns for dev servers
         "pkill node",
@@ -216,7 +216,7 @@ def main():
         "rm -f .git/index.lock && git add .",
         "rm server/migrations/003_messages.js",
         "rm -f server/test-users.js",
-        "rm -rf .playwright-mcp/",
+        "rm -rf .cache/playwright/",
         "rm -rf node_modules/.cache/",
         "rm -rf .cache/",
         "rm *.log",

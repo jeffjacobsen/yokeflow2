@@ -96,7 +96,7 @@ class TestHealthEndpoints:
         assert "version" in data
         assert "database_configured" in data
         assert "default_models" in data
-        assert "generations_dir" in data
+        assert "projects_dir" in data
 
 
 class TestAuthenticationEndpoints:
@@ -153,7 +153,7 @@ class TestProjectEndpoints:
                     'total_time_seconds': 120,
                     'progress': {'epics': 3, 'tasks': 10},
                     'metadata': json.dumps({
-                        'settings': {'sandbox_type': 'docker'}
+                        'settings': {}
                     })
                 },
                 {
@@ -167,7 +167,7 @@ class TestProjectEndpoints:
                     'total_time_seconds': 300,
                     'progress': {'epics': 5, 'tasks': 20},
                     'metadata': {
-                        'settings': {'sandbox_type': 'local'}
+                        'settings': {}
                     }
                 }
             ])
@@ -212,7 +212,6 @@ class TestProjectEndpoints:
                             data={
                                 "name": "test-project",
                                 "force": "false",
-                                "sandbox_type": "docker"
                             },
                             files={
                                 "spec_files": ("spec.txt", spec_file, "text/plain")
@@ -237,7 +236,6 @@ class TestProjectEndpoints:
                 data={
                     "name": "existing-project",
                     "force": "false",
-                    "sandbox_type": "docker"
                 },
                 files={
                     "spec_files": ("spec.txt", spec_file, "text/plain")
@@ -265,7 +263,7 @@ class TestProjectEndpoints:
                 'env_configured': False,
                 'progress': {'total_tasks': 0, 'completed_tasks': 0},
                 'active_sessions': [],
-                'metadata': {'settings': {'sandbox_type': 'docker'}}
+                'metadata': {'settings': {}}
             })
 
             response = client.get(f"/api/projects/{project_id}")
@@ -503,67 +501,6 @@ class TestErrorHandling:
 
             response = client.get(f"/api/projects/{project_id}")
             assert response.status_code == 500
-
-
-class TestContainerEndpoints:
-    """Test Docker container management endpoints."""
-
-    def test_get_container_status(self, client):
-        """Test getting container status for a project."""
-        project_id = uuid4()
-
-        # Mock database operations
-        with patch('server.api.app.DatabaseManager') as MockDB:
-            mock_db = AsyncMock()
-            mock_db.__aenter__.return_value = mock_db
-            mock_db.__aexit__.return_value = None
-            mock_db.get_project.return_value = {
-                'id': project_id,
-                'name': 'test-project',
-                'metadata': {'sandbox_type': 'docker'}
-            }
-            MockDB.return_value = mock_db
-
-            # Mock SandboxManager at the correct import location
-            with patch('server.sandbox.manager.SandboxManager') as MockSandboxManager:
-                MockSandboxManager.get_docker_container_status.return_value = {
-                    'status': 'running',
-                    'id': 'abc123',
-                    'name': 'test-project-container',
-                    'ports': {'8000/tcp': [{'HostPort': '32768'}]}
-                }
-
-                response = client.get(f"/api/projects/{project_id}/container/status")
-                assert response.status_code == 200
-                data = response.json()
-                assert data['container_exists'] == True
-                assert data['status'] == 'running'
-
-    def test_start_container(self, client):
-        """Test starting a container for a project."""
-        project_id = uuid4()
-
-        # Mock database operations
-        with patch('server.api.app.DatabaseManager') as MockDB:
-            mock_db = AsyncMock()
-            mock_db.__aenter__.return_value = mock_db
-            mock_db.__aexit__.return_value = None
-            mock_db.get_project.return_value = {
-                'id': project_id,
-                'name': 'test-project',
-                'metadata': {'sandbox_type': 'docker'}
-            }
-            MockDB.return_value = mock_db
-
-            # Mock SandboxManager at the correct import location
-            with patch('server.sandbox.manager.SandboxManager') as MockSandboxManager:
-                MockSandboxManager.start_docker_container.return_value = True
-
-                response = client.post(f"/api/projects/{project_id}/container/start")
-                assert response.status_code == 200
-                data = response.json()
-                assert data['message'] == 'Container started successfully'
-                assert data['started'] == True
 
 
 class TestEnvironmentEndpoints:

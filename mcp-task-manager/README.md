@@ -249,8 +249,8 @@ python tests/test_mcp_direct.py    # Direct MCP server tests
 **3. Via Web UI Sessions:**
 ```bash
 # Start API server and create project via Web UI
-uvicorn api.main:app --host 0.0.0.0 --port 8000
-# Then use Web UI at http://localhost:3000 to start sessions
+uvicorn api.main:app --host 0.0.0.0 --port 8010
+# Then use Web UI at http://localhost:3010 to start sessions
 # Observe MCP tool calls in API server logs
 ```
 

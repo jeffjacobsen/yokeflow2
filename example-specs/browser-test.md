@@ -1,17 +1,17 @@
-# Simple Web Application for Playwright Docker Testing
+# Simple Web Application for Browser Testing
 
-Create a minimal web application to test Playwright Docker integration.
+Create a minimal web application to test agent-browser integration.
 
 ## Requirements
 
 1. **Simple Express Backend** (port 3001)
    - GET /api/health - Returns { status: "ok", timestamp: Date.now() }
-   - GET /api/message - Returns { message: "Hello from Docker!" }
+   - GET /api/message - Returns { message: "Hello from the server!" }
 
 2. **Simple Frontend** (port 5173)
    - Single HTML page with:
-     - Title: "Playwright Docker Test"
-     - H1: "Testing Playwright in Docker"
+     - Title: "Browser Test"
+     - H1: "Testing Browser Automation"
      - Button: "Test API" that fetches /api/message
      - Div to display the API response
    - Should log to console: "Page loaded successfully"
@@ -30,4 +30,4 @@ After implementation, verify with browser automation that:
 - Button click fetches and displays message
 - Console has no errors
 
-This is specifically designed to test Playwright running inside Docker containers.
+This is designed to test agent-browser browser automation.

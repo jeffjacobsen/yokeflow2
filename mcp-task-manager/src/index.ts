@@ -14,15 +14,11 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
-import { exec } from 'child_process';
-import { promisify } from 'util';
 import path from 'path';
 import { fileURLToPath } from 'url';
 // Import database implementation
 import { TaskDatabase } from './database.js';
 import type { NewTask, NewTest, NewEpic, NewEpicTest } from './types.js';
-
-const execAsync = promisify(exec);
 
 // Get __dirname equivalent in ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -327,11 +323,11 @@ const tools: Tool[] = [
           ...idFieldSchema,
           description: 'The epic this task belongs to'
         },
-        description: {
+        name: {
           type: 'string',
-          description: 'Brief description of the task'
+          description: 'Brief name/title of the task'
         },
-        action: {
+        description: {
           type: 'string',
           description: 'Detailed implementation instructions'
         },
@@ -340,7 +336,7 @@ const tools: Tool[] = [
           description: 'Priority within the epic (optional, auto-increments)'
         }
       },
-      required: ['epic_id', 'description', 'action']
+      required: ['epic_id', 'name', 'description']
     }
   },
   {
@@ -673,11 +669,11 @@ const tools: Tool[] = [
           items: {
             type: 'object',
             properties: {
+              name: { type: 'string' },
               description: { type: 'string' },
-              action: { type: 'string' },
               priority: { type: 'number' }
             },
-            required: ['description', 'action']
+            required: ['name', 'description']
           },
           description: 'Array of tasks to create for this epic'
         }
@@ -706,25 +702,6 @@ const tools: Tool[] = [
       }
     }
   },
-  {
-    name: 'bash_docker',
-    description: 'Execute a bash command in the Docker sandbox. Use this instead of the regular Bash tool when a sandbox is active. Returns stdout, stderr, and exit code.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        command: {
-          type: 'string',
-          description: 'The bash command to execute in the Docker container'
-        },
-        description: {
-          type: 'string',
-          description: 'Brief description of what this command does (for logging)'
-        }
-      },
-      required: ['command']
-    }
-  }
-
 ];
 
 // Create MCP server
@@ -787,7 +764,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             content: [
               {
                 type: 'text',
-                text: `${nextTask.description}\n\n${nextTask.action}\n\nEpic: ${nextTask.epic_name} (ID: ${nextTask.epic_id})`
+                text: `${nextTask.name}\n\n${nextTask.description}\n\nEpic: ${nextTask.epic_name} (ID: ${nextTask.epic_id})`
               }
             ]
           };
@@ -887,8 +864,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'create_task':
         const newTask: NewTask = {
           epic_id: args?.epic_id as any,
+          name: args?.name as string,
           description: args?.description as string,
-          action: args?.action as string,
           priority: args?.priority as number
         };
         const createdTask = await db.createTask(newTask);
@@ -896,7 +873,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           content: [
             {
               type: 'text',
-              text: `Created task ${createdTask.id}: ${createdTask.description}`
+              text: `Created task ${createdTask.id}: ${createdTask.name}`
             }
           ]
         };
@@ -1239,7 +1216,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             {
               type: 'text',
               text: `Expanded epic ${args?.epic_id} with ${expandedTasks.length} tasks:\n${
-                expandedTasks.map(t => `- Task ${t.id}: ${t.description}`).join('\n')
+                expandedTasks.map(t => `- Task ${t.id}: ${t.name}`).join('\n')
               }`
             }
           ]
@@ -1269,107 +1246,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             }
           ]
         };
-
-      case 'bash_docker':
-        // Get Docker configuration from environment
-        const containerName = process.env.DOCKER_CONTAINER_NAME || 'yokeflow-container';
-        let command = args?.command as string;
-
-        if (!command) {
-          throw new Error('Command is required for bash_docker');
-        }
-
-        console.error(`[bash_docker] Executing in container ${containerName}: ${command.substring(0, 100)}`);
-
-        // Check if command contains a heredoc and transform it if needed
-        const heredocPattern = /cat\s*>\s*([^\s]+)\s*<<\s*['"]?(\w+)['"]?/;
-        const hasHeredoc = heredocPattern.test(command);
-
-        if (hasHeredoc) {
-          console.error(`[bash_docker] Detected heredoc syntax, transforming command`);
-
-          // Transform heredoc to use printf or echo with base64
-          const fullHeredocPattern = /cat\s*>\s*([^\s]+)\s*<<\s*['"]?(\w+)['"]?\n([\s\S]*?)\n\2/;
-          const match = command.match(fullHeredocPattern);
-
-          if (match) {
-            const [fullMatch, fileName, , content] = match; // delimiter not needed for base64 approach
-
-            // Use base64 encoding for reliability
-            const base64Content = Buffer.from(content).toString('base64');
-            const base64Command = `echo "${base64Content}" | base64 -d > ${fileName}`;
-
-            // Replace heredoc with base64 command
-            command = command.replace(fullMatch, base64Command);
-            console.error(`[bash_docker] Transformed heredoc to base64 encoding`);
-          }
-        }
-
-        try {
-          // Execute command in Docker container
-          const dockerCommand = `docker exec ${containerName} /bin/bash -c ${JSON.stringify(command)}`;
-          const { stdout, stderr } = await execAsync(dockerCommand, {
-            maxBuffer: 10 * 1024 * 1024, // 10MB buffer
-            timeout: 300000 // 5 minute timeout
-          });
-
-          console.error(`[bash_docker] Command executed successfully`);
-
-          // Return result in a format similar to regular Bash tool
-          let output = stdout;
-          if (stderr) {
-            output += stderr;
-          }
-
-          return {
-            content: [
-              {
-                type: 'text',
-                text: output
-              }
-            ]
-          };
-        } catch (error: any) {
-          // Docker exec failed - check if it's an expected exit code
-          console.error(`[bash_docker] Command failed: ${error.message}`);
-
-          // Exit code 143 = 128 + 15 (SIGTERM) - this is EXPECTED when killing processes
-          // Don't treat it as an error, just return the output
-          const exitCode = error.code;
-          if (exitCode === 143) {
-            console.error(`[bash_docker] Process terminated with SIGTERM (expected for pkill)`);
-            let output = '';
-            if (error.stdout) output += error.stdout;
-            if (error.stderr) output += error.stderr;
-            if (!output) output = 'Process terminated (SIGTERM)';
-
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: output
-                }
-              ]
-              // NOT marking as error for exit code 143
-            };
-          }
-
-          // For other exit codes, return as error
-          let errorOutput = '';
-          if (error.stdout) errorOutput += error.stdout;
-          if (error.stderr) errorOutput += error.stderr;
-          if (!errorOutput) errorOutput = error.message;
-
-          return {
-            content: [
-              {
-                type: 'text',
-                text: errorOutput
-              }
-            ],
-            isError: true
-          };
-        }
 
       // Test execution removed - tests are now requirement-based
 

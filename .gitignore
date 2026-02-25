@@ -1,5 +1,8 @@
-# Agent-generated output directories
-generations/
+# Project output directories
+projects/
+
+# Test pollution (unmocked Path objects)
+MagicMock/
 
 # Log files
 logs/

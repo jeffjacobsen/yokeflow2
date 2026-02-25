@@ -46,19 +46,19 @@ else:
     print(f"  {mcp_check['message']}")
     print(f"{'='*60}\n")
 
-print("\nStarting API server on http://localhost:8000")
-print("API documentation available at http://localhost:8000/docs")
+print("\nStarting API server on http://localhost:8010")
+print("API documentation available at http://localhost:8010/docs")
 print("\n[!]  Auto-reload is DISABLED")
 print("   You must manually restart the server to see code changes")
 print("\nPress Ctrl+C to stop the server")
 print("="*60 + "\n")
 
 # Start the server WITHOUT auto-reload
-# This prevents watchfiles from reloading when generations/ directory changes
+# This prevents watchfiles from reloading when projects/ directory changes
 uvicorn.run(
     "server.api.app:app",
     host="0.0.0.0",
-    port=8000,
+    port=8010,
     reload=False,  # DISABLED: Must manually restart to see code changes
     log_level="error"
 )

@@ -25,8 +25,8 @@ If you have any projects you want to preserve from v1:
 
 ```bash
 # Export project names and specs (manual backup)
-# Copy any important app_spec.txt files from generations/ folder
-cp -r generations/ ~/yokeflow-v1-backup/
+# Copy any important app_spec.txt files from projects/ folder
+cp -r projects/ ~/yokeflow-v1-backup/
 ```
 
 ### Step 2: Remove Old Database
@@ -77,7 +77,7 @@ cd ..
 docker-compose up -d
 
 # Or start API and Web UI manually
-uvicorn server.api.app:app --host 0.0.0.0 --port 8000 --reload &
+uvicorn server.api.app:app --host 0.0.0.0 --port 8010 --reload &
 cd web-ui && npm run dev &
 ```
 

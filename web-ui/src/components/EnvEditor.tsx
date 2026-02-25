@@ -29,7 +29,7 @@ export function EnvEditor({ projectId, onSave, onCancel }: EnvEditorProps) {
 
   async function loadEnvFiles() {
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8010';
       const response = await fetch(`${apiUrl}/api/projects/${projectId}/env`);
 
       if (response.ok) {
@@ -52,7 +52,7 @@ export function EnvEditor({ projectId, onSave, onCancel }: EnvEditorProps) {
   async function handleSave() {
     setSaving(true);
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8010';
       const response = await fetch(`${apiUrl}/api/projects/${projectId}/env`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -108,7 +108,7 @@ export function EnvEditor({ projectId, onSave, onCancel }: EnvEditorProps) {
                 : 'This project does not have a .env.example file. If you need to configure environment variables (like API keys), you can manually edit the .env file.'}
             </p>
             <p className="text-xs text-yellow-600 dark:text-yellow-400">
-              Path: <code className="bg-yellow-100 dark:bg-yellow-900 px-1 rounded">generations/{projectId}/.env</code>
+              Path: <code className="bg-yellow-100 dark:bg-yellow-900 px-1 rounded">projects/{projectId}/.env</code>
             </p>
           </div>
         </div>

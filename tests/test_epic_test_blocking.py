@@ -4,7 +4,7 @@ Test suite for Epic Test Blocking (Phase 3 Step 3.3).
 Tests the orchestrator's ability to detect and handle epic test failures:
 - Epic test block error detection
 - Session status set to BLOCKED (not ERROR)
-- Blocker info written to claude-progress.md
+- Blocker info written to agent-progress.md
 - Event callbacks for session_blocked
 - Regular errors still mark session as ERROR
 """
@@ -34,7 +34,7 @@ class TestEpicTestBlocking:
         with patch('server.agent.orchestrator.Config') as mock_config:
             mock_config.load_default.return_value = MagicMock(
                 project=MagicMock(
-                    default_generations_dir="generations",
+                    default_projects_dir="projects",
                     max_iterations=None
                 ),
                 models=MagicMock(
@@ -101,7 +101,7 @@ class TestEpicTestBlocking:
         await orchestrator._write_blocker_info(temp_project_dir, 5, error_msg)
 
         # Check that progress file was created
-        progress_file = temp_project_dir / "yokeflow" / "claude-progress.md"
+        progress_file = temp_project_dir / "yokeflow" / "agent-progress.md"
         assert progress_file.exists()
 
         # Verify content
@@ -114,11 +114,11 @@ class TestEpicTestBlocking:
 
     @pytest.mark.asyncio
     async def test_write_blocker_info_prepends_to_existing(self, orchestrator, temp_project_dir):
-        """Test that blocker info is prepended to existing claude-progress.md content."""
+        """Test that blocker info is prepended to existing agent-progress.md content."""
         # Create existing progress file
         yokeflow_dir = temp_project_dir / "yokeflow"
         yokeflow_dir.mkdir()
-        progress_file = yokeflow_dir / "claude-progress.md"
+        progress_file = yokeflow_dir / "agent-progress.md"
         existing_content = "# Previous Progress\n\nSome existing content.\n"
         progress_file.write_text(existing_content)
 

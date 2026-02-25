@@ -25,8 +25,10 @@ First, analyze what types of tasks were worked on:
 - **Database Tasks** (schemas, migrations) → SQL query testing sufficient
 - **Integration Tasks** (workflows, E2E) → Browser testing REQUIRED
 
+**IMPORTANT: Consider the project spec and task descriptions when evaluating verification adequacy.** A simple spec with one button and two endpoints needs fewer interactions than a complex multi-page app. Do not penalize proportionate verification — 1 interaction for 1 interactive element is 100% coverage. Evaluate whether the agent tested what was actually built, not whether raw operation counts hit arbitrary thresholds.
+
 Then evaluate verification appropriateness:
-- **UI/Integration Tasks (Browser operations include both Playwright and agent-browser):**
+- **UI/Integration Tasks (Browser operations use agent-browser):**
   - 50+ browser operations = Excellent (9-10)
   - 10-49 operations = Good (7-8)
   - 1-9 operations = Poor (4-6)
@@ -64,9 +66,8 @@ First, identify task types completed in this session:
 - Note which verification method was used for each
 
 **For UI/Integration Tasks - Browser Verification Required:**
-- How many browser operations total? (Count both Playwright MCP tools AND agent-browser Docker commands)
-  - Direct Playwright: mcp__playwright__* tools
-  - Agent-browser: bash_docker commands with "agent-browser"
+- How many browser operations total? (Count agent-browser commands)
+  - Agent-browser: Bash commands containing "agent-browser"
 - Screenshots before/after changes?
 - User interactions tested (clicks, forms, navigation)?
 - Console error checking implemented?
@@ -104,7 +105,7 @@ Categorize errors and assess preventability:
 **Syntax/Parse** → Validation guidance needed?
 **Network/Server** → Server startup guidance needed?
 **Tool Usage** → Better examples needed?
-**Browser Automation** → Wait strategies needed?
+**Browser Automation** → `agent-browser eval` quoting/syntax issues? Wait strategies needed?
 
 **Questions:**
 - What types most frequent?
@@ -125,7 +126,6 @@ Which steps from coding_prompt.md were:
 - ❌ Skipped or ignored
 
 **Common Adherence Issues:**
-- Used `Bash` instead of `bash_docker` in Docker mode
 - Used `/workspace/` prefix in file paths
 - Changed working directory with `cd` instead of subshells
 - Skipped browser verification
@@ -133,8 +133,10 @@ Which steps from coding_prompt.md were:
 
 ### 5. Concrete Prompt Improvements
 
+**CRITICAL: When citing "Current Prompt" or "Before" text, quote the EXACT text from the coding prompt or skill files. Do NOT paraphrase or fabricate prompt excerpts.** If you cannot find the relevant text, state "No existing guidance found" instead of inventing a quote. Inaccurate quotes undermine the review's credibility and make recommendations unactionable.
+
 For each issue, provide:
-- **Current Prompt**: What's missing/unclear
+- **Current Prompt**: What's missing/unclear (EXACT quote from prompt files)
 - **Recommended Prompt**: Specific addition/change
 - **Rationale**: Why this will help
 - **Expected Impact**: What it prevents
@@ -156,7 +158,7 @@ For each issue, provide:
 [Detailed breakdown with evidence from metrics]
 
 ### Rating Breakdown
-- Task-appropriate verification: X/5 (UI tasks: Y Playwright calls, API tasks: Z curl tests, etc.)
+- Task-appropriate verification: X/5 (UI tasks: Y agent-browser calls, API tasks: Z curl tests, etc.)
 - Error handling: X/5 (Z% error rate)
 - Task completion: X/5 (tests verified with appropriate method: Yes/No)
 - Prompt adherence: X/5
@@ -171,7 +173,7 @@ For each issue, provide:
 - Integration Tasks: [List task IDs] - Required E2E browser testing
 
 **Verification Method Used:**
-- Browser/Playwright: X calls - [Appropriate for UI tasks: Yes/No]
+- Browser/agent-browser: X calls - [Appropriate for UI tasks: Yes/No]
 - curl/fetch: Y calls - [Appropriate for API tasks: Yes/No]
 - Build verification: Z occurrences - [Appropriate for config tasks: Yes/No]
 
@@ -250,7 +252,7 @@ For each issue, provide:
 
 **Impact:** [What this prevents/improves in future sessions]
 
-**Theme:** [browser_verification|docker_mode|testing|error_handling|git_commits|parallel_execution|task_management|prompt_adherence]
+**Theme:** [browser_verification|testing|error_handling|git_commits|parallel_execution|task_management|prompt_adherence]
 
 **Confidence:** [1-10 score based on evidence strength]
 
@@ -336,9 +338,9 @@ After generating the markdown review above, also provide structured recommendati
     {
       "title": "Recommendation Title",
       "priority": "HIGH|MEDIUM|LOW",
-      "theme": "browser_verification|docker_mode|testing|error_handling|git_commits|parallel_execution|task_management|prompt_adherence|general",
+      "theme": "browser_verification|testing|error_handling|git_commits|parallel_execution|task_management|prompt_adherence|general",
       "problem": "Detailed problem description with evidence from session",
-      "current_text": "The exact problematic text from the current prompt (1-5 lines max)",
+      "current_text": "EXACT quote from current prompt file (1-5 lines max) — do NOT fabricate or paraphrase. Use 'No existing guidance found' if no relevant text exists.",
       "proposed_text": "Concise replacement text (keep minimal - only what needs to change, 1-10 lines typical)",
       "impact": "Expected improvement in future sessions",
       "confidence": 8,

@@ -5,7 +5,6 @@ This module provides common test fixtures and configuration for all tests.
 """
 
 import asyncio
-import json
 import os
 import sys
 import tempfile
@@ -127,7 +126,7 @@ async def test_session(db, test_project) -> UUID:
             VALUES ($1, $2, $3, $4, NOW(), $5, $6)
         """,
         session_id, test_project, 1, "in_progress",
-        "claude-sonnet-3-5", "coding"
+        "claude-sonnet-4-6", "coding"
     )
 
     yield session_id
@@ -191,12 +190,13 @@ def temp_project_dir() -> Generator[Path, None, None]:
     with tempfile.TemporaryDirectory(prefix="yokeflow_test_") as tmpdir:
         project_dir = Path(tmpdir)
 
-        # Create standard project structure
-        (project_dir / "logs").mkdir(parents=True)
-        (project_dir / "spec").mkdir(parents=True)
+        # Create standard project structure under yokeflow/
+        (project_dir / "yokeflow" / "logs").mkdir(parents=True)
+        (project_dir / "yokeflow" / "specs").mkdir(parents=True)
+        (project_dir / "yokeflow" / "screenshots").mkdir(parents=True)
 
         # Create basic files
-        (project_dir / "app_spec.txt").write_text("# Test Specification\n")
+        (project_dir / "yokeflow" / "specs" / "app_spec.txt").write_text("# Test Specification\n")
         (project_dir / ".env.example").write_text("TEST_VAR=example\n")
 
         yield project_dir
@@ -210,7 +210,7 @@ def mock_claude_client():
     Provides a mock client that simulates Claude API responses.
     """
     client = Mock()
-    client.model = "claude-sonnet-3-5"
+    client.model = "claude-sonnet-4-6"
 
     # Mock message method
     async def mock_message(message, tools=None):
@@ -257,49 +257,6 @@ async def api_client(test_config):
         # Set test authentication token
         client.headers["Authorization"] = "Bearer test-token"
         yield client
-
-
-@pytest.fixture
-def mock_mcp_server():
-    """
-    Mock MCP server for testing.
-
-    Simulates MCP tool responses without requiring actual server.
-    """
-    with patch("core.agent.run_mcp_tool") as mock_tool:
-        # Configure default responses for common tools
-        async def mock_run_tool(tool_name, params):
-            if tool_name == "mcp__task-manager__get_next_task":
-                return json.dumps({
-                    "task_id": 1,
-                    "name": "Test Task",
-                    "description": "Mock task for testing"
-                })
-            elif tool_name == "mcp__task-manager__update_task_status":
-                return json.dumps({"success": True})
-            else:
-                return json.dumps({"result": "mock"})
-
-        mock_tool.side_effect = mock_run_tool
-        yield mock_tool
-
-
-@pytest.fixture
-def mock_docker_sandbox():
-    """
-    Mock Docker sandbox for testing.
-
-    Simulates Docker container operations without actual containers.
-    """
-    with patch("core.sandbox_manager.SandboxManager") as MockSandbox:
-        sandbox = Mock()
-        sandbox.container_name = "test-container"
-        sandbox.start = AsyncMock()
-        sandbox.stop = AsyncMock()
-        sandbox.execute_command = AsyncMock(return_value=(0, "Success", ""))
-
-        MockSandbox.return_value = sandbox
-        yield sandbox
 
 
 @pytest.fixture(autouse=True)

@@ -17,20 +17,20 @@
 models:
   # Model for initialization session (creates project structure and task database)
   # Opus is recommended for better planning capabilities
-  initializer: claude-opus-4-5-20251101
+  initializer: claude-opus-4-6
 
   # Model for coding sessions (implements features)
   # Sonnet is recommended for faster, more cost-effective implementation
-  coding: claude-sonnet-4-5-20250929
+  coding: claude-sonnet-4-6
 
   # Model for quality reviews (deep code analysis)
   # Sonnet provides good analysis at lower cost
-  review: claude-sonnet-4-5-20250929
+  review: claude-sonnet-4-6
 
   # Model for prompt improvement analysis (Phase 4 quality system)
   # Opus is recommended for better reasoning and comprehensive improvements
   # This is a critical task that benefits from the most capable model
-  prompt_improvement: claude-opus-4-5-20251101
+  prompt_improvement: claude-opus-4-6
 
 # Timing Configuration
 # --------------------
@@ -43,7 +43,7 @@ timing:
   web_ui_poll_interval: 5
 
   # Port for web UI dashboard (Next.js default)
-  web_ui_port: 3000
+  web_ui_port: 3010
 
 # Security Configuration
 # ----------------------
@@ -59,8 +59,8 @@ security:
 # ---------------------
 # Project and directory settings
 project:
-  # Default directory for generated projects
-  default_generations_dir: generations
+  # Default directory for projects
+  default_projects_dir: projects
 
   # Default maximum iterations (null = unlimited)
   # Set a number to limit iterations by default
@@ -149,6 +149,18 @@ epic_retesting:
 #
 # The test execution system is active but configuration is not yet exposed.
 
+# Spec Pre-Analysis (Optional)
+# --------------------------------
+# Pre-analyzes spec files with a fast model before initialization.
+# Generates a summary, feature list, and suggested epic structure
+# that is injected into the initializer prompt.
+# Useful for large or multi-file specifications.
+spec_analysis:
+  # Enable/disable spec pre-analysis (default: false)
+  enabled: false
+  # Model for analysis (default: Haiku for cost efficiency)
+  model: claude-haiku-4-5-20251001
+
 # Future Configuration Options (Not Yet Implemented)
 # ---------------------------------------------------
 # The following systems were partially implemented but are currently disabled:
@@ -164,40 +176,13 @@ epic_retesting:
 #
 # These features may be re-enabled in future versions as needed.
 
-# Sandbox Configuration
-# ----------------------
-# Isolated execution environments for agent sessions
-sandbox:
-  # Sandbox type: "none" (no isolation), "docker" (local containers), or "e2b" (cloud)
-  # none: Current behavior - runs directly on host (faster but can leak environment variables)
-  # docker: Runs in Docker container (good isolation, zero cost, unlimited duration)
-  # e2b: Runs in E2B cloud sandbox (production-ready, requires paid tier for long sessions)
-  type: none
-
-  # Docker-specific settings (when type: docker)
-  docker_image: yokeflow-playwright:latest  # Or node:20-slim for basic setup
-  docker_network: bridge
-  docker_memory_limit: 3g  # Increased for browser operations if using Playwright
-  docker_cpu_limit: "2.0"
-  # Port forwarding (optional - not needed if Playwright runs inside container)
-  # docker_ports:
-  #   - "5173:5173"  # Only if you need manual browser access for debugging
-
-  # E2B-specific settings (when type: e2b)
-  # e2b_api_key: ${E2B_API_KEY}  # Or set E2B_API_KEY environment variable
-  # e2b_tier: pro  # "free" (1-hour limit) or "pro" (24-hour limit, $150/month)
-
-docker:
-  enabled: true
-  image: yokeflow-playwright:latest
-
 # ============================================================================
 # Usage:
 # ============================================================================
 #
 # This configuration file is automatically detected and loaded by:
-# - Web UI (http://localhost:3000) - Primary interface for all operations
-# - API Server (http://localhost:8000) - REST API + WebSocket
+# - Web UI (http://localhost:3010) - Primary interface for all operations
+# - API Server (http://localhost:8010) - REST API + WebSocket
 # - Utility scripts in scripts/ directory
 #
 # Configuration Priority (highest to lowest):
@@ -213,7 +198,7 @@ docker:
 # 1. Copy this file to .yokeflow.yaml (project) or ~/.yokeflow.yaml (global)
 # 2. Start the API server: python api/start_api.py
 # 3. Start the Web UI: cd web-ui && npm run dev
-# 4. Open http://localhost:3000 to create and manage projects
+# 4. Open http://localhost:3010 to create and manage projects
 #
 # For utility scripts, see scripts/README.md
 # ============================================================================

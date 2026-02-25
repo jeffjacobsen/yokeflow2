@@ -27,10 +27,10 @@ async def test_retry_tracker():
 
     # Test command retry detection
     commands = [
-        ("bash_docker", {"command": "curl http://localhost:3001/health"}),
-        ("bash_docker", {"command": "curl http://localhost:3001/health"}),
-        ("bash_docker", {"command": "curl http://localhost:3001/health"}),
-        ("bash_docker", {"command": "curl http://localhost:3001/health"}),  # 4th attempt should trigger
+        ("Bash", {"command": "curl http://localhost:3001/health"}),
+        ("Bash", {"command": "curl http://localhost:3001/health"}),
+        ("Bash", {"command": "curl http://localhost:3001/health"}),
+        ("Bash", {"command": "curl http://localhost:3001/health"}),  # 4th attempt should trigger
     ]
 
     for i, (tool, input_) in enumerate(commands, 1):
@@ -153,9 +153,9 @@ async def test_intervention_manager():
     # Test command tracking
     print("\n--- Testing Command Retry Detection ---")
     commands = [
-        ("bash_docker", {"command": "npm start"}),
-        ("bash_docker", {"command": "npm start"}),
-        ("bash_docker", {"command": "npm start"}),  # Should trigger on 3rd attempt
+        ("Bash", {"command": "npm start"}),
+        ("Bash", {"command": "npm start"}),
+        ("Bash", {"command": "npm start"}),  # Should trigger on 3rd attempt
     ]
 
     for i, (tool, input_) in enumerate(commands, 1):

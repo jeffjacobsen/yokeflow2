@@ -34,9 +34,9 @@ YokeFlow 2 includes AI-powered specification generation that allows users to des
 
 ### Backend Components
 
-#### Spec Generator (`server/generation/spec_generator_v2.py`)
+#### Spec Generator (`server/generation/spec_generator.py`)
 - Uses Claude Agent SDK for consistency with main agent
-- Generates comprehensive specifications using claude-sonnet-4-5-20250929
+- Generates comprehensive specifications using claude-sonnet-4-6
 - Streams responses via SSE for real-time updates
 - Handles context files and natural language descriptions
 
@@ -146,11 +146,11 @@ data: {"event": "complete", "message": "Specification generated successfully"}
 ## Configuration
 
 ### Model Selection
-The spec generator uses the same model as the coding agent (claude-sonnet-4-5-20250929) by default. This can be configured in `.yokeflow.yaml`:
+The spec generator uses the same model as the coding agent (claude-sonnet-4-6) by default. This can be configured in `.yokeflow.yaml`:
 
 ```yaml
 models:
-  coding: claude-sonnet-4-5-20250929  # Used for spec generation
+  coding: claude-sonnet-4-6  # Used for spec generation
 ```
 
 ### Authentication
@@ -184,7 +184,7 @@ Required sections vary by project type:
 - Check that specification is not empty
 
 ### Model Not Found Error
-- Verify correct model name: `claude-sonnet-4-5-20250929`
+- Verify correct model name: `claude-sonnet-4-6`
 - Check OAuth token is valid and present
 
 ### Validation Always Shows "Needs Improvement"

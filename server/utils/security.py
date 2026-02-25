@@ -110,12 +110,16 @@ def split_command_segments(command_string: str) -> list[str]:
                     i += 1
                     continue
 
-            # Check for semicolon
+            # Check for semicolon (but not escaped \; as used in find -exec)
             if char == ';':
-                seg = ''.join(current_segment).strip()
-                if seg:
-                    result.append(seg)
-                current_segment = []
+                if i > 0 and command_string[i-1] == '\\':
+                    # Escaped semicolon (\;) — keep as part of current segment
+                    current_segment.append(char)
+                else:
+                    seg = ''.join(current_segment).strip()
+                    if seg:
+                        result.append(seg)
+                    current_segment = []
                 i += 1
                 continue
 
@@ -362,7 +366,7 @@ def validate_rm_command(command_string: str) -> tuple[bool, str]:
     Allows:
         - Single files: rm file.js, rm -f .git/index.lock
         - Project files: rm server/migrations/003.js
-        - Safe temp dirs: rm -rf .playwright-mcp/, rm -rf node_modules/.cache/
+        - Safe temp dirs: rm -rf node_modules/.cache/
         - Safe wildcards: rm *.log, rm temp/*.txt
 
     Blocks:
@@ -483,7 +487,6 @@ def validate_rm_command(command_string: str) -> tuple[bool, str]:
 
             # Allow temp/cache directories
             safe_recursive_dirs = [
-                ".playwright-mcp",
                 "node_modules/.cache",
                 ".cache",
                 ".temp",

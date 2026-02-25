@@ -25,8 +25,6 @@ YokeFlow 2.1 introduces a comprehensive quality system across 8 phases:
 - 4 new configuration sections in `.yokeflow.yaml`
 - ~5,000+ lines of new code
 
-See [QUALITY_SYSTEM_SUMMARY.md](../QUALITY_SYSTEM_SUMMARY.md) for complete implementation details.
-
 ## Table of Contents
 
 - [Architecture Overview](#architecture-overview)
@@ -57,7 +55,7 @@ See [QUALITY_SYSTEM_SUMMARY.md](../QUALITY_SYSTEM_SUMMARY.md) for complete imple
          │ HTTP/WebSocket
          ▼
 ┌─────────────────────┐
-│  Next.js Web UI     │  TypeScript/React (port 3000)
+│  Next.js Web UI     │  TypeScript/React (port 3010)
 │  - Project mgmt     │
 │  - Real-time updates│
 │  - Env editor       │
@@ -65,7 +63,7 @@ See [QUALITY_SYSTEM_SUMMARY.md](../QUALITY_SYSTEM_SUMMARY.md) for complete imple
          │ REST API
          ▼
 ┌─────────────────────┐
-│   FastAPI Server    │  Python (port 8000)
+│   FastAPI Server    │  Python (port 8010)
 │ server/api/app.py   │
 └────────┬────────────┘
          │
@@ -101,7 +99,7 @@ See [QUALITY_SYSTEM_SUMMARY.md](../QUALITY_SYSTEM_SUMMARY.md) for complete imple
 ┌──────────────┐  ┌─────────┐  ┌──────────────┐
 │ MCP Servers  │  │Security │  │Observability │
 │ task-manager │  │Blocklist│  │Session Logs  │
-│ playwright   │  │         │  │              │
+│              │  │         │  │              │
 └──────┬───────┘  └─────────┘  └──────────────┘
        │
        ▼
@@ -176,7 +174,6 @@ server/
 │       └── prompt_improvements.py # Prompt improvement routes ⭐ v2.1
 ├── client/             # External service clients
 │   ├── claude.py       # Claude SDK client
-│   ├── playwright.py   # Browser automation
 │   └── prompts.py      # Prompt loading
 ├── database/           # Database layer
 │   ├── operations.py   # PostgreSQL operations
@@ -187,9 +184,7 @@ server/
 │   ├── reviews.py      # Deep reviews (Phase 2)
 │   ├── gates.py        # Quality gates
 │   ├── integration.py  # Quality integration (Phase 6)
-│   ├── completion_analyzer.py # Completion review (Phase 7)
 │   ├── spec_parser.py  # Specification parser (Phase 7)
-│   ├── requirement_matcher.py # Requirement matching (Phase 7)
 │   ├── epic_retest_manager.py # Epic re-testing (Phase 5)
 │   ├── test_compliance_analyzer.py # Test compliance
 │   └── prompt_analyzer.py # Prompt improvements (Phase 4/8)
@@ -198,9 +193,6 @@ server/
 │   ├── epic_validator.py # Epic validation (14 tests)
 │   ├── epic_manager.py  # Epic management
 │   └── test_generator.py # Test generation (15 tests)
-├── sandbox/            # Docker management
-│   ├── manager.py      # Sandbox management (17 tests)
-│   └── hooks.py        # Sandbox hooks
 └── utils/              # Shared utilities
     ├── config.py       # Configuration
     ├── logging.py      # Structured logging (19 tests)
@@ -280,10 +272,6 @@ mcp_servers = {
             "PROJECT_ID": str(project_id)
         }
     },
-    "playwright": {
-        "command": "npx",
-        "args": ["playwright-mcp-server"]
-    }
 }
 ```
 
@@ -344,7 +332,7 @@ def validate_bash_command(command: str) -> tuple[bool, str]:
 
 **Log Structure:**
 ```
-generations/[project]/logs/
+projects/[project]/logs/
 ├── session_001_20251209_140523.jsonl  # Machine-readable
 └── session_001_20251209_140523.txt    # Human-readable
 
@@ -423,8 +411,8 @@ from core.orchestrator import AgentOrchestrator
 
 orchestrator = AgentOrchestrator(verbose=False)
 session_info = await orchestrator.start_session(
-    project_dir=Path("generations/my-project"),
-    model="claude-sonnet-4-5-20250929"
+    project_dir=Path("projects/my-project"),
+    model="claude-sonnet-4-6"
 )
 ```
 
@@ -443,9 +431,7 @@ server/quality/          # 10+ Python files (~4,000+ lines)
 ├── metrics.py           # Quick metrics (Phase 1, zero-cost)
 ├── reviews.py           # Deep AI reviews (Phase 2)
 ├── integration.py       # Triggers & coordination (Phase 6)
-├── completion_analyzer.py # Final verification (Phase 7)
 ├── spec_parser.py       # Parse app_spec.txt (Phase 7)
-├── requirement_matcher.py # Match requirements to implementation (Phase 7)
 ├── epic_retest_manager.py # Regression testing (Phase 5)
 └── prompt_analyzer.py   # Improvement suggestions (Phase 4/8)
 
@@ -532,8 +518,7 @@ mcp-task-manager/src/    # MCP tools
 
 **Completion Review:**
 - `server/quality/spec_parser.py` - Parse markdown specs (25 tests)
-- `server/quality/requirement_matcher.py` - Hybrid matching (70-85% accuracy)
-- `server/quality/completion_analyzer.py` - Orchestrate review workflow
+- Completion review not yet implemented (see `COMPLETION_REVIEW.md`)
 
 **Epic Re-testing:**
 - `server/quality/epic_retest_manager.py` - Smart selection algorithm
@@ -564,7 +549,7 @@ epic_retesting:
 
 **Trigger Completion Review** (API):
 ```bash
-curl -X POST http://localhost:8000/api/projects/PROJECT_ID/completion-review
+curl -X POST http://localhost:8010/api/projects/PROJECT_ID/completion-review
 ```
 
 **View Quality Dashboard** (Web UI):
@@ -956,7 +941,6 @@ ORDER BY e.priority;
 **Why Blocklist:**
 - Development needs diverse tools
 - Agent should work autonomously
-- Safe in containers (primary deployment)
 - Easier to maintain (fewer commands to list)
 
 ### Implementation
@@ -1004,7 +988,7 @@ BLOCKED_COMMANDS = {
 }
 ```
 
-**Warning:** Be cautious when removing blocks - test in container first.
+**Warning:** Be cautious when removing blocks - test thoroughly first.
 
 ---
 
@@ -1059,7 +1043,7 @@ class QuietOutputFilter:
 
 **Using analyze_logs.sh:**
 ```bash
-./analyze_logs.sh generations/my_project
+./analyze_logs.sh projects/my_project
 
 # Shows:
 # - Session overview (duration, tools, errors)
@@ -1157,7 +1141,7 @@ def validate_bash_command(command: str) -> tuple[bool, str]:
 # api/main.py
 @app.get("/api/projects/{project_id}/my-endpoint")
 async def my_endpoint(project_id: str):
-    db = get_database(generations_dir / project_id)
+    db = get_database(projects_dir / project_id)
     results = db.custom_query()
     return results
 ```
@@ -1301,7 +1285,7 @@ console.error("DEBUG: tool called with args:", args);
 **View stderr:**
 ```bash
 # MCP server logs go to stderr, visible in agent logs
-grep "MCP" generations/my_project/logs/session_*.txt
+grep "MCP" projects/my_project/logs/session_*.txt
 ```
 
 **Test MCP server directly:**
@@ -1315,7 +1299,7 @@ python test_mcp_direct.py
 **See what command was blocked:**
 ```bash
 # Check logs
-./analyze_logs.sh generations/my_project
+./analyze_logs.sh projects/my_project
 
 # Look for "blocked" in JSONL
 jq -r 'select(.type == "tool_result" and .is_blocked == true)' logs/*.jsonl
@@ -1546,13 +1530,13 @@ RUN cd mcp-task-manager && npm install && npm run build
 RUN cd web-ui && npm install && npm run build
 
 # Run API server (or agent CLI)
-CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8010"]
 # Alternative: CMD ["python", "yokeflow.py", "--project-dir", "/workspace"]
 ```
 
 **Volume mounts:**
 ```bash
-docker run -v $(pwd)/generations:/workspace yokeflow
+docker run -v $(pwd)/projects:/workspace yokeflow
 ```
 
 ### Cloud Deployment
@@ -1560,15 +1544,14 @@ docker run -v $(pwd)/generations:/workspace yokeflow
 **Current Status:** API-first architecture is complete and ready for deployment.
 
 **Architecture:**
-- FastAPI REST API server (port 8000)
-- Next.js Web UI (port 3000, or static export)
+- FastAPI REST API server (port 8010)
+- Next.js Web UI (port 3010, or static export)
 - WebSocket for real-time updates
 - Database abstraction layer (PostgreSQL-ready)
 
 **Deployment Recommendations:**
 - Use Digital Ocean, AWS, or similar for API server
 - Deploy Next.js as static site or Node.js server
-- Use Docker for sandboxed agent workspaces (built-in)
 - ✅ JWT authentication implemented (production-ready)
 - ✅ PostgreSQL in production (async operations, connection pooling)
 
@@ -1601,7 +1584,6 @@ See [TODO.md](../TODO.md) and [api/README.md](../api/README.md) for details.
 - [docs/verification-system.md](verification-system.md) - Verification system guide
 
 **Specialized Topics:**
-- [docs/docker-sandbox-implementation.md](docker-sandbox-implementation.md) - Docker integration
 - [docs/input-validation.md](input-validation.md) - Validation framework (19 models)
 - [docs/ai-spec-generation.md](ai-spec-generation.md) - AI-powered spec generation
 

@@ -123,21 +123,15 @@ class SessionConfigValidator(BaseModel):
 
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    sandbox_type: str = Field(
-        default="docker",
-        pattern="^(docker|local|none)$",
-        description="Sandbox type for session execution"
-    )
-
     initializer_model: Optional[str] = Field(
         default=None,
-        pattern="^(claude-3-opus|claude-3-5-sonnet|claude-3-haiku).*$",
+        pattern="^(claude-opus-4-6|claude-sonnet-4-6|claude-haiku-4-5).*$",
         description="Model for initialization session"
     )
 
     coding_model: Optional[str] = Field(
         default=None,
-        pattern="^(claude-3-opus|claude-3-5-sonnet|claude-3-haiku).*$",
+        pattern="^(claude-opus-4-6|claude-sonnet-4-6|claude-haiku-4-5).*$",
         description="Model for coding sessions"
     )
 

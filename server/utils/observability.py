@@ -57,7 +57,7 @@ class SessionLogger:
     - session_{iteration}_{timestamp}.txt: Human-readable narrative
     """
 
-    def __init__(self, log_dir: Path, session_number: int, session_type: str, model: str = None, prompt_file: str = None, sandbox_type: str = "local", event_callback=None):
+    def __init__(self, log_dir: Path, session_number: int, session_type: str, model: str = None, prompt_file: str = None, event_callback=None):
         """
         Initialize session logger.
 
@@ -65,9 +65,8 @@ class SessionLogger:
             log_dir: Directory to store logs
             session_number: Session iteration number
             session_type: "initializer" or "coding"
-            model: Claude model being used (e.g., "claude-opus-4-5-20251101")
-            prompt_file: Prompt file used (e.g., "initializer_prompt_local.md")
-            sandbox_type: Sandbox type ("docker" or "local", default: "local")
+            model: Claude model being used (e.g., "claude-opus-4-6")
+            prompt_file: Prompt file used (e.g., "initializer_prompt.md")
             event_callback: Optional callback function(event_type, data) for real-time events
         """
         self.log_dir = Path(log_dir)
@@ -82,7 +81,6 @@ class SessionLogger:
 
         self.session_number = session_number
         self.session_type = session_type
-        self.sandbox_type = sandbox_type
         self.model = model
         self.prompt_file = prompt_file
         self.start_time = time.time()
@@ -91,8 +89,8 @@ class SessionLogger:
         self.tool_errors = 0
         self.event_callback = event_callback
 
-        # Use MetricsCollector for all metrics tracking, pass sandbox_type
-        self.metrics = MetricsCollector(sandbox_type=sandbox_type)
+        # Use MetricsCollector for all metrics tracking
+        self.metrics = MetricsCollector()
 
         # Track token usage (estimated from character counts)
         # Rough estimate: 1 token ≈ 4 characters for English text
@@ -625,7 +623,8 @@ def get_next_session_number(project_dir: Path) -> int:
     Returns:
         Next session number (1 if no logs exist)
     """
-    log_dir = project_dir / "logs"
+    from server.utils.project_paths import resolve_logs_dir
+    log_dir = resolve_logs_dir(project_dir)
     if not log_dir.exists():
         return 1
 
@@ -661,7 +660,6 @@ def create_session_logger(
     session_number: int,
     session_type: str,
     model: str = None,
-    sandbox_type: str = "local",
     event_callback=None
 ) -> SessionLogger:
     """
@@ -673,21 +671,17 @@ def create_session_logger(
         project_dir: Project directory
         session_number: Session iteration number (will be auto-determined if 0)
         session_type: "initializer" or "coding"
-        model: Claude model being used (e.g., "claude-opus-4-5-20251101")
-        sandbox_type: Sandbox type ("docker" or "local", default: "local")
+        model: Claude model being used (e.g., "claude-opus-4-6")
         event_callback: Optional callback function(event_type, data) for real-time events
 
     Returns:
         SessionLogger instance
     """
-    log_dir = project_dir / "logs"
+    from server.utils.project_paths import resolve_logs_dir
+    log_dir = resolve_logs_dir(project_dir)
 
-    # Determine prompt file based on session and sandbox type
+    # Determine prompt file based on session type
     from server.client.prompts import get_prompt_filename
-    prompt_file = get_prompt_filename(session_type, sandbox_type)
+    prompt_file = get_prompt_filename(session_type)
 
-    # Note: session_number can be 0 (initialization session) in 0-based numbering
-    # We should trust the caller to provide the correct number from the database
-    # Legacy auto-detection removed - database is the source of truth
-
-    return SessionLogger(log_dir, session_number, session_type, model, prompt_file, sandbox_type, event_callback)
+    return SessionLogger(log_dir, session_number, session_type, model, prompt_file, event_callback)

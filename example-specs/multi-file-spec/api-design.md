@@ -5,7 +5,7 @@ Complete REST API and WebSocket event specifications for the Task Management Saa
 ## Base URL
 
 ```
-Development: http://localhost:3000/api
+Development: http://localhost:3010/api
 Production: https://api.taskmanager.com/api
 ```
 
@@ -352,7 +352,7 @@ Add a comment to a task.
 ### Connection
 ```javascript
 // Connect with JWT token
-const socket = io('http://localhost:3000', {
+const socket = io('http://localhost:3010', {
   auth: {
     token: 'jwt_token'
   }

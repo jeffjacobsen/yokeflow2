@@ -2,7 +2,7 @@
  * ProjectDetailsPanel - Bottom panel for project configuration and roadmap
  *
  * Contains three tabs:
- * - Settings: Model configuration, sandbox type, max iterations
+ * - Settings: Model configuration, max iterations
  * - Environment: .env file configuration
  * - Epics: Project roadmap with tasks and tests
  */
@@ -112,7 +112,7 @@ export function ProjectDetailsPanel({
         markdown += `### Tasks\n\n`;
         tasks.forEach((task, taskIndex) => {
           const taskIcon = task.done ? '✅' : '⬜';
-          markdown += `${taskIndex + 1}. ${taskIcon} **${task.description}**\n`;
+          markdown += `${taskIndex + 1}. ${taskIcon} **${task.name}**\n`;
           if (task.test_count > 0) {
             markdown += `   - Tests: ${task.test_count}\n`;
           }

@@ -23,8 +23,8 @@ Usage:
     # Trigger deep review for a session
     await run_deep_review(
         session_id=session_uuid,
-        project_path=Path("generations/my-project"),
-        model="claude-3-5-sonnet-20241022"
+        project_path=Path("projects/my-project"),
+        model="claude-sonnet-4-6"
     )
 """
 
@@ -135,7 +135,7 @@ async def run_deep_review(
     """
     # Use DEFAULT_REVIEW_MODEL from env if model not specified
     if model is None:
-        model = os.getenv('DEFAULT_REVIEW_MODEL', 'claude-3-5-sonnet-20241022')
+        model = os.getenv('DEFAULT_REVIEW_MODEL', 'claude-sonnet-4-6')
 
     logger.info(f"Starting deep review for session {session_id} using model {model}")
 
@@ -165,7 +165,8 @@ async def run_deep_review(
 
 
     # Find session logs
-    logs_dir = project_path / "logs"
+    from server.utils.project_paths import resolve_logs_dir
+    logs_dir = resolve_logs_dir(project_path)
     jsonl_pattern = f"session_{session_number:03d}_*.jsonl"
     txt_pattern = f"session_{session_number:03d}_*.txt"
 
@@ -195,7 +196,7 @@ async def run_deep_review(
 
     # Use the configured review model (from environment or default)
     # The model in enhanced_data is the agent's model, not the review model
-    model = os.getenv('DEFAULT_REVIEW_MODEL', 'claude-3-5-sonnet-20241022')
+    model = os.getenv('DEFAULT_REVIEW_MODEL', 'claude-sonnet-4-6')
 
     # Create review context with all data
     context = _create_review_context(
@@ -242,7 +243,7 @@ Analyze this session using the framework above. All necessary data is provided -
 
 Provide a comprehensive review focusing on:
 
-1. **Session Quality Rating (1-10)** - Based on browser verification ({metrics.get('browser_verifications', 0)} total browser operations: {metrics.get('playwright_count', 0)} Playwright + {metrics.get('agent_browser_count', 0)} agent-browser), error rate, task completion
+1. **Session Quality Rating (1-10)** - Based on browser verification ({metrics.get('browser_verifications', 0)} total browser operations using agent-browser), error rate, task completion
 2. **Browser Verification Analysis** - Critical quality indicator (r=0.98 correlation)
 3. **Error Pattern Analysis** - What types, were they preventable, recovery efficiency
 4. **Prompt Adherence** - Which steps followed well, which skipped

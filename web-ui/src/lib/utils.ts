@@ -90,8 +90,6 @@ export function getSessionTypeDisplayName(type: string): string {
   switch (type) {
     case 'initializer':
       return 'Initializer';
-    case 'expansion':
-      return 'Expansion';
     case 'coding':
       return 'Coding';
     case 'review':

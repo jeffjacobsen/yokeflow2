@@ -65,9 +65,9 @@ def cleanup_with_docker(path: Path) -> bool:
         return False
 
 
-def cleanup_project(project_name: str, generations_dir: Path) -> bool:
+def cleanup_project(project_name: str, projects_dir: Path) -> bool:
     """Clean up a single project directory."""
-    project_path = generations_dir / project_name
+    project_path = projects_dir / project_name
 
     if not project_path.exists():
         print(f"Project directory does not exist: {project_path}")
@@ -101,14 +101,14 @@ def cleanup_project(project_name: str, generations_dir: Path) -> bool:
             return True
 
 
-def find_problem_projects(generations_dir: Path) -> list:
+def find_problem_projects(projects_dir: Path) -> list:
     """Find projects with permission issues."""
     problem_projects = []
 
-    if not generations_dir.exists():
+    if not projects_dir.exists():
         return problem_projects
 
-    for project_dir in generations_dir.iterdir():
+    for project_dir in projects_dir.iterdir():
         if not project_dir.is_dir():
             continue
 
@@ -138,15 +138,15 @@ def main():
     parser = argparse.ArgumentParser(description="Clean up YokeFlow project directories")
     parser.add_argument("project", nargs="?", help="Project name to clean up")
     parser.add_argument("--all", action="store_true", help="Clean all projects with permission issues")
-    parser.add_argument("--generations-dir", default="generations", help="Path to generations directory")
+    parser.add_argument("--projects-dir", default="projects", help="Path to projects directory")
     parser.add_argument("--force", action="store_true", help="Force removal even if Docker is not available")
 
     args = parser.parse_args()
 
-    generations_dir = Path(args.generations_dir)
+    projects_dir = Path(args.projects_dir)
 
-    if not generations_dir.exists():
-        print(f"Generations directory does not exist: {generations_dir}")
+    if not projects_dir.exists():
+        print(f"Projects directory does not exist: {projects_dir}")
         sys.exit(1)
 
     # Check if Docker is available
@@ -162,7 +162,7 @@ def main():
 
     if args.all:
         # Find and clean all problem projects
-        problem_projects = find_problem_projects(generations_dir)
+        problem_projects = find_problem_projects(projects_dir)
 
         if not problem_projects:
             print("✅ No projects with permission issues found")
@@ -179,7 +179,7 @@ def main():
 
         success_count = 0
         for project in problem_projects:
-            if cleanup_project(project, generations_dir):
+            if cleanup_project(project, projects_dir):
                 success_count += 1
             print()
 
@@ -187,22 +187,22 @@ def main():
 
     elif args.project:
         # Clean specific project
-        if cleanup_project(args.project, generations_dir):
+        if cleanup_project(args.project, projects_dir):
             print(f"✅ Successfully cleaned up {args.project}")
         else:
             print(f"⚠️  Cleanup incomplete for {args.project}")
             sys.exit(1)
     else:
         # List available projects
-        projects = [d.name for d in generations_dir.iterdir() if d.is_dir()]
+        projects = [d.name for d in projects_dir.iterdir() if d.is_dir()]
 
         if not projects:
-            print("No projects found in generations directory")
+            print("No projects found in projects directory")
             return
 
         print("Available projects:")
         for project in sorted(projects):
-            project_path = generations_dir / project
+            project_path = projects_dir / project
             size = sum(f.stat().st_size for f in project_path.rglob('*') if f.is_file())
             size_mb = size / (1024 * 1024)
             print(f"  - {project:<30} ({size_mb:.1f} MB)")

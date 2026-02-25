@@ -207,20 +207,20 @@ class TestToolExecutionErrors:
     def test_tool_execution_error(self):
         """Test tool execution error"""
         error = ToolExecutionError(
-            "bash_docker",
+            "Bash",
             "Command timeout",
             recoverable=True
         )
         assert error.category == ErrorCategory.TOOL_EXECUTION
         assert error.error_code == "TOOL_ERROR"
-        assert error.tool_name == "bash_docker"
-        assert "bash_docker: Command timeout" in str(error)
+        assert error.tool_name == "Bash"
+        assert "Bash: Command timeout" in str(error)
         assert error.recoverable is True
 
     def test_security_blocked_error(self):
         """Test security blocked error"""
         command = "rm -rf /"
-        error = SecurityBlockedError("bash_docker", command)
+        error = SecurityBlockedError("Bash", command)
         assert error.error_code == "SECURITY_BLOCKED"
         assert error.recoverable is False
         assert error.context["blocked_command"] == command

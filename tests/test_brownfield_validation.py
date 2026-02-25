@@ -108,7 +108,6 @@ class TestImportProjectRequest:
             change_spec_content="Some changes here",
         )
         assert req.branch == "main"
-        assert req.sandbox_type == "docker"
         assert req.initializer_model is None
         assert req.coding_model is None
 
@@ -118,11 +117,11 @@ class TestImportProjectRequest:
             name="custom-models",
             source_url="https://github.com/user/repo.git",
             change_spec_content="Some changes here",
-            initializer_model="claude-opus-4-5-20251101",
-            coding_model="claude-sonnet-4-5-20250929",
+            initializer_model="claude-opus-4-6",
+            coding_model="claude-sonnet-4-6",
         )
-        assert req.initializer_model == "claude-opus-4-5-20251101"
-        assert req.coding_model == "claude-sonnet-4-5-20250929"
+        assert req.initializer_model == "claude-opus-4-6"
+        assert req.coding_model == "claude-sonnet-4-6"
 
     def test_change_spec_too_short(self):
         """Test that very short change spec is rejected."""

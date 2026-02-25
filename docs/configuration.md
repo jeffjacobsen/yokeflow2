@@ -11,7 +11,6 @@ YokeFlow 2.1 adds extensive configuration options for the quality system:
 - **Review System**: Configure minimum reviews for prompt improvement analysis
 - **Epic Testing**: Strict vs autonomous modes with critical epic patterns
 - **Epic Re-testing**: Automated regression detection every N epics
-- **Sandbox Configuration**: Docker and E2B cloud sandbox support
 - **Testing Configuration**: Test execution tracking with error details and timing
 - **Model Selection**: Separate models for reviews and prompt improvements
 
@@ -57,10 +56,10 @@ Control which Claude models are used for different session types:
 
 ```yaml
 models:
-  initializer: claude-opus-4-5-20251101        # For planning/initialization
-  coding: claude-sonnet-4-5-20250929           # For implementation
-  review: claude-sonnet-4-5-20250929           # For quality reviews (v2.1)
-  prompt_improvement: claude-opus-4-5-20251101 # For prompt analysis (v2.1)
+  initializer: claude-opus-4-6        # For planning/initialization
+  coding: claude-sonnet-4-6           # For implementation
+  review: claude-sonnet-4-6           # For quality reviews (v2.1)
+  prompt_improvement: claude-opus-4-6 # For prompt analysis (v2.1)
 ```
 
 **Recommended:**
@@ -77,7 +76,7 @@ Control delays and intervals:
 timing:
   auto_continue_delay: 3      # Seconds between sessions
   web_ui_poll_interval: 5     # Web UI refresh interval
-  web_ui_port: 3000           # Web dashboard port (Next.js default)
+  web_ui_port: 3010           # Web dashboard port (Next.js default)
 ```
 
 ### Security
@@ -221,54 +220,9 @@ Project-level settings:
 
 ```yaml
 project:
-  default_generations_dir: generations   # Where to store projects
+  default_projects_dir: projects   # Where to store projects
   max_iterations: null                    # Default iteration limit (null = unlimited)
 ```
-
-### Sandbox (v2.1)
-
-Configure isolated execution environments for agent sessions:
-
-```yaml
-sandbox:
-  # Sandbox type: "none", "docker", or "e2b"
-  type: none  # Default: none (runs on host)
-
-  # Docker-specific settings (when type: docker)
-  docker_image: yokeflow-playwright:latest
-  docker_network: bridge
-  docker_memory_limit: 3g    # Increased for browser operations
-  docker_cpu_limit: "2.0"
-
-  # Port forwarding (optional - not needed if Playwright runs inside container)
-  # docker_ports:
-  #   - "5173:5173"  # Only for manual browser access during debugging
-
-  # E2B-specific settings (when type: e2b)
-  # e2b_api_key: ${E2B_API_KEY}  # Or set E2B_API_KEY environment variable
-  # e2b_tier: pro                # "free" (1-hour) or "pro" (24-hour, $150/month)
-
-docker:
-  enabled: true
-  image: yokeflow-playwright:latest
-```
-
-**Sandbox Types:**
-- **none**: Runs directly on host (faster but can leak environment variables)
-- **docker**: Local containers (good isolation, zero cost, unlimited duration)
-- **e2b**: Cloud sandbox (production-ready, requires paid tier for long sessions)
-
-**Docker with Playwright:**
-- Use `yokeflow-playwright:latest` image for browser testing support
-- Memory increased to 3g for headless Chromium
-- Playwright runs inside container - no port forwarding needed
-- See [docs/docker-sandbox-implementation.md](docker-sandbox-implementation.md) for setup
-
-**E2B Cloud Sandbox:**
-- Free tier: 1-hour session limit
-- Pro tier: 24-hour limit, $150/month
-- Good for production deployments
-- Automatic cleanup and resource management
 
 ## Priority Order
 
@@ -281,15 +235,15 @@ Settings are applied in this order (highest priority first):
 2. **Configuration file** (provides defaults)
    ```yaml
    models:
-     initializer: claude-opus-4-5-20251101
-     coding: claude-sonnet-4-5-20250929
+     initializer: claude-opus-4-6
+     coding: claude-sonnet-4-6
    ```
 
 3. **Built-in defaults** (fallback)
    ```python
    # From core/config.py
-   initializer: "claude-opus-4-5-20251101"
-   coding: "claude-sonnet-4-5-20250929"
+   initializer: "claude-opus-4-6"
+   coding: "claude-sonnet-4-6"
    ```
 
 ## Examples
@@ -300,14 +254,14 @@ Create `.yokeflow.yaml` in current directory:
 
 ```yaml
 models:
-  initializer: claude-opus-4-5-20251101
-  coding: claude-sonnet-4-5-20250929
+  initializer: claude-opus-4-6
+  coding: claude-sonnet-4-6
 
 timing:
   auto_continue_delay: 5  # Slower pace between sessions
 
 project:
-  default_generations_dir: generations
+  default_projects_dir: projects
 ```
 
 The Web UI will use these as defaults when creating new projects.
@@ -318,8 +272,8 @@ Create `~/.yokeflow.yaml` for global defaults:
 
 ```yaml
 models:
-  initializer: claude-opus-4-5-20251101
-  coding: claude-sonnet-4-5-20250929
+  initializer: claude-opus-4-6
+  coding: claude-sonnet-4-6
 ```
 
 These defaults apply to all projects on this machine.
@@ -331,8 +285,8 @@ You can use different configs for different scenarios by placing them in differe
 **Development** (`.yokeflow.yaml`):
 ```yaml
 models:
-  initializer: claude-opus-4-5-20251101
-  coding: claude-sonnet-4-5-20250929  # Fast, cost-effective
+  initializer: claude-opus-4-6
+  coding: claude-sonnet-4-6  # Fast, cost-effective
 
 timing:
   auto_continue_delay: 1  # Quick iteration
@@ -341,8 +295,8 @@ timing:
 **Production** (`~/.yokeflow.yaml`):
 ```yaml
 models:
-  initializer: claude-opus-4-5-20251101
-  coding: claude-opus-4-5-20251101  # Higher quality
+  initializer: claude-opus-4-6
+  coding: claude-opus-4-6  # Higher quality
 
 timing:
   auto_continue_delay: 5  # Slower, more stable
@@ -354,8 +308,8 @@ Enable comprehensive quality monitoring with epic testing and re-testing:
 
 ```yaml
 models:
-  review: claude-sonnet-4-5-20250929
-  prompt_improvement: claude-opus-4-5-20251101
+  review: claude-sonnet-4-6
+  prompt_improvement: claude-opus-4-6
 
 review:
   min_reviews_for_analysis: 5
@@ -378,41 +332,23 @@ epic_retesting:
 
 This provides automated quality checks, regression detection, and intelligent test blocking.
 
-### Example 5: Docker Sandbox with Playwright (v2.1)
-
-Enable Docker isolation with browser testing support:
-
-```yaml
-sandbox:
-  type: docker
-  docker_image: yokeflow-playwright:latest
-  docker_memory_limit: 3g
-  docker_cpu_limit: "2.0"
-
-docker:
-  enabled: true
-  image: yokeflow-playwright:latest
-```
-
-This runs all sessions in isolated Docker containers with full Playwright support.
-
-### Example 6: Complete v2.1 Configuration
+### Example 5: Complete v2.1 Configuration
 
 A comprehensive configuration using all v2.1 features:
 
 ```yaml
 # Model Configuration
 models:
-  initializer: claude-opus-4-5-20251101
-  coding: claude-sonnet-4-5-20250929
-  review: claude-sonnet-4-5-20250929
-  prompt_improvement: claude-opus-4-5-20251101
+  initializer: claude-opus-4-6
+  coding: claude-sonnet-4-6
+  review: claude-sonnet-4-6
+  prompt_improvement: claude-opus-4-6
 
 # Timing Configuration
 timing:
   auto_continue_delay: 3
   web_ui_poll_interval: 5
-  web_ui_port: 3000
+  web_ui_port: 3010
 
 # Security Configuration
 security:
@@ -421,7 +357,7 @@ security:
 
 # Project Configuration
 project:
-  default_generations_dir: generations
+  default_projects_dir: projects
   max_iterations: null  # unlimited
 
 # Review Configuration
@@ -452,17 +388,6 @@ epic_retesting:
   pause_on_regression: false
   auto_create_rework_tasks: true
 
-# Sandbox Configuration
-sandbox:
-  type: docker
-  docker_image: yokeflow-playwright:latest
-  docker_network: bridge
-  docker_memory_limit: 3g
-  docker_cpu_limit: "2.0"
-
-docker:
-  enabled: true
-  image: yokeflow-playwright:latest
 ```
 
 This configuration enables:
@@ -470,7 +395,6 @@ This configuration enables:
 - ✅ Intelligent epic test blocking (autonomous mode)
 - ✅ Regression detection every 2 epics
 - ✅ Foundation epic re-testing every 7 days
-- ✅ Docker isolation with Playwright support
 - ✅ Automatic fix task creation
 - ✅ Quality reviews with prompt improvements
 
@@ -507,6 +431,5 @@ See [.yokeflow.yaml.example](../.yokeflow.yaml.example) for a complete configura
 
 ### Related Documentation
 - [docs/api-usage.md](api-usage.md) - API endpoint reference (60+ endpoints)
-- [docs/docker-sandbox-implementation.md](docker-sandbox-implementation.md) - Docker setup guide
 - [docs/developer-guide.md](developer-guide.md) - Platform architecture
 

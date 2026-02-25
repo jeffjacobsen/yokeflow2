@@ -104,8 +104,7 @@ from server.generation import (
     ContextManager,
     ContextManifest
 )
-# Use the new SDK-based spec generator
-from server.generation.spec_generator_v2 import SpecGenerator
+from server.generation.spec_generator import SpecGenerator
 
 # Use structured logging
 logger = get_logger(__name__)
@@ -144,7 +143,6 @@ class ProjectResponse(BaseModel):
     needs_env_config: bool = False
     env_configured: bool = False
     spec_file_path: Optional[str] = None
-    sandbox_type: Optional[str] = None  # Sandbox type: 'docker', 'local', etc.
     project_type: str = "greenfield"  # 'greenfield' or 'brownfield'
     source_commit_sha: Optional[str] = None
     codebase_analysis: Optional[Dict[str, Any]] = None
@@ -332,7 +330,7 @@ running_sessions: Dict[str, asyncio.Task] = {}
 # Helper function to convert datetime fields
 
 # JSONB fields that asyncpg returns as strings (no JSON codec registered on pool)
-_JSONB_FIELDS = {'metadata', 'codebase_analysis', 'sandbox_config', 'metrics', 'result'}
+_JSONB_FIELDS = {'metadata', 'codebase_analysis', 'metrics', 'result'}
 
 
 def convert_datetimes_to_str(data: Dict[str, Any], fields: List[str] = None) -> Dict[str, Any]:
@@ -571,7 +569,7 @@ async def get_info(current_user: dict = Depends(get_current_user)):
             "initializer": config.models.initializer,
             "coding": config.models.coding,
         },
-        "generations_dir": config.project.default_generations_dir,
+        "projects_dir": config.project.default_projects_dir,
     }
 
 
@@ -888,7 +886,6 @@ async def list_projects(current_user: dict = Depends(get_current_user)):
         projects = await orchestrator.list_projects()
 
         # Convert UUIDs and datetimes for JSON serialization
-        # Also extract sandbox_type from metadata for easier frontend access
         response_projects = []
         for p in projects:
             project_dict = dict(p)
@@ -898,18 +895,6 @@ async def list_projects(current_user: dict = Depends(get_current_user)):
             # Normalize progress field names for frontend compatibility
             if 'progress' in project_dict:
                 project_dict['progress'] = normalize_progress_fields(project_dict['progress'])
-
-            # Extract sandbox_type from metadata to top level
-            metadata = project_dict.get('metadata', {})
-            if isinstance(metadata, str):
-                metadata = json.loads(metadata)
-            if metadata is None:
-                metadata = {}
-
-            # sandbox_type is nested in metadata.settings
-            settings = metadata.get('settings', {})
-            sandbox_type = settings.get('sandbox_type', 'docker')  # Default to docker
-            project_dict['sandbox_type'] = sandbox_type
 
             response_projects.append(project_dict)
 
@@ -925,7 +910,6 @@ async def create_project(
     name: str = Form(...),
     spec_files: List[UploadFile] = File(...),
     force: bool = Form(False),
-    sandbox_type: str = Form("docker"),
     initializer_model: Optional[str] = Form(None),
     coding_model: Optional[str] = Form(None),
     current_user: dict = Depends(get_current_user),
@@ -969,7 +953,6 @@ async def create_project(
             spec_source=spec_source,  # None for single file, Path for multi-file
             spec_content=spec_content,  # Content for single file, None for multi-file
             force=force,
-            sandbox_type=sandbox_type,
             initializer_model=initializer_model,
             coding_model=coding_model,
         )
@@ -1004,7 +987,6 @@ async def import_project(
     branch: str = Form("main"),
     change_spec: Optional[UploadFile] = File(None),
     change_spec_content: Optional[str] = Form(None),
-    sandbox_type: str = Form("docker"),
     initializer_model: Optional[str] = Form(None),
     coding_model: Optional[str] = Form(None),
     current_user: dict = Depends(get_current_user),
@@ -1041,7 +1023,6 @@ async def import_project(
             source_path=source_path,
             branch=branch,
             change_spec_content=spec_content,
-            sandbox_type=sandbox_type,
             initializer_model=initializer_model,
             coding_model=coding_model,
         )
@@ -1104,18 +1085,6 @@ async def get_project(project_id: str, current_user: dict = Depends(get_current_
         if 'progress' in project_dict:
             project_dict['progress'] = normalize_progress_fields(project_dict['progress'])
 
-        # Extract sandbox_type from metadata to top level
-        metadata = project_dict.get('metadata', {})
-        if isinstance(metadata, str):
-            metadata = json.loads(metadata)
-        if metadata is None:
-            metadata = {}
-
-        # sandbox_type is nested in metadata.settings
-        settings = metadata.get('settings', {})
-        sandbox_type = settings.get('sandbox_type', 'docker')  # Default to docker
-        project_dict['sandbox_type'] = sandbox_type
-
         return project_dict
     except ValueError as e:
         if "not found" in str(e).lower():
@@ -1169,190 +1138,6 @@ async def delete_project(project_id: str):
         }
     except Exception as e:
         logger.error(f"Failed to delete project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# =============================================================================
-# Container Management Endpoints
-# =============================================================================
-
-def extract_sandbox_type(project: dict) -> str:
-    """Extract sandbox_type from project metadata."""
-    metadata = project.get('metadata', {})
-    if isinstance(metadata, str):
-        metadata = json.loads(metadata)
-    if metadata is None:
-        metadata = {}
-    settings = metadata.get('settings', {})
-    return settings.get('sandbox_type', 'docker')
-
-@app.get("/api/projects/{project_id}/container/status")
-async def get_container_status(project_id: str):
-    """Get the status of a project's Docker container."""
-    try:
-        from server.sandbox.manager import SandboxManager
-
-        # Get project from database
-        project_uuid = UUID(project_id)
-        async with DatabaseManager() as db:
-            project = await db.get_project(project_uuid)
-
-            if not project:
-                raise HTTPException(status_code=404, detail="Project not found")
-
-            project_name = project.get('name')
-            sandbox_type = extract_sandbox_type(project)
-
-            if sandbox_type != 'docker':
-                return {
-                    "container_exists": False,
-                    "sandbox_type": sandbox_type,
-                    "message": f"Project uses {sandbox_type} sandbox (not Docker)"
-                }
-
-            # Get container status
-            status = SandboxManager.get_docker_container_status(project_name)
-
-            if status:
-                return {
-                    "container_exists": True,
-                    "status": status['status'],
-                    "container_id": status['id'],
-                    "container_name": status['name'],
-                    "ports": status.get('ports', {}),
-                    "sandbox_type": sandbox_type
-                }
-            else:
-                return {
-                    "container_exists": False,
-                    "sandbox_type": sandbox_type,
-                    "message": "No container found for this project"
-                }
-
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid project ID format")
-    except Exception as e:
-        logger.error(f"Failed to get container status for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/api/projects/{project_id}/container/start")
-async def start_container(project_id: str):
-    """Start a project's Docker container."""
-    try:
-        from server.sandbox.manager import SandboxManager
-
-        # Get project from database
-        project_uuid = UUID(project_id)
-        async with DatabaseManager() as db:
-            project = await db.get_project(project_uuid)
-
-            if not project:
-                raise HTTPException(status_code=404, detail="Project not found")
-
-            project_name = project.get('name')
-            sandbox_type = extract_sandbox_type(project)
-
-            if sandbox_type != 'docker':
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Project uses {sandbox_type} sandbox (not Docker)"
-                )
-
-            # Start the container
-            started = SandboxManager.start_docker_container(project_name)
-
-            if started:
-                return {"message": f"Container started successfully", "started": True}
-            else:
-                return {"message": "Container was already running or doesn't exist", "started": False}
-
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid project ID format")
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to start container for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/api/projects/{project_id}/container/stop")
-async def stop_container(project_id: str):
-    """Stop a project's Docker container."""
-    try:
-        from server.sandbox.manager import SandboxManager
-
-        # Get project from database
-        project_uuid = UUID(project_id)
-        async with DatabaseManager() as db:
-            project = await db.get_project(project_uuid)
-
-            if not project:
-                raise HTTPException(status_code=404, detail="Project not found")
-
-            project_name = project.get('name')
-            sandbox_type = extract_sandbox_type(project)
-
-            if sandbox_type != 'docker':
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Project uses {sandbox_type} sandbox (not Docker)"
-                )
-
-            # Stop the container
-            stopped = SandboxManager.stop_docker_container(project_name)
-
-            if stopped:
-                return {"message": "Container stopped successfully", "stopped": True}
-            else:
-                return {"message": "Container was not running or doesn't exist", "stopped": False}
-
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid project ID format")
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to stop container for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.delete("/api/projects/{project_id}/container")
-async def delete_container(project_id: str):
-    """Delete a project's Docker container."""
-    try:
-        from server.sandbox.manager import SandboxManager
-
-        # Get project from database
-        project_uuid = UUID(project_id)
-        async with DatabaseManager() as db:
-            project = await db.get_project(project_uuid)
-
-            if not project:
-                raise HTTPException(status_code=404, detail="Project not found")
-
-            project_name = project.get('name')
-            sandbox_type = extract_sandbox_type(project)
-
-            if sandbox_type != 'docker':
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Project uses {sandbox_type} sandbox (not Docker)"
-                )
-
-            # Delete the container
-            deleted = SandboxManager.delete_docker_container(project_name)
-
-            if deleted:
-                return {"message": "Container deleted successfully", "deleted": True}
-            else:
-                return {"message": "Container doesn't exist", "deleted": False}
-
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid project ID format")
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to delete container for project {project_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -1916,7 +1701,6 @@ async def update_project_settings(project_id: str, settings: Dict[str, Any]):
 
     Supported settings:
     - auto_continue: bool - Auto-start next session after completion
-    - sandbox_type: str - 'docker' or 'local'
     - coding_model: str - LLM model for coding sessions
     - initializer_model: str - LLM model for initialization
     - max_iterations: int | null - Max sessions per auto-run
@@ -2079,7 +1863,6 @@ async def reset_project_endpoint(project_id: str):
 async def initialize_project(
     project_id: str,
     initializer_model: Optional[str] = None,
-    parallel_expansion: Optional[bool] = None,
     background_tasks: BackgroundTasks = None
 ):
     """
@@ -2121,7 +1904,6 @@ async def initialize_project(
                     project_id=project_uuid,
                     initializer_model=initializer_model,
                     progress_callback=progress_update,
-                    parallel_expansion=parallel_expansion,
                 )
 
                 # Send WebSocket notification
@@ -2250,69 +2032,6 @@ async def cancel_initialization(
         raise
     except Exception as e:
         logger.error(f"Failed to cancel initialization: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/api/projects/{project_id}/expansion/cancel")
-async def cancel_expansion(
-    project_id: str,
-    current_user: dict = Depends(get_current_user)
-):
-    """
-    Cancel running expansion sessions for a project.
-
-    Stops all expansion worker sessions and cleans up incomplete tasks/tests
-    that were created during expansion. Epics created during Session 0 are preserved.
-
-    Returns:
-        Status message with count of stopped workers
-
-    Raises:
-        400: No expansion sessions running
-        404: Project not found
-        500: Server error
-    """
-    try:
-        project_uuid = UUID(project_id)
-
-        async with DatabaseManager() as db:
-            project = await db.get_project(project_uuid)
-            if not project:
-                raise HTTPException(status_code=404, detail="Project not found")
-
-            # Find running expansion sessions
-            sessions = await db.get_session_history(project_uuid, limit=100)
-            expansion_sessions = [
-                s for s in sessions
-                if s.get('type') == 'expansion' and s.get('status') == 'running'
-            ]
-
-            if not expansion_sessions:
-                raise HTTPException(
-                    status_code=400,
-                    detail="No expansion sessions running. Nothing to cancel."
-                )
-
-            # Stop all expansion workers
-            stopped = 0
-            for session in expansion_sessions:
-                try:
-                    await orchestrator.stop_session(session['id'])
-                    stopped += 1
-                except Exception as e:
-                    logger.warning(f"Failed to stop expansion session {session['id']}: {e}")
-
-        return {
-            "status": "cancelled",
-            "message": f"Expansion cancelled. {stopped} worker(s) stopped.",
-            "project_id": project_id,
-            "stopped_workers": stopped,
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to cancel expansion: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -2647,7 +2366,6 @@ async def list_sessions(project_id: str):
                         session_dict[field] = str(session_dict[field])
 
             # Map DB 'type' column to 'session_type' for frontend compatibility
-            # Frontend checks session.session_type (e.g., === 'expansion')
             if 'type' in session_dict and 'session_type' not in session_dict:
                 session_dict['session_type'] = session_dict['type']
 
@@ -2753,7 +2471,7 @@ async def get_session_logs(
             project_id = session.get('project_id')
             session_number = session.get('session_number')
 
-            # Find log file in generations directory
+            # Find log file in project directory
             from pathlib import Path
             import json
 
@@ -2763,9 +2481,11 @@ async def get_session_logs(
                 raise HTTPException(status_code=404, detail="Project not found")
 
             project_name = project.get('name')
-            generations_dir = Path("generations")
-            project_dir = generations_dir / project_name
-            logs_dir = project_dir / "logs"
+            config = Config.load_default()
+            projects_dir = Path(config.project.default_projects_dir)
+            project_dir = projects_dir / project_name
+            from server.utils.project_paths import resolve_logs_dir
+            logs_dir = resolve_logs_dir(project_dir)
 
             # Find log file for this session (format: session_NNN_*.jsonl)
             log_files = list(logs_dir.glob(f"session_{session_number:03d}_*.jsonl")) if logs_dir.exists() else []
@@ -3098,7 +2818,7 @@ def _parse_session_number_from_filename(stem: str) -> int | None:
     Parse session number from a log filename stem.
 
     Handles both positive (session_000_...) and negative (session_-01_...)
-    session numbers used by expansion workers.
+    session numbers.
 
     Returns the session number as int, or None if parsing fails.
     """
@@ -3124,7 +2844,8 @@ async def list_logs(project_id: str):
         if not project_path or not project_path.exists():
             return []
 
-        logs_path = project_path / "logs"
+        from server.utils.project_paths import resolve_logs_dir
+        logs_path = resolve_logs_dir(project_path)
         if not logs_path.exists():
             return []
 
@@ -3184,7 +2905,8 @@ async def get_human_log(project_id: str, filename: str):
         if ".." in filename or "/" in filename:
             raise HTTPException(status_code=400, detail="Invalid filename")
 
-        logs_dir = project_path / "logs"
+        from server.utils.project_paths import resolve_logs_dir
+        logs_dir = resolve_logs_dir(project_path)
 
         # Try exact filename first
         log_path = logs_dir / filename
@@ -3239,7 +2961,8 @@ async def get_events_log(project_id: str, filename: str):
         if ".." in filename or "/" in filename:
             raise HTTPException(status_code=400, detail="Invalid filename")
 
-        logs_dir = project_path / "logs"
+        from server.utils.project_paths import resolve_logs_dir
+        logs_dir = resolve_logs_dir(project_path)
 
         # Try exact filename first
         log_path = logs_dir / filename
@@ -3279,7 +3002,7 @@ async def get_events_log(project_id: str, filename: str):
 @app.get("/api/projects/{project_id}/screenshots")
 async def list_screenshots(project_id: str):
     """
-    List all screenshots for a project from the .playwright-mcp directory.
+    List all screenshots for a project from the yokeflow/screenshots directory.
 
     Returns:
         List of screenshots with metadata (filename, size, modified time, task_id if parseable)
@@ -3291,14 +3014,14 @@ async def list_screenshots(project_id: str):
             if not project:
                 raise HTTPException(status_code=404, detail="Project not found")
 
-            # Construct project path from generations directory + project name
+            # Construct project path from projects directory + project name
             config = Config.load_default()
-            generations_dir = Path(config.project.default_generations_dir)
-            project_path = generations_dir / project["name"]
+            projects_dir = Path(config.project.default_projects_dir)
+            project_path = projects_dir / project["name"]
 
             # Check both directories for backward compatibility
             yokeflow_screenshots_dir = project_path / "yokeflow" / "screenshots"
-            legacy_screenshots_dir = project_path / ".playwright-mcp"
+            legacy_screenshots_dir = project_path / ".playwright-mcp"  # Legacy path for backwards compat
 
             screenshots = []
 
@@ -3310,8 +3033,9 @@ async def list_screenshots(project_id: str):
                 for filepath in screenshots_dir.glob("*.png"):
                     stat = filepath.stat()
 
-                    # Try to extract task ID from filename (format: task_NNN_*.png)
+                    # Try to extract task/epic ID from filename
                     task_id = None
+                    epic_id = None
                     if filepath.name.startswith("task_"):
                         try:
                             parts = filepath.name.split("_")
@@ -3319,18 +3043,26 @@ async def list_screenshots(project_id: str):
                                 task_id = int(parts[1])
                         except (ValueError, IndexError):
                             pass
+                    elif filepath.name.startswith("epic_"):
+                        try:
+                            parts = filepath.name.split("_")
+                            if len(parts) >= 2:
+                                epic_id = int(parts[1])
+                        except (ValueError, IndexError):
+                            pass
 
                     # Determine the directory type for tracking
                     if "yokeflow" in str(screenshots_dir):
                         dir_type = "yokeflow/screenshots"
                     else:
-                        dir_type = ".playwright-mcp"
+                        dir_type = "legacy"
 
                     screenshots.append({
                         "filename": filepath.name,
                         "size": stat.st_size,
                         "modified_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
                         "task_id": task_id,
+                        "epic_id": epic_id,
                         "url": f"/api/projects/{project_id}/screenshots/{filepath.name}",
                         "directory": dir_type  # Track which directory it came from
                     })
@@ -3361,14 +3093,14 @@ async def get_screenshot(project_id: str, filename: str):
             if not project:
                 raise HTTPException(status_code=404, detail="Project not found")
 
-            # Construct project path from generations directory + project name
+            # Construct project path from projects directory + project name
             config = Config.load_default()
-            generations_dir = Path(config.project.default_generations_dir)
-            project_path = generations_dir / project["name"]
+            projects_dir = Path(config.project.default_projects_dir)
+            project_path = projects_dir / project["name"]
 
             # Check both directories for the screenshot
             yokeflow_screenshot_path = project_path / "yokeflow" / "screenshots" / filename
-            legacy_screenshot_path = project_path / ".playwright-mcp" / filename
+            legacy_screenshot_path = project_path / ".playwright-mcp" / filename  # Legacy path for backwards compat
 
             # Try yokeflow directory first, then legacy
             screenshot_path = None
@@ -3377,7 +3109,7 @@ async def get_screenshot(project_id: str, filename: str):
                 allowed_parent = project_path / "yokeflow" / "screenshots"
             elif legacy_screenshot_path.exists() and legacy_screenshot_path.is_file():
                 screenshot_path = legacy_screenshot_path
-                allowed_parent = project_path / ".playwright-mcp"
+                allowed_parent = project_path / ".playwright-mcp"  # Legacy
             else:
                 raise HTTPException(status_code=404, detail="Screenshot not found")
 
@@ -3517,7 +3249,7 @@ async def trigger_deep_review(
 
         # Get project path
         config = Config.load_default()
-        project_path = Path(config.project.default_generations_dir) / project_name
+        project_path = Path(config.project.default_projects_dir) / project_name
 
         if not project_path.exists():
             raise HTTPException(status_code=404, detail=f"Project directory not found: {project_path}")
@@ -3664,7 +3396,7 @@ async def trigger_bulk_reviews(
 
         # Get project path
         config = Config.load_default()
-        project_path = Path(config.project.default_generations_dir) / project_name
+        project_path = Path(config.project.default_projects_dir) / project_name
 
         # Trigger reviews for each session
         triggered_count = 0
@@ -3974,50 +3706,15 @@ async def trigger_completion_review(
     """
     Manually trigger a completion review for a project.
 
-    This is useful if you want to run a review before the project
-    is fully complete, or re-run a review after making changes.
+    This verifies that the actual generated code implements what was
+    requested in the specification. Only available for completed projects.
+
+    TODO: Implement ImplementationReviewer (see COMPLETION_REVIEW.md)
     """
-    try:
-        from server.quality.completion_analyzer import CompletionAnalyzer
-
-        project_uuid = UUID(project_id)
-
-        # Check if project exists
-        project = await db.get_project(project_uuid)
-        if not project:
-            raise HTTPException(status_code=404, detail="Project not found")
-
-        logger.info(f"Manually triggering completion review for project {project_id}")
-
-        # Run analysis
-        analyzer = CompletionAnalyzer(use_semantic_matching=True)
-        review = await analyzer.analyze_completion(project_uuid, db)
-
-        # Store in database
-        review_id = await db.store_completion_review(project_uuid, review)
-
-        logger.info(
-            f"Completion review finished: {review['recommendation'].upper()} "
-            f"(score={review['overall_score']}, coverage={review['coverage_percentage']:.1f}%)"
-        )
-
-        return {
-            "review_id": str(review_id),
-            "score": review['overall_score'],
-            "coverage_percentage": review['coverage_percentage'],
-            "recommendation": review['recommendation'],
-            "requirements_met": review['requirements_met'],
-            "requirements_total": review['requirements_total'],
-            "executive_summary": review['executive_summary']
-        }
-
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid project ID")
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error triggering completion review: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+    raise HTTPException(
+        status_code=501,
+        detail="Completion review not yet implemented. See COMPLETION_REVIEW.md for the implementation plan."
+    )
 
 
 @app.get("/api/completion-reviews")
@@ -4129,7 +3826,7 @@ if __name__ == "__main__":
     print("ERROR: Do not run this file directly")
     print("="*80)
     print("\nTo start the API server, use uvicorn from the project root:")
-    print("\n  uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload")
+    print("\n  uvicorn api.main:app --host 0.0.0.0 --port 8010 --reload")
     print("\nOr use the wrapper script:")
     print("\n  python start_api.py")
     print("\n" + "="*80 + "\n")

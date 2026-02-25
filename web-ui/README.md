@@ -117,7 +117,7 @@ Modern React/Next.js web interface for the YokeFlow autonomous development platf
 ### Prerequisites
 
 - Node.js 18+ and npm
-- FastAPI backend running on port 8000
+- FastAPI backend running on port 8010
 
 ### Installation
 
@@ -137,7 +137,7 @@ cp .env.local.example .env.local
 # Start dev server
 npm run dev
 
-# Open http://localhost:3000
+# Open http://localhost:3010
 ```
 
 ### Environment Variables
@@ -146,10 +146,10 @@ The `.env.local` file contains browser-accessible environment variables:
 
 ```bash
 # API Server URL (where FastAPI is running)
-NEXT_PUBLIC_API_URL=http://localhost:8000
+NEXT_PUBLIC_API_URL=http://localhost:8010
 
 # WebSocket URL (same as API URL but with ws:// protocol)
-NEXT_PUBLIC_WS_URL=ws://localhost:8000
+NEXT_PUBLIC_WS_URL=ws://localhost:8010
 ```
 
 For production deployment with HTTPS, update to:

@@ -35,7 +35,6 @@ You have access to the following MCP tools (prefix: `mcp__task-manager__`):
 - `start_task` - For coding sessions only
 - `update_task_status` - For coding sessions only
 - `update_task_test_result` - For coding sessions only
-- `bash_docker` - For Docker coding sessions only
 
 ## TASK 1: Explore the Existing Codebase
 
@@ -79,7 +78,7 @@ Note in your progress the key architectural patterns:
 
 ## TASK 2: Read the Change Specification
 
-Read `change_spec.md` in the project root. This describes what the user wants to modify, improve, or add to the existing codebase.
+Read `yokeflow/specs/change_spec.md`. This describes what the user wants to modify, improve, or add to the existing codebase.
 
 For each requested change:
 1. Identify which parts of the codebase are affected
@@ -134,7 +133,7 @@ priority: 2
 
 For EACH epic, use `expand_epic` to add detailed tasks. **Brownfield tasks differ from greenfield:**
 
-**Task description guidelines:**
+**Task name and description guidelines:**
 - Reference SPECIFIC existing files to modify
 - Describe the current behavior and the desired new behavior
 - Note potential regression risks
@@ -144,14 +143,14 @@ For EACH epic, use `expand_epic` to add detailed tasks. **Brownfield tasks diffe
 ```
 mcp__task-manager__expand_epic
 epic_id: "epic-uuid-here"
-description: "Add offset/limit parameters to user list endpoint"
-action: "Modify src/api/users.ts: The current GET /api/users endpoint returns all users without pagination. Add optional query parameters 'offset' (default 0) and 'limit' (default 20, max 100). Update the database query to use LIMIT/OFFSET. Return pagination metadata in the response: { data: [...], total: N, offset: M, limit: L }. Ensure backward compatibility -- requests without offset/limit should still work (use defaults). Update TypeScript types in src/types/api.ts. Regression risk: Existing clients expect array response, now getting object. Add backward-compatible response format."
+name: "Add offset/limit parameters to user list endpoint"
+description: "Modify src/api/users.ts: The current GET /api/users endpoint returns all users without pagination. Add optional query parameters 'offset' (default 0) and 'limit' (default 20, max 100). Update the database query to use LIMIT/OFFSET. Return pagination metadata in the response: { data: [...], total: N, offset: M, limit: L }. Ensure backward compatibility -- requests without offset/limit should still work (use defaults). Update TypeScript types in src/types/api.ts. Regression risk: Existing clients expect array response, now getting object. Add backward-compatible response format."
 priority: 1
 
 mcp__task-manager__expand_epic
 epic_id: "epic-uuid-here"
-description: "Update frontend to use paginated API"
-action: "Modify src/hooks/useUsers.ts: Update the data fetching hook to pass offset/limit parameters. Add state for current page and items per page. Handle the new response format (object with data array instead of plain array). Modify src/pages/users.tsx: Add pagination controls (prev/next buttons, page indicator). Ensure loading states work correctly during page transitions. Test with existing user list functionality to prevent regressions."
+name: "Update frontend to use paginated API"
+description: "Modify src/hooks/useUsers.ts: Update the data fetching hook to pass offset/limit parameters. Add state for current page and items per page. Handle the new response format (object with data array instead of plain array). Modify src/pages/users.tsx: Add pagination controls (prev/next buttons, page indicator). Ensure loading states work correctly during page transitions. Test with existing user list functionality to prevent regressions."
 priority: 2
 ```
 
@@ -246,10 +245,27 @@ key_verification_points: [
 3. Reference the project's existing test patterns (use the same framework/style)
 4. Include integration tests that verify changes work with existing code
 
-**Verification**: After creating all tests, use `mcp__task-manager__task_status` to verify:
-- Each task has 1-3 tests
-- Include regression tests where changes affect existing behavior
-- Each epic has 1-2 integration tests
+### MANDATORY: Verify 100% Test Coverage
+
+After creating tests, you MUST verify that EVERY task has at least one test. Do NOT skip this step.
+
+**Step 1**: Call `mcp__task-manager__task_status` and check the `tasks_without_tests` field.
+
+**Step 2**: If `tasks_without_tests > 0`:
+- You are NOT done with TASK 4. Do NOT proceed to TASK 5.
+- Use `mcp__task-manager__list_epics` to find epics that need attention.
+- For each epic, use `mcp__task-manager__get_epic` to see its tasks and identify which lack tests.
+- Create tests for ALL uncovered tasks using `create_task_test`.
+- Call `task_status` again. Repeat until `tasks_without_tests` equals 0.
+
+**Step 3**: Only when `tasks_without_tests == 0`, proceed to TASK 5.
+
+**Rules:**
+- Do NOT describe coverage as "comprehensive" or "complete" while `tasks_without_tests > 0`.
+- Do NOT skip later epics — the last epic's tasks need tests just as much as the first.
+- Every task must have at least 1 test. No exceptions.
+- Include regression tests where changes affect existing behavior.
+- Target: each task has 1-3 tests, each epic has 1-2 integration tests.
 
 ## TASK 5: Verify Git State
 
@@ -293,7 +309,7 @@ mcp__task-manager__task_status
 
 This should show:
 - All epics created and expanded
-- All tasks have test coverage
+- `tasks_without_tests` equals 0 (every task has at least one test)
 - Project is ready for coding sessions
 
 ## Session Completion

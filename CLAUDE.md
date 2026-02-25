@@ -6,16 +6,15 @@ This file provides guidance to Claude Code when working with this repository.
 
 **YokeFlow 2** - An autonomous AI development platform that uses Claude to build complete applications over multiple sessions.
 
-**Status**: Production Ready - v2.3.0 (February 2026) ✅ **Parallel Expansion**
+**Status**: Production Ready - v2.4.0 (February 2026)
 
 **Architecture**: API-first platform with FastAPI + Next.js Web UI + PostgreSQL + MCP task management
 
-**Workflow**: Opus plans roadmap (Session 0) → Parallel workers expand epics → Sonnet implements features (Sessions 1+)
+**Workflow**: Opus creates roadmap (Session 0: epics + tasks + tests) → Sonnet implements features (Sessions 1+)
 
 **Latest Updates** (February 2026):
-- ✅ **Parallel Expansion**: Session 0 creates epics, then parallel workers expand into tasks/tests (~4x faster)
+- ✅ **Simplified Initialization**: Single-agent initializer creates epics, tasks, and tests with parallel MCP tool calls
 - ✅ **MCP Pre-flight Check**: Auto-rebuilds stale MCP server, validates before sessions start
-- ✅ **Real-time Expansion UI**: WebSocket events for expansion progress, live session updates
 - ✅ **Brownfield Support**: Import existing codebases from local paths or GitHub, analyze, and modify (43 tests)
 - ✅ **REST API Complete**: 60+ endpoints with comprehensive validation
 - ✅ **Quality System**: 8-phase quality system with test tracking and epic re-testing
@@ -24,19 +23,17 @@ This file provides guidance to Claude Code when working with this repository.
 
 ## Core Workflow
 
-**Greenfield Session 0**: Reads `app_spec.txt` → Creates epics in PostgreSQL → Runs `init.sh` → Parallel workers expand epics into tasks/tests
+**Greenfield Session 0**: Reads spec from `yokeflow/specs/` → Creates epics, tasks, and tests in PostgreSQL → Runs `init.sh`
 
-**Brownfield Session 0**: Explores imported codebase → Reads `change_spec.md` → Creates scoped epics → Parallel workers expand
+**Brownfield Session 0**: Explores imported codebase → Reads `yokeflow/specs/change_spec.md` → Creates scoped epics, tasks, and tests
 
-**Parallel Expansion**: After Session 0, up to 4 workers expand epics concurrently (~6 epics/worker, auto-scaled). Uses negative session numbers (-1, -2, ...) and advisory locks for safe concurrent DB access.
-
-**Sessions 1+ (Coding)**: Get next task → Implement → Browser verify (with Playwright) → Update database → Git commit → Auto-continue
+**Sessions 1+ (Coding)**: Get next task → Implement → Browser verify (with agent-browser) → Update database → Git commit → Auto-continue
 
 **Key Files**:
-- `server/agent/orchestrator.py` - Session lifecycle + parallel expansion (greenfield + brownfield)
+- `server/agent/orchestrator.py` - Session lifecycle (greenfield + brownfield)
 - `server/agent/codebase_import.py` - Codebase import and analysis (brownfield)
 - `server/agent/agent.py` - Agent loop and session logic
-- `server/database/operations.py` - PostgreSQL abstraction (async) + retry logic + atomic session creation
+- `server/database/operations.py` - PostgreSQL abstraction (async) + retry logic
 - `server/database/retry.py` - Retry logic with exponential backoff (30 tests)
 - `server/client/claude.py` - Claude SDK client + MCP pre-flight check/auto-rebuild
 - `server/agent/checkpoint.py` - Session checkpointing and recovery (19 tests)
@@ -46,7 +43,7 @@ This file provides guidance to Claude Code when working with this repository.
 - `server/api/app.py` - REST API + WebSocket
 - `server/utils/observability.py` - Session logging (JSONL + TXT)
 - `server/utils/security.py` - Blocklist validation
-- `prompts/` - Agent instructions (including `expansion_prompt.md`)
+- `prompts/` - Agent instructions
 
 
 ## Database
@@ -87,8 +84,6 @@ Must build before use: `cd mcp-task-manager && npm run build`
 - `models.initializer` / `models.coding` - Override default Opus/Sonnet models
 - `timing.auto_continue_delay` - Seconds between sessions (default 3)
 - `project.max_iterations` - Limit session count (null = unlimited)
-- `parallel.parallel_expansion` - Enable parallel epic expansion (default: true)
-- `parallel.max_expansion_workers` - Max concurrent expansion workers (default: 4, auto-scales based on epic count)
 - `brownfield.default_feature_branch_prefix` - Branch prefix (default: `yokeflow/`)
 - `brownfield.run_existing_tests_before_changes` / `after_changes` - Regression safety (default: true)
 
@@ -115,8 +110,7 @@ See [docs/api-usage.md](docs/api-usage.md) for complete endpoint reference and e
 **What's validated**:
 - API requests: Project names, spec content, session parameters, environment variables
 - Brownfield imports: Source URLs, local paths, change spec content
-- Configuration: Model names, timing settings, Docker limits, database URLs
-- Sandbox: Memory/CPU limits, port mappings, E2B configuration
+- Configuration: Model names, timing settings, database URLs
 - Verification: Test timeouts, coverage thresholds, webhook URLs
 
 **Benefits**:
@@ -131,7 +125,7 @@ See [docs/input-validation.md](docs/input-validation.md) for usage examples.
 
 **Blocklist approach**: Allows dev tools (npm, git, curl), blocks dangerous commands (rm, sudo, apt)
 
-Edit `server/utils/security.py` `BLOCKED_COMMANDS` to modify. Safe in Docker containers.
+Edit `server/utils/security.py` `BLOCKED_COMMANDS` to modify.
 
 ## Project Structure
 
@@ -140,7 +134,7 @@ yokeflow2/
 ├── server/                  # All server code (reorganized)
 │   ├── agent/               # Session orchestration & lifecycle
 │   │   ├── agent.py         # Agent loop and session logic
-│   │   ├── orchestrator.py  # Session lifecycle + parallel expansion
+│   │   ├── orchestrator.py  # Session lifecycle
 │   │   ├── codebase_import.py  # Codebase import & analysis (brownfield)
 │   │   ├── session_manager.py  # Intervention system (DB persistence)
 │   │   ├── checkpoint.py    # Session checkpointing and recovery
@@ -157,7 +151,6 @@ yokeflow2/
 │   │   └── retry.py         # Retry logic with exponential backoff
 │   ├── client/              # External service clients
 │   │   ├── claude.py        # Claude SDK client
-│   │   ├── playwright.py    # Playwright Docker client
 │   │   └── prompts.py       # Prompt loading
 │   ├── quality/             # Quality & review system
 │   │   ├── metrics.py       # Quality metrics (Phase 1)
@@ -170,9 +163,6 @@ yokeflow2/
 │   │   ├── epic_validator.py  # Epic validation
 │   │   ├── epic_manager.py  # Epic management
 │   │   └── test_generator.py  # Test generation
-│   ├── sandbox/             # Docker management
-│   │   ├── manager.py       # Docker sandbox management
-│   │   └── hooks.py         # Sandbox hooks
 │   ├── utils/               # Shared utilities
 │   │   ├── config.py        # Configuration management
 │   │   ├── logging.py       # Structured logging
@@ -189,7 +179,7 @@ yokeflow2/
 ├── schema/postgresql/       # Database DDL
 ├── tests/                   # Test suites
 ├── docs/                    # Documentation
-└── generations/             # Generated projects
+└── projects/                # Project output directories
 ```
 
 ## Key Design Decisions
@@ -204,9 +194,9 @@ yokeflow2/
 
 **Dual Models**: Opus for planning (comprehensive), Sonnet for coding (fast + cheap)
 
-**Blocklist Security**: Agent autonomy with safety, designed for containers
+**Blocklist Security**: Agent autonomy with safety
 
-**Brownfield as Copy**: Imported codebases are copied to `generations/`, keeping originals safe. Feature branches isolate changes.
+**Brownfield as Copy**: Imported codebases are copied to `projects/`, keeping originals safe. Feature branches isolate changes.
 
 ## Troubleshooting
 
@@ -216,7 +206,7 @@ yokeflow2/
 
 **Command blocked**: Check `server/utils/security.py` BLOCKED_COMMANDS list
 
-**Agent stuck**: Check logs in `generations/[project]/logs/`, run with `--verbose`
+**Agent stuck**: Check logs in `projects/[project]/yokeflow/logs/`, run with `--verbose`
 
 **Web UI no projects**: Ensure PostgreSQL running, verify API connection
 
@@ -235,7 +225,7 @@ yokeflow2/
 ## Testing
 
 **Test Suite Status** (February 2026):
-- ✅ **533+ total tests** across all test files (46 parallel expansion, 13 MCP pre-flight, 43 brownfield)
+- ✅ **450+ total tests** across all test files (13 MCP pre-flight, 43 brownfield), 10 skipped
 - ✅ **70% coverage achieved** (target met)
 - ✅ **Production ready** with comprehensive test infrastructure
 
@@ -254,14 +244,12 @@ pytest --cov=server --cov-report=html --cov-report=term-missing
 **Key Test Files**:
 ```bash
 pytest tests/test_orchestrator.py            # Session lifecycle (17 tests)
-pytest tests/test_parallel_expansion.py      # Parallel expansion (46 tests)
 pytest tests/test_parallel_orchestrator.py   # Parallel orchestrator (varies)
 pytest tests/test_mcp_preflight.py           # MCP pre-flight check (13 tests)
 pytest tests/test_codebase_import.py         # Brownfield import & analysis (19 tests)
 pytest tests/test_brownfield_orchestrator.py # Brownfield orchestration (10 tests)
 pytest tests/test_brownfield_validation.py   # Brownfield validation (14 tests)
 pytest tests/test_quality_integration.py     # Quality system (10 tests)
-pytest tests/test_sandbox_manager.py         # Docker sandbox (17 tests)
 pytest tests/test_security.py               # Security validation (2 tests, 64 assertions)
 pytest tests/test_task_verifier.py           # Task verification (11 tests)
 pytest tests/test_test_generator.py          # Test generation (15 tests)
@@ -315,7 +303,7 @@ pytest tests/test_test_generator.py          # Test generation (15 tests)
 **Structured Logging** (v1.4.0):
 - **Terminal**: Development-friendly colored output
 - **File**: `logs/yokeflow.log` - JSON format for analysis
-- **Per-Session**: `generations/<project>/logs/session_*.jsonl` - Session details
+- **Per-Session**: `projects/<project>/yokeflow/logs/session_*.jsonl` - Session details
 
 **Configuration** (via environment variables):
 ```bash
@@ -325,8 +313,8 @@ export LOG_FORMAT=dev           # 'dev' (colored) or 'json' (production)
 
 **Log Locations**:
 - Application logs: `logs/yokeflow.log` (JSON format)
-- Session logs: `generations/<project>/logs/session_NNN_TIMESTAMP.jsonl`
-- Session summaries: `generations/<project>/logs/session_NNN_TIMESTAMP.txt`
+- Session logs: `projects/<project>/yokeflow/logs/session_NNN_TIMESTAMP.jsonl`
+- Session summaries: `projects/<project>/yokeflow/logs/session_NNN_TIMESTAMP.txt`
 
 **Features**:
 - Automatic session_id and project_id context injection
@@ -410,16 +398,12 @@ state = await recovery.restore_from_checkpoint(checkpoint_id)
 
 ## Recent Changes
 
-**February 15, 2026 - v2.3.0 Parallel Expansion & Reliability**:
-- ✅ **Parallel Expansion**: Session 0 creates epics (planning-only), then up to 4 workers expand concurrently
-- ✅ **Auto-scaling Workers**: ~6 epics/worker, capped at `max_expansion_workers` config
-- ✅ **Advisory Lock**: `pg_advisory_xact_lock` serializes concurrent session creation (prevents duplicate key races)
+**February 19, 2026 - v2.4.0 Simplified Initialization & Local-Only Mode**:
+- ✅ **Simplified Initialization**: Removed parallel expansion workers; single initializer agent creates epics, tasks, and tests using parallel MCP tool calls
+- ✅ **Local-Only Mode**: Removed Docker sandbox infrastructure; all sessions run locally
 - ✅ **MCP Pre-flight Check**: Validates build exists, detects stale builds, auto-rebuilds, syntax checks
-- ✅ **Real-time Expansion UI**: WebSocket events (`expansion_started`, `expansion_worker_complete`, `expansion_complete`)
-- ✅ **Expansion Session Labels**: UI shows "Expansion Worker N" in History, Logs, and Current Session
-- ✅ **Negative Session Numbers**: Expansion workers use -1, -2, ... to avoid colliding with coding sessions
-- ✅ **Bug Fixes**: Metadata JSON parsing, log directory path fallback, `isdigit()` for negative numbers
-- ✅ **Tests**: 46 parallel expansion tests, 13 MCP pre-flight tests (533 total, 0 failures)
+- ✅ **Improved Coding Prompt**: Stronger browser testing minimums, removed stale Docker references
+- ✅ **Quality System Fixes**: Review system updated for local-only mode
 
 **February 11, 2026 - v2.2.0 Brownfield Support**:
 - ✅ **Codebase Import**: Import from local paths or GitHub URLs (public + private repos)
@@ -469,11 +453,9 @@ state = await recovery.restore_from_checkpoint(checkpoint_id)
 - ✅ 119 new tests (100% pass rate)
 
 **December 29, 2025 - v1.2.0 Release**:
-- ✅ **Playwright Browser Automation**: Full browser testing within Docker containers
-- ✅ **Docker Integration**: Headless Chromium runs inside containers without port forwarding
+- ✅ **Browser Automation**: Full browser testing with agent-browser
 - ✅ **Visual Verification**: Screenshots and page snapshots for testing web applications
-- ✅ **Codebase Cleanup**: Removed experimental files from Playwright development
-- ✅ **Documentation Update**: Consolidated Playwright docs into main Docker guide
+- ✅ **Codebase Cleanup**: Removed experimental files from browser automation development
 
 **December 27, 2025 - v1.1.0 Release**:
 - ✅ **Version 1.1.0**: Database schema improvements, migration scripts removed
@@ -493,7 +475,7 @@ state = await recovery.restore_from_checkpoint(checkpoint_id)
 - ✅ PostgreSQL migration complete (UUID-based, async, connection pooling)
 - ✅ API-first platform with Next.js Web UI
 - ✅ Project completion tracking with celebration UI
-- ✅ Coding prompt improvements (browser verification enforcement, bash_docker mandate)
+- ✅ Coding prompt improvements (browser verification enforcement)
 - 🚀 **YokeFlow Transition**: Rebranding and repository migration in progress
 - ✅ **Code Organization**: Refactored to `core/` and `review/` modules for better structure
 - ✅ **Pre-Release Cleanup**: Experimental features archived, TODO split into pre/post-release
@@ -515,16 +497,15 @@ state = await recovery.restore_from_checkpoint(checkpoint_id)
 
 ## Release Status
 
-**Current State**: Production Ready - v2.3.0
+**Current State**: Production Ready - v2.4.0
 
-**v2.3 Release Highlights**:
-- ✅ **Parallel Expansion**: Up to 4 workers expand epics concurrently (~4x faster initialization)
+**v2.4 Release Highlights**:
+- ✅ **Simplified Initialization**: Single-agent initializer with parallel MCP tool calls (replaces multi-worker expansion)
+- ✅ **Local-Only Mode**: Removed Docker sandbox; all sessions run locally
 - ✅ **MCP Pre-flight Check**: Auto-rebuilds stale MCP server, validates before sessions
-- ✅ **Real-time Expansion UI**: WebSocket events for live expansion progress
-- ✅ **Advisory Lock Concurrency**: PostgreSQL advisory locks prevent race conditions
-- ✅ **533+ Tests**: 46 parallel expansion + 13 MCP pre-flight tests added
 
 **Previous Releases**:
+- v2.3: Parallel expansion (removed in v2.4 in favor of simpler single-agent approach)
 - v2.2: Brownfield support (import/modify existing codebases, 43 tests)
 - v2.1: Quality system (8 phases), 60+ API endpoints, 20+ MCP tools
 - v2.0: REST API, verification system, production hardening, clean architecture

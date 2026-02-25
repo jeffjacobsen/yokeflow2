@@ -181,7 +181,7 @@ When creating a bug report, include:
 - **Steps to reproduce** the bug
 - **Expected behavior** vs. actual behavior
 - **Environment details** (OS, Python/Node versions, Docker version)
-- **Logs** from `generations/[project]/logs/` if applicable
+- **Logs** from `projects/[project]/yokeflow/logs/` if applicable
 - **Screenshots** if relevant
 
 Use the bug report template when creating issues.

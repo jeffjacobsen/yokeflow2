@@ -2,7 +2,7 @@
  * TaskDetailModal - Display detailed task information in a modal dialog
  *
  * Shows:
- * - Task description and action
+ * - Task name and description
  * - Epic context
  * - Completion status
  * - All associated tests with pass/fail status
@@ -142,20 +142,20 @@ export function TaskDetailModal({ projectId, taskId, isOpen, onClose }: TaskDeta
                 </div>
               )}
 
-              {/* Task Description */}
+              {/* Task Name */}
               <div>
-                <h3 className="text-sm font-medium text-gray-400 mb-2">Description</h3>
+                <h3 className="text-sm font-medium text-gray-400 mb-2">Task Name</h3>
                 <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-700/50">
-                  <p className="text-gray-100 whitespace-pre-wrap">{task.description}</p>
+                  <p className="text-gray-100 whitespace-pre-wrap">{task.name}</p>
                 </div>
               </div>
 
-              {/* Task Action */}
-              {task.action && (
+              {/* Task Description */}
+              {task.description && (
                 <div>
-                  <h3 className="text-sm font-medium text-gray-400 mb-2">Implementation Details</h3>
+                  <h3 className="text-sm font-medium text-gray-400 mb-2">Description</h3>
                   <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-700/50">
-                    <p className="text-gray-300 text-sm whitespace-pre-wrap">{task.action}</p>
+                    <p className="text-gray-300 text-sm whitespace-pre-wrap">{task.description}</p>
                   </div>
                 </div>
               )}

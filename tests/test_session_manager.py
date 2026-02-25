@@ -108,7 +108,7 @@ class TestPausedSessionManager:
 
         current_task = {
             "id": 123,
-            "description": "Implement feature X"
+            "name": "Implement feature X"
         }
 
         with patch('server.agent.session_manager.DatabaseManager') as MockDB:

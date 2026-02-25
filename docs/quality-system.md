@@ -16,7 +16,7 @@ YokeFlow's quality system provides comprehensive session monitoring, automatic q
 1. **Real-time Metrics Collection (MetricsCollector v3.0)**
    - Tool usage tracking with categorization
    - Error pattern analysis with recovery attempts
-   - Browser operation detection (unified Playwright & agent-browser)
+   - Browser operation detection (agent-browser)
    - Task type classification (UI, API, CONFIG, DATABASE, INTEGRATION)
    - Prompt adherence violation detection
    - Session progression tracking (hourly metrics)
@@ -68,14 +68,14 @@ YokeFlow's quality system provides comprehensive session monitoring, automatic q
 - Configuration in `.yokeflow.yaml` (strict/autonomous modes)
 - MCP tool integration with mode checking
 - Orchestrator handles blocked sessions gracefully
-- Blocker info written to `claude-progress.md`
+- Blocker info written to `yokeflow/agent-progress.md`
 - 5 passing tests for blocking behavior
 
 **Phase 4.1: Test Viewer UI** (February 2, 2026)
 - Epic and task tests visible with requirements in Web UI
 - Show pass/fail status with verification notes
 - Fixed database queries for requirements-based testing
-- Tested and verified with Playwright
+- Tested and verified with browser automation
 
 **Phase 5: Epic Re-testing** (February 2, 2026)
 - Smart epic selection with priority tiers (foundation, high-dependency, standard)
@@ -164,12 +164,7 @@ class MetricsCollector:
             "avg_recovery_attempts": 2.5
         }
     },
-    "adherence_violations": [
-        {
-            "type": "wrong_bash_command",
-            "context": "Used Bash instead of bash_docker"
-        }
-    ]
+    "adherence_violations": []
 }
 ```
 
@@ -314,7 +309,7 @@ def calculate_quality_score(metrics: Dict) -> int:
 ### Environment Variables
 ```bash
 # Review configuration
-DEFAULT_REVIEW_MODEL=claude-3-5-sonnet-20241022
+DEFAULT_REVIEW_MODEL=claude-4-6
 REVIEW_TRIGGER_INTERVAL=5  # Sessions between reviews
 REVIEW_QUALITY_THRESHOLD=7  # Trigger if quality < this
 

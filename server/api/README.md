@@ -34,16 +34,16 @@ pip install -r requirements.txt
 
 ```bash
 # From project root
-uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn api.main:app --host 0.0.0.0 --port 8010 --reload
 
-# Server will start at http://localhost:8000
+# Server will start at http://localhost:8010
 ```
 
 ### View Documentation
 
-- **Swagger UI**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
-- **Health Check**: http://localhost:8000/api/health
+- **Swagger UI**: http://localhost:8010/docs
+- **ReDoc**: http://localhost:8010/redoc
+- **Health Check**: http://localhost:8010/api/health
 
 ## API Endpoints
 
@@ -67,10 +67,10 @@ Get API configuration information.
 **Response:**
 ```json
 {
-  "generations_dir": "generations",
+  "projects_dir": "projects",
   "default_models": {
-    "initializer": "claude-opus-4-5-20251101",
-    "coding": "claude-sonnet-4-5-20250929"
+    "initializer": "claude-opus-4-6",
+    "coding": "claude-sonnet-4-6"
   },
   "version": "1.0.0"
 }
@@ -86,7 +86,7 @@ List all projects.
 [
   {
     "project_id": "my-project",
-    "project_path": "generations/my-project",
+    "project_path": "projects/my-project",
     "progress": {
       "total_epics": 25,
       "completed_epics": 5,
@@ -119,7 +119,7 @@ Create a new project with specification file.
 
 **Example with curl:**
 ```bash
-curl -X POST http://localhost:8000/api/projects \
+curl -X POST http://localhost:8010/api/projects \
   -F "name=my-project" \
   -F "spec_file=@app_spec.txt" \
   -F "sandbox_type=docker"
@@ -130,12 +130,12 @@ curl -X POST http://localhost:8000/api/projects \
 {
   "project_id": "550e8400-e29b-41d4-a716-446655440000",
   "name": "my-project",
-  "generations_path": "generations/my-project",
+  "projects_path": "projects/my-project",
   "is_initialized": false,
   "metadata": {
     "sandbox_type": "docker",
-    "initializer_model": "claude-opus-4-5-20251101",
-    "coding_model": "claude-sonnet-4-5-20250929"
+    "initializer_model": "claude-opus-4-6",
+    "coding_model": "claude-sonnet-4-6"
   }
 }
 ```
@@ -152,7 +152,7 @@ Get project details.
 ```json
 {
   "project_id": "my-project",
-  "project_path": "generations/my-project",
+  "project_path": "projects/my-project",
   "progress": { ... },
   "next_task": { ... }
 }
@@ -209,7 +209,7 @@ Run initialization session (Session 0) only. Creates project roadmap (epics, tas
 **Request Body:**
 ```json
 {
-  "initializer_model": "claude-opus-4-5-20251101"  // Optional
+  "initializer_model": "claude-opus-4-6"  // Optional
 }
 ```
 
@@ -220,7 +220,7 @@ Run initialization session (Session 0) only. Creates project roadmap (epics, tas
   "project_id": "550e8400-...",
   "session_number": 1,
   "session_type": "initializer",
-  "model": "claude-opus-4-5-20251101",
+  "model": "claude-opus-4-6",
   "status": "running",
   "created_at": "2025-12-16T12:00:00Z"
 }
@@ -273,7 +273,7 @@ Run coding sessions (2+) with auto-continue loop.
 **Request Body:**
 ```json
 {
-  "coding_model": "claude-sonnet-4-5-20250929",  // Optional
+  "coding_model": "claude-sonnet-4-6",  // Optional
   "max_iterations": 0  // 0 = unlimited, N = run N sessions
 }
 ```
@@ -354,7 +354,7 @@ Get details for a specific session.
   "session_number": 1,
   "session_type": "initializer",
   "status": "completed",
-  "model": "claude-opus-4-5-20251101",
+  "model": "claude-opus-4-6",
   "sandbox_type": "docker",
   "created_at": "2025-12-16T12:00:00Z",
   "completed_at": "2025-12-16T12:15:00Z",
@@ -373,7 +373,7 @@ WebSocket connection for real-time progress and session updates.
 
 **Connection:**
 ```javascript
-const ws = new WebSocket('ws://localhost:8000/api/ws/550e8400-...');
+const ws = new WebSocket('ws://localhost:8010/api/ws/550e8400-...');
 ```
 
 **Event Types:**
@@ -464,13 +464,13 @@ function ProjectDetail({ projectId }) {
 ```
 ┌─────────────────────────────────────────┐
 │   Client Layer                          │
-│   - Next.js Web UI (port 3000)         │
+│   - Next.js Web UI (port 3010)         │
 │   - Third-party API clients           │
 │   - Third-party integrations           │
 └─────────────────┬───────────────────────┘
                   │ HTTP / WebSocket
 ┌─────────────────▼───────────────────────┐
-│   FastAPI Server (port 8000)            │
+│   FastAPI Server (port 8010)            │
 │   - REST endpoints                      │
 │   - WebSocket event streaming           │
 │   - CORS middleware                     │
@@ -542,7 +542,7 @@ function ProjectDetail({ projectId }) {
 
 ```bash
 # Start server
-uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn api.main:app --host 0.0.0.0 --port 8010 --reload
 
 # In another terminal
 python api/test_api.py
@@ -563,7 +563,7 @@ python api/test_api.py
 async def list_tasks(project_id: str):
     """List all tasks for a project."""
     try:
-        project_path = generations_dir / project_id
+        project_path = projects_dir / project_id
         db = get_database(project_path)
         tasks = db.get_all_tasks()
         return tasks
@@ -611,7 +611,7 @@ server {
     server_name api.example.com;
 
     location / {
-        proxy_pass http://localhost:8000;
+        proxy_pass http://localhost:8010;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_http_version 1.1;
@@ -629,10 +629,10 @@ server {
 **Solution:**
 ```bash
 # Check if server is running
-lsof -i :8000
+lsof -i :8010
 
 # Start server
-uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn api.main:app --host 0.0.0.0 --port 8010 --reload
 
 # Check logs (server logs to stdout)
 ```
@@ -643,7 +643,7 @@ uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
 **Solution:**
 ```bash
 # List all projects
-curl http://localhost:8000/api/projects
+curl http://localhost:8010/api/projects
 
 # Check database
 psql $DATABASE_URL -c "SELECT project_id, name FROM projects;"
@@ -662,13 +662,13 @@ psql $DATABASE_URL -c "SELECT project_id, name FROM projects;"
 **Solution:**
 ```bash
 # Check active sessions
-curl http://localhost:8000/api/projects/{project_id}/sessions
+curl http://localhost:8010/api/projects/{project_id}/sessions
 
 # Stop coding sessions
-curl -X POST http://localhost:8000/api/projects/{project_id}/coding/stop
+curl -X POST http://localhost:8010/api/projects/{project_id}/coding/stop
 
 # Cancel initialization
-curl -X POST http://localhost:8000/api/projects/{project_id}/initialize/cancel
+curl -X POST http://localhost:8010/api/projects/{project_id}/initialize/cancel
 ```
 
 ### WebSocket disconnects immediately

@@ -1,20 +1,22 @@
 """
-AI-Powered Specification Generator
-===================================
+AI-Powered Specification Generator using Claude SDK
+=====================================================
 
 Generates structured application specifications from natural language descriptions
-using Claude AI. Outputs markdown format with required sections for YokeFlow projects.
+using the same Claude SDK client that YokeFlow uses for agent sessions.
 """
 
 import asyncio
 import json
 import logging
 import os
+import tempfile
 from typing import Optional, Dict, Any, List, AsyncGenerator
 from pathlib import Path
 from dotenv import load_dotenv
 
-from anthropic import AsyncAnthropic
+from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions
+from server.utils.auth import get_oauth_token
 from server.utils.config import Config
 from server.utils.logging import get_logger
 
@@ -25,39 +27,14 @@ _server_dir = _generation_dir.parent
 _project_root = _server_dir.parent
 _env_file = _project_root / ".env"
 
-# Load the .env file
+# Load the .env file to make CLAUDE_CODE_OAUTH_TOKEN available
 load_dotenv(dotenv_path=_env_file)
 
 logger = get_logger(__name__)
 
 
 class SpecGenerator:
-    """Generate application specifications using Claude AI."""
-
-    # Template for the generated specification
-    SPEC_TEMPLATE = """# {project_name}
-
-## Overview
-{overview}
-
-## Tech Stack
-{tech_stack}
-
-## Frontend
-{frontend}
-
-## Backend
-{backend}
-
-## Database
-{database}
-
-## Additional Features
-{features}
-
-## Development Notes
-{notes}
-"""
+    """Generate application specifications using Claude SDK."""
 
     # Prompt template for Claude
     GENERATION_PROMPT = """You are an expert software architect helping to create a detailed application specification.
@@ -97,25 +74,102 @@ Please incorporate insights from these context files into the specification wher
         """
         self.config = config or Config()
         self.client = None
-        self._ensure_client()
 
         # Model selection - use Sonnet for cost efficiency
-        # Access the generation model if it exists in config
-        self.model = "claude-3-5-sonnet-20241022"  # Default model
+        # Use the same model as the coding agent
+        self.model = "claude-sonnet-4-6"  # Default model
         if hasattr(self.config, 'generation') and hasattr(self.config.generation, 'model'):
             self.model = self.config.generation.model
+        elif hasattr(self.config, 'models') and hasattr(self.config.models, 'coding'):
+            self.model = self.config.models.coding
 
-    def _ensure_client(self):
-        """Ensure the Anthropic client is initialized."""
-        if not self.client:
-            # Get API key from environment variable
-            api_key = os.getenv("CLAUDE_CODE_OAUTH_TOKEN")
-            if not api_key:
+    def _create_client(self, temp_dir: Path) -> ClaudeSDKClient:
+        """Create a Claude SDK client for spec generation.
+
+        Args:
+            temp_dir: Temporary directory for the SDK to work in
+
+        Returns:
+            Configured ClaudeSDKClient
+        """
+        # Get OAuth token
+        oauth_token = get_oauth_token()
+
+        if not oauth_token:
+            raise ValueError(
+                "No OAuth token found. Please ensure you're authenticated with Claude Code. "
+                "Run 'claude setup-token' or check ~/.claude/.credentials.json"
+            )
+
+        # Prepare environment for SDK
+        sdk_env = {
+            "CLAUDE_CODE_OAUTH_TOKEN": oauth_token,
+            "ANTHROPIC_API_KEY": ""  # Explicitly unset to prevent conflicts
+        }
+
+        # Create a minimal client without MCP servers since we just need to generate text
+        return ClaudeSDKClient(
+            options=ClaudeAgentOptions(
+                model=self.model,
+                system_prompt="You are an expert software architect helping to create detailed application specifications.",
+                permission_mode="bypassPermissions",
+                mcp_servers={},  # No MCP servers needed for spec generation
+                max_turns=1,  # Single turn conversation
+                cwd=str(temp_dir),
+                env=sdk_env
+            )
+        )
+
+    async def _sdk_query(self, prompt: str, system_prompt: Optional[str] = None,
+                         max_turns: int = 1) -> str:
+        """Run a single-turn SDK query and return the text response.
+
+        Args:
+            prompt: The user prompt to send
+            system_prompt: Optional override for the system prompt
+            max_turns: Maximum conversation turns
+
+        Returns:
+            The text content from Claude's response
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            oauth_token = get_oauth_token()
+
+            if not oauth_token:
                 raise ValueError(
-                    "CLAUDE_CODE_OAUTH_TOKEN not configured. "
-                    "Please set your Anthropic API key in the environment variables."
+                    "No OAuth token found. Please ensure you're authenticated with Claude Code. "
+                    "Run 'claude setup-token' or check ~/.claude/.credentials.json"
                 )
-            self.client = AsyncAnthropic(api_key=api_key)
+
+            sdk_env = {
+                "CLAUDE_CODE_OAUTH_TOKEN": oauth_token,
+                "ANTHROPIC_API_KEY": ""
+            }
+
+            client = ClaudeSDKClient(
+                options=ClaudeAgentOptions(
+                    model=self.model,
+                    system_prompt=system_prompt or "You are an expert software architect.",
+                    permission_mode="bypassPermissions",
+                    mcp_servers={},
+                    max_turns=max_turns,
+                    cwd=str(temp_path),
+                    env=sdk_env
+                )
+            )
+
+            async with client:
+                await client.query(prompt)
+
+                content = ""
+                async for msg in client.receive_response():
+                    if type(msg).__name__ == "AssistantMessage" and hasattr(msg, "content"):
+                        for block in msg.content:
+                            if type(block).__name__ == "TextBlock" and hasattr(block, "text"):
+                                content += block.text
+
+            return content
 
     async def generate_spec(
         self,
@@ -129,28 +183,24 @@ Please incorporate insights from these context files into the specification wher
         Args:
             description: Natural language description of the application
             project_name: Name of the project
-            context_files: Optional list of context file summaries
-            stream: Whether to stream the response
+            context_files: Optional list of context files with their summaries
+            stream: Whether to stream the response (for SSE)
 
         Yields:
-            Chunks of the generated specification (if streaming)
-
-        Returns:
-            Complete specification (if not streaming)
+            Chunks of the generated specification
         """
-        self._ensure_client()
-
-        # Build context section if files provided
+        # Prepare context section
         context_section = ""
         if context_files:
-            summaries = []
-            for file_info in context_files:
-                summaries.append(f"- **{file_info['name']}**: {file_info.get('summary', 'No summary available')}")
+            summaries = "\n".join([
+                f"- {file['name']}: {file.get('summary', 'No summary available')}"
+                for file in context_files
+            ])
             context_section = self.CONTEXT_TEMPLATE.format(
-                context_summaries="\n".join(summaries)
+                context_summaries=summaries
             )
 
-        # Build the prompt
+        # Build the full prompt
         prompt = self.GENERATION_PROMPT.format(
             description=description,
             context_section=context_section
@@ -159,42 +209,78 @@ Please incorporate insights from these context files into the specification wher
         logger.info(f"Generating specification for project: {project_name}")
         logger.debug(f"Description: {description[:200]}...")
 
-        try:
-            if stream:
-                # Stream the response
-                async with self.client.messages.stream(
-                    model=self.model,
-                    messages=[{"role": "user", "content": prompt}],
-                    max_tokens=8000,
-                    temperature=0.7
-                ) as stream_response:
-                    async for chunk in stream_response.text_stream:
-                        yield chunk
-            else:
-                # Get complete response
-                response = await self.client.messages.create(
-                    model=self.model,
-                    messages=[{"role": "user", "content": prompt}],
-                    max_tokens=8000,
-                    temperature=0.7
-                )
-                # Yield the complete response as a single chunk
-                yield response.content[0].text
+        # Create a temporary directory for the SDK
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
 
-        except Exception as e:
-            error_msg = str(e)
-            if "401" in error_msg or "authentication_error" in error_msg:
-                logger.error(
-                    "Authentication failed. Please ensure CLAUDE_CODE_OAUTH_TOKEN "
-                    "contains a valid Anthropic API key. You may need to use a standard "
-                    "API key (sk-ant-api...) instead of an OAuth token for direct API calls."
-                )
-                raise ValueError(
-                    "Invalid API key. Please check your CLAUDE_CODE_OAUTH_TOKEN in .env file. "
-                    "For AI generation, you need a valid Anthropic API key."
-                )
-            logger.error(f"Error generating specification: {error_msg}")
-            raise
+            try:
+                # Create the client
+                client = self._create_client(temp_path)
+
+                # Use the client with async context manager (handles connect/disconnect)
+                async with client:
+                    # Send the query
+                    logger.info("Sending prompt to Claude SDK...")
+                    logger.debug(f"Prompt length: {len(prompt)} characters")
+                    logger.debug(f"First 200 chars of prompt: {prompt[:200]}...")
+                    await client.query(prompt)
+
+                    # Collect the full response
+                    spec_content = ""
+                    message_count = 0
+                    block_count = 0
+
+                    async for msg in client.receive_response():
+                        msg_type = type(msg).__name__
+                        message_count += 1
+                        logger.debug(f"Received message #{message_count} of type: {msg_type}")
+
+                        # Handle AssistantMessage (text content)
+                        if msg_type == "AssistantMessage" and hasattr(msg, "content"):
+                            for block in msg.content:
+                                block_type = type(block).__name__
+                                block_count += 1
+                                logger.debug(f"  Block #{block_count} type: {block_type}")
+
+                                if block_type == "TextBlock" and hasattr(block, "text"):
+                                    text_chunk = block.text
+                                    spec_content += text_chunk
+                                    logger.debug(f"  Added {len(text_chunk)} characters")
+                                    logger.debug(f"  First 100 chars: {text_chunk[:100]}...")
+
+                    logger.info(f"Received {message_count} messages with {block_count} blocks")
+
+                    if spec_content:
+                        logger.info(f"Generated specification ({len(spec_content)} characters)")
+                        logger.debug(f"Full spec first 500 chars: {spec_content[:500]}...")
+
+                        if stream:
+                            # Simulate streaming by yielding chunks
+                            chunk_size = 100
+                            for i in range(0, len(spec_content), chunk_size):
+                                yield spec_content[i:i + chunk_size]
+                                await asyncio.sleep(0.01)  # Small delay to simulate streaming
+                        else:
+                            # Yield the complete response
+                            yield spec_content
+                    else:
+                        error_msg = "No response received from Claude"
+                        logger.error(error_msg)
+                        raise ValueError(error_msg)
+
+            except Exception as e:
+                error_msg = str(e)
+                if "401" in error_msg or "authentication" in error_msg.lower():
+                    logger.error(
+                        "Authentication failed. Please ensure you're logged in with Claude Code. "
+                        "Run 'claude setup-token' to authenticate."
+                    )
+                    raise ValueError(
+                        "Authentication failed. Please authenticate with 'claude setup-token' "
+                        "and ensure your Claude Code credentials are valid."
+                    )
+                logger.error(f"Error generating specification: {error_msg}")
+                raise
 
     async def generate_spec_sections(
         self,
@@ -202,26 +288,24 @@ Please incorporate insights from these context files into the specification wher
         project_name: str,
         context_files: Optional[List[Dict[str, str]]] = None
     ) -> Dict[str, str]:
-        """Generate specification and parse into sections.
+        """Generate specification sections as a dictionary.
 
         Args:
             description: Natural language description
             project_name: Name of the project
-            context_files: Optional context file summaries
+            context_files: Optional context files
 
         Returns:
-            Dictionary with parsed sections
+            Dictionary with section names as keys and content as values
         """
-        # Generate the complete specification
+        # Generate the full specification
         full_spec = ""
-        async for chunk in self.generate_spec(description, project_name, context_files, stream=True):
+        async for chunk in self.generate_spec(
+            description, project_name, context_files, stream=False
+        ):
             full_spec += chunk
 
-        # Parse into sections
-        sections = self._parse_markdown_sections(full_spec)
-        sections["project_name"] = project_name
-
-        return sections
+        return self._parse_markdown_sections(full_spec)
 
     def _parse_markdown_sections(self, markdown: str) -> Dict[str, str]:
         """Parse markdown into sections based on headers.
@@ -268,8 +352,6 @@ Please incorporate insights from these context files into the specification wher
         Returns:
             Enhanced specification
         """
-        self._ensure_client()
-
         prompt = f"""You are helping to improve an application specification.
 
 Current Specification:
@@ -282,19 +364,15 @@ Please update the specification to address the feedback while maintaining the sa
 Return ONLY the updated markdown content."""
 
         try:
-            response = await self.client.messages.create(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=8000,
-                temperature=0.7
-            )
-            return response.content[0].text
+            return await self._sdk_query(prompt)
         except Exception as e:
             logger.error(f"Error enhancing specification: {str(e)}")
             raise
 
     async def generate_summary(self, content: str, max_length: int = 500) -> str:
         """Generate a concise summary of content.
+
+        Uses a cheaper model (Haiku) for cost efficiency.
 
         Args:
             content: Content to summarize
@@ -303,27 +381,53 @@ Return ONLY the updated markdown content."""
         Returns:
             Concise summary
         """
-        self._ensure_client()
-
-        # Use Haiku for summaries (cheaper)
-        summary_model = self.config.get("generation.summary_model", "claude-3-haiku-20240307")
+        summary_model = self.config.get("generation.summary_model", "claude-haiku-4-5")
 
         prompt = f"""Summarize the following content in {max_length} characters or less.
 Focus on the key technical details and purpose.
 
 Content:
-{content[:5000]}  # Limit input to avoid token limits
+{content[:5000]}
 
 Return ONLY the summary, no explanations."""
 
         try:
-            response = await self.client.messages.create(
-                model=summary_model,
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=200,
-                temperature=0.5
-            )
-            return response.content[0].text
+            # Use Haiku for summaries via a dedicated client with the cheaper model
+            with tempfile.TemporaryDirectory() as temp_dir:
+                temp_path = Path(temp_dir)
+                oauth_token = get_oauth_token()
+
+                if not oauth_token:
+                    raise ValueError("No OAuth token found.")
+
+                sdk_env = {
+                    "CLAUDE_CODE_OAUTH_TOKEN": oauth_token,
+                    "ANTHROPIC_API_KEY": ""
+                }
+
+                client = ClaudeSDKClient(
+                    options=ClaudeAgentOptions(
+                        model=summary_model,
+                        system_prompt="You are a concise technical summarizer.",
+                        permission_mode="bypassPermissions",
+                        mcp_servers={},
+                        max_turns=1,
+                        cwd=str(temp_path),
+                        env=sdk_env
+                    )
+                )
+
+                async with client:
+                    await client.query(prompt)
+
+                    content_result = ""
+                    async for msg in client.receive_response():
+                        if type(msg).__name__ == "AssistantMessage" and hasattr(msg, "content"):
+                            for block in msg.content:
+                                if type(block).__name__ == "TextBlock" and hasattr(block, "text"):
+                                    content_result += block.text
+
+                return content_result
         except Exception as e:
             logger.error(f"Error generating summary: {str(e)}")
             # Fallback to simple truncation

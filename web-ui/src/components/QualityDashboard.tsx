@@ -17,7 +17,7 @@ import { api } from '@/lib/api';
 import { TestCoverageReport } from './TestCoverageReport';
 import { Download, AlertTriangle } from 'lucide-react';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8010';
 
 interface QualityDashboardProps {
   projectId: string;

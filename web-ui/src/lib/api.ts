@@ -34,11 +34,9 @@ import type {
   TriggerBulkReviewsRequest,
   TriggerBulkReviewsResponse,
   Screenshot,
-  ContainerStatus,
-  ContainerActionResponse,
 } from './types';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8010';
 
 class ApiClient {
   private client: AxiosInstance;
@@ -121,7 +119,6 @@ class ApiClient {
     name: string,
     specFiles: File | File[],
     force: boolean = false,
-    sandboxType: 'docker' | 'local' = 'docker',
     initializerModel?: string,
     codingModel?: string,
   ): Promise<CreateProjectResponse> {
@@ -135,7 +132,6 @@ class ApiClient {
     });
 
     formData.append('force', force.toString());
-    formData.append('sandbox_type', sandboxType);
     if (initializerModel) formData.append('initializer_model', initializerModel);
     if (codingModel) formData.append('coding_model', codingModel);
 
@@ -153,7 +149,6 @@ class ApiClient {
     sourcePath: string | null,
     branch: string = 'main',
     changeSpecContent: string | null = null,
-    sandboxType: 'docker' | 'local' = 'docker',
     initializerModel?: string,
     codingModel?: string,
   ): Promise<CreateProjectResponse> {
@@ -163,7 +158,6 @@ class ApiClient {
     if (sourcePath) formData.append('source_path', sourcePath);
     formData.append('branch', branch);
     if (changeSpecContent) formData.append('change_spec_content', changeSpecContent);
-    formData.append('sandbox_type', sandboxType);
     if (initializerModel) formData.append('initializer_model', initializerModel);
     if (codingModel) formData.append('coding_model', codingModel);
 
@@ -182,28 +176,6 @@ class ApiClient {
 
   async deleteProject(projectId: string): Promise<void> {
     await this.client.delete(`/api/projects/${projectId}`);
-  }
-
-  // Container Management
-
-  async getContainerStatus(projectId: string): Promise<ContainerStatus> {
-    const response = await this.client.get<ContainerStatus>(`/api/projects/${projectId}/container/status`);
-    return response.data;
-  }
-
-  async startContainer(projectId: string): Promise<ContainerActionResponse> {
-    const response = await this.client.post<ContainerActionResponse>(`/api/projects/${projectId}/container/start`);
-    return response.data;
-  }
-
-  async stopContainer(projectId: string): Promise<ContainerActionResponse> {
-    const response = await this.client.post<ContainerActionResponse>(`/api/projects/${projectId}/container/stop`);
-    return response.data;
-  }
-
-  async deleteContainer(projectId: string): Promise<ContainerActionResponse> {
-    const response = await this.client.delete<ContainerActionResponse>(`/api/projects/${projectId}/container`);
-    return response.data;
   }
 
   // Progress and Settings
@@ -268,14 +240,6 @@ class ApiClient {
   async cancelInitialization(projectId: string): Promise<{ status: string; message: string }> {
     const response = await this.client.post<{ status: string; message: string }>(
       `/api/projects/${projectId}/initialize/cancel`,
-      {}
-    );
-    return response.data;
-  }
-
-  async cancelExpansion(projectId: string): Promise<{ status: string; message: string }> {
-    const response = await this.client.post<{ status: string; message: string }>(
-      `/api/projects/${projectId}/expansion/cancel`,
       {}
     );
     return response.data;

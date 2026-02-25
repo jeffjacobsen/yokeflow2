@@ -32,7 +32,7 @@ export class TaskDatabase {
       connectionString,
       max: 10, // Maximum number of connections in the pool
       idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
-      connectionTimeoutMillis: 2000, // Return an error after 2 seconds if connection could not be established
+      connectionTimeoutMillis: 5000, // Return an error after 5 seconds if connection could not be established
     });
 
     // Test connection on startup (log-only, don't crash the process)
@@ -86,7 +86,13 @@ export class TaskDatabase {
          WHERE tk.project_id = $1 AND t.passes = true) /
               NULLIF((SELECT COUNT(*) FROM task_tests t
          JOIN tasks tk ON t.task_id = tk.id
-         WHERE tk.project_id = $1), 0), 1), 0) as test_pass_pct
+         WHERE tk.project_id = $1), 0), 1), 0) as test_pass_pct,
+        (SELECT COUNT(DISTINCT tk.id)::int FROM tasks tk
+         WHERE tk.project_id = $1
+         AND NOT EXISTS (SELECT 1 FROM task_tests tt WHERE tt.task_id = tk.id)) as tasks_without_tests,
+        (SELECT COUNT(DISTINCT tk.id)::int FROM tasks tk
+         WHERE tk.project_id = $1
+         AND EXISTS (SELECT 1 FROM task_tests tt WHERE tt.task_id = tk.id)) as tasks_with_tests
     `, [this.projectId]);
 
     return result[0] ? { ...result[0], project_id: this.projectId } : {
@@ -98,7 +104,9 @@ export class TaskDatabase {
       total_tests: 0,
       passing_tests: 0,
       task_completion_pct: 0,
-      test_pass_pct: 0
+      test_pass_pct: 0,
+      tasks_without_tests: 0,
+      tasks_with_tests: 0
     };
   }
 
@@ -143,8 +151,8 @@ export class TaskDatabase {
         id: 'EPIC_TEST_REQUIRED',
         epic_id: epic.epic_id,
         epic_name: epic.epic_name,
-        description: `⚠️ EPIC COMPLETION REQUIRED: All tasks for epic "${epic.epic_name}" are complete. Run epic tests before continuing.`,
-        action: `IMPORTANT: Epic ${epic.epic_id} has all tasks completed but epic tests have not been verified.\n\n` +
+        name: `⚠️ EPIC COMPLETION REQUIRED: All tasks for epic "${epic.epic_name}" are complete. Run epic tests before continuing.`,
+        description: `IMPORTANT: Epic ${epic.epic_id} has all tasks completed but epic tests have not been verified.\n\n` +
                 `REQUIRED ACTIONS:\n` +
                 `1. Run: mcp__task-manager__get_epic_tests({ epic_id: ${epic.epic_id}, verbose: true })\n` +
                 `2. Verify all epic integration requirements\n` +
@@ -165,8 +173,8 @@ export class TaskDatabase {
       SELECT
         t.id::text,
         t.epic_id::text,
+        t.name,
         t.description,
-        t.action,
         'pending' as status,
         t.priority,
         t.created_at,
@@ -285,8 +293,8 @@ export class TaskDatabase {
       SELECT
         id::text,
         epic_id::text,
+        name,
         description,
-        action,
         'pending' as status,
         priority,
         created_at,
@@ -319,8 +327,8 @@ export class TaskDatabase {
       SELECT
         t.id::text,
         t.epic_id::text,
+        t.name,
         t.description,
-        t.action,
         'pending' as status,
         t.priority,
         t.created_at,
@@ -448,20 +456,20 @@ export class TaskDatabase {
     const priority = task.priority ?? await this.getNextTaskPriority(String(task.epic_id));
 
     const result = await this.query<Task>(`
-      INSERT INTO tasks (epic_id, project_id, description, action, priority)
+      INSERT INTO tasks (epic_id, project_id, name, description, priority)
       VALUES ($1, $2, $3, $4, $5)
       RETURNING
         id::text,
         epic_id::text,
+        name,
         description,
-        action,
         'pending' as status,
         priority,
         created_at,
         completed_at,
         session_notes,
         CASE WHEN done = true THEN 1 ELSE 0 END as done
-    `, [String(task.epic_id), this.projectId, task.description, task.action, priority]);
+    `, [String(task.epic_id), this.projectId, task.name, task.description, priority]);
 
     return result[0];
   }
@@ -729,8 +737,8 @@ export class TaskDatabase {
         SELECT
           id::text,
           epic_id::text,
+          name,
           description,
-          action,
           'pending' as status,
           priority,
           created_at,
@@ -807,8 +815,8 @@ export class TaskDatabase {
       SET session_notes = $2 || ' claimed at ' || NOW()::text
       FROM next
       WHERE tasks.id = next.id
-      RETURNING tasks.id::text, tasks.epic_id::text, tasks.description,
-                tasks.action, tasks.priority, tasks.session_notes,
+      RETURNING tasks.id::text, tasks.epic_id::text, tasks.name,
+                tasks.description, tasks.priority, tasks.session_notes,
                 tasks.created_at, tasks.completed_at,
                 CASE WHEN tasks.done THEN 1 ELSE 0 END as done
     `, [this.projectId, workerId]);

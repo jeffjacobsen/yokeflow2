@@ -4,7 +4,7 @@ Parallel Agent Orchestrator
 
 Manages multiple concurrent SDK agent workers for a single project.
 
-Each worker gets its own ClaudeSDKClient + MCP server + Docker sandbox,
+Each worker gets its own ClaudeSDKClient + MCP server,
 and independently claims and implements tasks using atomic database locking.
 
 Usage:
@@ -31,8 +31,6 @@ from server.client.prompts import get_coding_prompt, get_brownfield_coding_pream
 from server.database.connection import DatabaseManager
 from server.agent.agent import run_agent_session, SessionManager
 from server.agent.models import SessionStatus, SessionType, SessionInfo
-from server.sandbox.manager import SandboxManager, DockerSandbox
-from server.sandbox.hooks import set_active_sandbox, clear_active_sandbox
 from server.utils.observability import create_session_logger
 from server.utils.config import Config
 from server.utils.logging import get_logger
@@ -169,15 +167,6 @@ class ParallelOrchestrator:
         project_path = Path(project.get('local_path', ''))
         project_type = project.get('project_type', 'greenfield')
 
-        # Get sandbox type from project metadata
-        project_metadata = project.get('metadata', {})
-        if isinstance(project_metadata, str):
-            import json
-            project_metadata = json.loads(project_metadata)
-        project_sandbox_type = project_metadata.get('settings', {}).get('sandbox_type')
-        if not project_sandbox_type:
-            project_sandbox_type = self.config.sandbox.type
-
         logger.info(
             f"Starting parallel coding: {num_workers} workers for project "
             f"'{project_name}' ({remaining} tasks remaining)"
@@ -207,7 +196,6 @@ class ParallelOrchestrator:
                     project_name=project_name,
                     project_path=project_path,
                     project_type=project_type,
-                    project_sandbox_type=project_sandbox_type,
                     coding_model=coding_model,
                     max_tasks=max_tasks_per_worker,
                     progress_callback=progress_callback,
@@ -271,7 +259,6 @@ class ParallelOrchestrator:
         project_name: str,
         project_path: Path,
         project_type: str,
-        project_sandbox_type: str,
         coding_model: str,
         max_tasks: Optional[int],
         progress_callback: Optional[Callable] = None,
@@ -284,38 +271,7 @@ class ParallelOrchestrator:
 
         logger.info(f"[{worker_id}] Starting worker")
 
-        # Create sandbox for this worker
-        sandbox_config = {
-            "image": self.config.sandbox.docker_image,
-            "network": self.config.sandbox.docker_network,
-            "memory_limit": self.config.sandbox.docker_memory_limit,
-            "cpu_limit": self.config.sandbox.docker_cpu_limit,
-            "ports": self.config.sandbox.docker_ports,
-            "session_type": "coding",
-            "project_type": project_type,
-            "worker_id": worker_id,
-        }
-
-        sandbox = SandboxManager.create_sandbox(
-            sandbox_type=project_sandbox_type,
-            project_dir=project_path,
-            config=sandbox_config,
-        )
-
         try:
-            # Start sandbox
-            sandbox_timeout = self.config.timing.sandbox_startup_timeout
-            logger.info(f"[{worker_id}] Starting sandbox (timeout: {sandbox_timeout}s)")
-            await asyncio.wait_for(sandbox.start(), timeout=sandbox_timeout)
-
-            # Get docker container name
-            docker_container = None
-            if isinstance(sandbox, DockerSandbox):
-                docker_container = sandbox.container_name
-                logger.info(f"[{worker_id}] Docker sandbox active: {docker_container}")
-
-            sandbox_type = "docker" if docker_container else "local"
-
             while True:
                 # Check stop request
                 if self._stop_requested:
@@ -336,7 +292,7 @@ class ParallelOrchestrator:
                     break
 
                 task_id = task['id']
-                task_desc = task.get('description', '')[:80]
+                task_desc = task.get('name', '')[:80]
                 worker_info.current_task_id = str(task_id)
                 worker_info.status = WorkerStatus.RUNNING
 
@@ -370,13 +326,13 @@ class ParallelOrchestrator:
                 # Create session logger
                 session_logger = create_session_logger(
                     project_path, session_number, SessionType.CODING.value,
-                    coding_model, sandbox_type=sandbox_type,
+                    coding_model,
                 )
                 session_logger.session_id = str(session_id)
                 session_logger.project_id = str(project_id)
 
                 # Build prompt with parallel mode preamble
-                base_prompt = get_coding_prompt(sandbox_type=sandbox_type)
+                base_prompt = get_coding_prompt()
                 if project_type == 'brownfield':
                     preamble = get_brownfield_coding_preamble()
                     base_prompt = f"{preamble}\n\n{base_prompt}"
@@ -396,7 +352,6 @@ class ParallelOrchestrator:
                     project_path,
                     coding_model,
                     project_id=str(project_id),
-                    docker_container=docker_container,
                 )
 
                 # Run agent session
@@ -407,7 +362,7 @@ class ParallelOrchestrator:
                         intervention_config = {
                             "enabled": self.config.intervention.enabled,
                             "max_retries": self.config.intervention.max_retries,
-                            "environment": sandbox_type,
+                            "environment": "local",
                         }
                         status, response_text, _summary = await run_agent_session(
                             client=client,
@@ -470,24 +425,12 @@ class ParallelOrchestrator:
                 # Brief delay between tasks
                 await asyncio.sleep(1)
 
-        except asyncio.TimeoutError:
-            logger.error(f"[{worker_id}] Sandbox startup timed out")
-            worker_info.status = WorkerStatus.ERROR
-            worker_info.error = "Sandbox startup timeout"
-            raise RuntimeError(f"Sandbox startup timed out for {worker_id}")
         except Exception as e:
             logger.error(f"[{worker_id}] Worker failed: {e}", exc_info=True)
             worker_info.status = WorkerStatus.ERROR
             worker_info.error = str(e)
             raise
         finally:
-            # Stop sandbox
-            try:
-                await sandbox.stop()
-                logger.info(f"[{worker_id}] Sandbox stopped")
-            except Exception as e:
-                logger.warning(f"[{worker_id}] Failed to stop sandbox: {e}")
-
             # Mark worker as completed if not errored
             if worker_info.status != WorkerStatus.ERROR:
                 worker_info.status = WorkerStatus.COMPLETED

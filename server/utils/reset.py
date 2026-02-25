@@ -46,7 +46,8 @@ class ProjectResetter:
         """
         self.project_id = project_id
         self.project_path = Path(project_path).resolve()
-        self.logs_dir = self.project_path / "logs"
+        from server.utils.project_paths import resolve_logs_dir
+        self.logs_dir = resolve_logs_dir(self.project_path)
         self.project_name = self.project_path.name
 
     def is_git_repository(self) -> bool:
@@ -162,7 +163,7 @@ class ProjectResetter:
 
             # Find "Initial setup" or similar init commit in first 5 commits
             for i, commit_line in enumerate(all_commits[:5]):
-                if "Initial setup" in commit_line or "init" in commit_line.lower():
+                if "Initial " in commit_line or "init " in commit_line.lower():
                     # Return the next commit (which should be the progress/roadmap)
                     if i + 1 < len(all_commits):
                         return all_commits[i + 1].split()[0]
@@ -410,7 +411,7 @@ class ProjectResetter:
 
     def reset_progress_notes(self, archive_dir: Optional[Path] = None) -> Tuple[bool, Optional[str]]:
         """
-        Reset or archive claude-progress.md.
+        Reset or archive agent-progress.md.
 
         Creates a backup and resets to post-initialization state.
 
@@ -420,7 +421,7 @@ class ProjectResetter:
         Returns:
             Tuple of (success, error_message)
         """
-        progress_file = self.project_path / "claude-progress.md"
+        progress_file = self.project_path / "yokeflow" / "agent-progress.md"
 
         if not progress_file.exists():
             return True, None
@@ -432,7 +433,7 @@ class ProjectResetter:
                 archive_dir = self.logs_dir / "old_attempts" / f"reset_{timestamp}"
                 archive_dir.mkdir(parents=True, exist_ok=True)
 
-            backup_file = archive_dir / "claude-progress_backup.md"
+            backup_file = archive_dir / "agent-progress_backup.md"
             shutil.copy(str(progress_file), str(backup_file))
 
             # Create fresh progress file

@@ -146,8 +146,8 @@ class TestCodingSessionWorkflow:
                         # First call returns a task
                         {
                             'id': task_id,
-                            'description': 'Implement calculator addition',
-                            'action': 'Create add function'
+                            'name': 'Implement calculator addition',
+                            'description': 'Create add function'
                         },
                         # Second call returns None (no more tasks)
                         None
@@ -183,9 +183,9 @@ class TestCodingSessionWorkflow:
             # Setup project with multiple tasks
             mock_db.get_project.return_value = {'id': project_id, 'status': 'active'}
             mock_db.get_next_task.side_effect = [
-                {'id': uuid4(), 'description': 'Task 1'},
-                {'id': uuid4(), 'description': 'Task 2'},
-                {'id': uuid4(), 'description': 'Task 3'},
+                {'id': uuid4(), 'name': 'Task 1'},
+                {'id': uuid4(), 'name': 'Task 2'},
+                {'id': uuid4(), 'name': 'Task 3'},
                 None  # No more tasks
             ]
 
@@ -296,8 +296,8 @@ class TestFullProjectLifecycle:
 
             # Coding sessions complete tasks
             mock_db.get_next_task.side_effect = [
-                {'id': uuid4(), 'description': 'Task 1'},
-                {'id': uuid4(), 'description': 'Task 2'},
+                {'id': uuid4(), 'name': 'Task 1'},
+                {'id': uuid4(), 'name': 'Task 2'},
                 None  # All tasks complete
             ]
 

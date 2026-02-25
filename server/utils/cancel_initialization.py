@@ -143,7 +143,8 @@ class InitializationCanceller:
             Tuple of (success, error_message)
         """
         try:
-            logs_dir = self.project_path / "logs"
+            from server.utils.project_paths import resolve_logs_dir
+            logs_dir = resolve_logs_dir(self.project_path)
 
             if not logs_dir.exists():
                 return True, None

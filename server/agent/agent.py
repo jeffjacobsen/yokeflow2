@@ -212,7 +212,7 @@ async def run_agent_session(
                             logger.log_error(error_msg)
                             print(f"\n❌ FATAL ERROR: {error_msg}", flush=True)
                             print("   This usually means ANTHROPIC_API_KEY leaked from the generated project.", flush=True)
-                            print("   Check generations/{project}/.env and remove ANTHROPIC_API_KEY if present.", flush=True)
+                            print("   Check projects/{project}/.env and remove ANTHROPIC_API_KEY if present.", flush=True)
                             raise RuntimeError(error_msg)
 
                         # Log assistant text
@@ -279,8 +279,8 @@ async def run_agent_session(
                                 print(f"\n{error_msg}\n")
                                 logger.log_error(error_msg)
 
-                                # Document in claude-progress.md
-                                task_info = {"id": "unknown", "description": "Current task"}
+                                # Document in yokeflow/agent-progress.md
+                                task_info = {"id": "unknown", "name": "Current task"}
                                 intervention_manager.document_blocker(
                                     project_dir, task_info, reason
                                 )
@@ -323,7 +323,7 @@ async def run_agent_session(
                                             "project_name": project_dir.name,
                                             "session_id": session_id,
                                             "pause_type": pause_type,
-                                            "current_task": task_info.get("description", "Unknown"),
+                                            "current_task": task_info.get("name", "Unknown"),
                                             "intervention_id": paused_session_id
                                         }
                                     )
@@ -351,7 +351,7 @@ async def run_agent_session(
                                     f"   Command: {command}\n"
                                     f"   Risk: Process may timeout and abort silently (known Claude Code bug).\n"
                                     f"   Recommendation: Start servers via init.sh before session, not during.\n"
-                                    f"   See: prompts/coding_prompt_docker.md - Background Bash section"
+                                    f"   See: prompts/coding_prompt.md - Background Bash section"
                                 )
                                 # Log warning to session logs
                                 logger.log_system_message("risky_background_bash_warning", warning_msg)
@@ -419,8 +419,8 @@ async def run_agent_session(
                                 print(f"\n{error_msg}\n")
                                 logger.log_error(error_msg)
 
-                                # Document in claude-progress.md
-                                task_info = {"id": "unknown", "description": "Current task"}
+                                # Document in yokeflow/agent-progress.md
+                                task_info = {"id": "unknown", "name": "Current task"}
                                 intervention_manager.document_blocker(
                                     project_dir, task_info, reason
                                 )
@@ -458,6 +458,21 @@ async def run_agent_session(
 
                 logger.log_system_message(subtype, message_text)
 
+                # Check for MCP server failures (init message only)
+                if subtype == "init" and hasattr(msg, "data"):
+                    mcp_servers = msg.data.get("mcp_servers", [])
+                    failed_servers = [
+                        s["name"] for s in mcp_servers
+                        if isinstance(s, dict) and s.get("status") == "failed"
+                    ]
+                    if failed_servers:
+                        error_msg = f"MCP server(s) failed to start: {', '.join(failed_servers)}"
+                        logger.log_error(error_msg)
+                        print(f"\n❌ {error_msg}", flush=True)
+                        print("   This is usually a transient issue (Node.js cold start or PostgreSQL slow to respond).", flush=True)
+                        print("   The session will be retried with a fresh client.\n", flush=True)
+                        raise SessionError(error_msg)
+
                 # Check for API key usage warning (init message only)
                 if subtype == "init" and hasattr(msg, "data"):
                     api_key_source = msg.data.get("apiKeySource", "none")
@@ -489,7 +504,7 @@ async def run_agent_session(
                         print("  2. ANTHROPIC_API_KEY set in system environment")
                         print("")
                         print("To fix:")
-                        print("  1. Check generations/{project}/.env and remove ANTHROPIC_API_KEY")
+                        print("  1. Check projects/{project}/.env and remove ANTHROPIC_API_KEY")
                         print("  2. Unset ANTHROPIC_API_KEY: unset ANTHROPIC_API_KEY")
                         print("  3. Ensure CLAUDE_CODE_OAUTH_TOKEN is set in agent's .env file")
                         print("=" * 80 + "\n")

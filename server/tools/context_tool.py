@@ -236,13 +236,13 @@ class ContextTool:
     async def load_context_for_task(
         self,
         project_dir: str,
-        task_description: str
+        task_name: str
     ) -> Dict[str, Any]:
         """Load context files relevant to a specific task.
 
         Args:
             project_dir: Project directory path
-            task_description: Description of the current task
+            task_name: Name of the current task
 
         Returns:
             Relevant context files and content
@@ -275,7 +275,7 @@ class ContextTool:
 
             # Otherwise, use task-specific loading
             relevant_files = []
-            task_lower = task_description.lower()
+            task_lower = task_name.lower()
 
             # Keywords to file type mapping
             keyword_mapping = {
@@ -313,7 +313,7 @@ class ContextTool:
             return {
                 "success": True,
                 "strategy": "task_specific",
-                "task": task_description,
+                "task": task_name,
                 "files": relevant_files,
                 "count": len(relevant_files)
             }

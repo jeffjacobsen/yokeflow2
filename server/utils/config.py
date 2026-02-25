@@ -29,19 +29,19 @@ class ModelConfig:
     """Configuration for Claude models."""
     initializer: str = field(default_factory=lambda: os.getenv(
         "DEFAULT_INITIALIZER_MODEL",
-        "claude-opus-4-5-20251101"
+        "claude-opus-4-6"
     ))
     coding: str = field(default_factory=lambda: os.getenv(
         "DEFAULT_CODING_MODEL",
-        "claude-sonnet-4-5-20250929"
+        "claude-sonnet-4-6"
     ))
     review: str = field(default_factory=lambda: os.getenv(
         "DEFAULT_REVIEW_MODEL",
-        "claude-sonnet-4-5-20250929"
+        "claude-sonnet-4-6"
     ))
     prompt_improvement: str = field(default_factory=lambda: os.getenv(
         "DEFAULT_PROMPT_IMPROVEMENT_MODEL",
-        "claude-opus-4-5-20251101"
+        "claude-opus-4-6"
     ))
 
 
@@ -50,8 +50,7 @@ class TimingConfig:
     """Configuration for timing and delays."""
     auto_continue_delay: int = 3  # seconds between sessions
     web_ui_poll_interval: int = 5  # seconds for UI refresh
-    web_ui_port: int = 3000
-    sandbox_startup_timeout: int = 120  # seconds to wait for Docker sandbox to start
+    web_ui_port: int = 3010
     initialization_max_retries: int = 2  # number of attempts if initialization fails to start
 
 
@@ -73,7 +72,7 @@ class DatabaseConfig:
 @dataclass
 class ProjectConfig:
     """Configuration for project settings."""
-    default_generations_dir: str = "generations"
+    default_projects_dir: str = "projects"
     max_iterations: Optional[int] = None  # None = unlimited
 
 
@@ -81,26 +80,6 @@ class ProjectConfig:
 class ReviewConfig:
     """Configuration for review and prompt improvement settings."""
     min_reviews_for_analysis: int = 5  # Minimum deep reviews required for prompt improvement analysis
-
-
-@dataclass
-class SandboxConfig:
-    """Configuration for sandbox settings."""
-    type: str = "none"  # Options: "none", "docker", "e2b"
-
-    # Docker-specific settings
-    docker_image: str = "yokeflow-sandbox:latest"
-    docker_network: str = "bridge"
-    docker_memory_limit: str = "2g"
-    docker_cpu_limit: str = "2.0"
-    docker_ports: List[str] = field(default_factory=lambda: [
-        # Empty by default - no port forwarding needed when Playwright runs inside container
-        # Add ports here only if you need manual browser debugging: e.g., "5173:5173"
-    ])
-
-    # E2B-specific settings
-    e2b_api_key: Optional[str] = field(default_factory=lambda: os.getenv("E2B_API_KEY"))
-    e2b_tier: str = "free"  # "free" or "pro"
 
 
 @dataclass
@@ -190,13 +169,18 @@ class BrownfieldConfig:
 
 
 @dataclass
+class SpecAnalysisConfig:
+    """Optional pre-analysis of spec files before initialization."""
+    enabled: bool = False                       # Disabled by default
+    model: str = "claude-haiku-4-5-20251001"    # Cheap/fast model for summarization
+
+
+@dataclass
 class ParallelConfig:
     """Configuration for parallel agent execution."""
     enabled: bool = False           # Opt-in, disabled by default
     max_workers: int = 2            # Default 2 concurrent workers, hard cap at 4
     max_tasks_per_worker: Optional[int] = None  # None = unlimited (worker loops until no tasks)
-    parallel_expansion: bool = True  # Enable parallel epic expansion during initialization
-    max_expansion_workers: int = 4   # Max expansion workers; actual count auto-scales (~6 epics/worker)
 
 
 @dataclass
@@ -208,11 +192,11 @@ class Config:
     database: DatabaseConfig = field(default_factory=DatabaseConfig)
     project: ProjectConfig = field(default_factory=ProjectConfig)
     review: ReviewConfig = field(default_factory=ReviewConfig)
-    sandbox: SandboxConfig = field(default_factory=SandboxConfig)
     intervention: InterventionConfig = field(default_factory=InterventionConfig)
     verification: VerificationConfig = field(default_factory=VerificationConfig)
     epic_testing: EpicTestingConfig = field(default_factory=EpicTestingConfig)
     brownfield: BrownfieldConfig = field(default_factory=BrownfieldConfig)
+    spec_analysis: SpecAnalysisConfig = field(default_factory=SpecAnalysisConfig)
     parallel: ParallelConfig = field(default_factory=ParallelConfig)
 
     @classmethod
@@ -267,8 +251,8 @@ class Config:
 
         # Override project settings
         if 'project' in data:
-            if 'default_generations_dir' in data['project']:
-                config.project.default_generations_dir = data['project']['default_generations_dir']
+            if 'default_projects_dir' in data['project']:
+                config.project.default_projects_dir = data['project']['default_projects_dir']
             if 'max_iterations' in data['project']:
                 config.project.max_iterations = data['project']['max_iterations']
 
@@ -276,23 +260,6 @@ class Config:
         if 'review' in data:
             if 'min_reviews_for_analysis' in data['review']:
                 config.review.min_reviews_for_analysis = data['review']['min_reviews_for_analysis']
-
-        # Override sandbox settings
-        if 'sandbox' in data:
-            if 'type' in data['sandbox']:
-                config.sandbox.type = data['sandbox']['type']
-            if 'docker_image' in data['sandbox']:
-                config.sandbox.docker_image = data['sandbox']['docker_image']
-            if 'docker_network' in data['sandbox']:
-                config.sandbox.docker_network = data['sandbox']['docker_network']
-            if 'docker_memory_limit' in data['sandbox']:
-                config.sandbox.docker_memory_limit = data['sandbox']['docker_memory_limit']
-            if 'docker_cpu_limit' in data['sandbox']:
-                config.sandbox.docker_cpu_limit = data['sandbox']['docker_cpu_limit']
-            if 'e2b_api_key' in data['sandbox']:
-                config.sandbox.e2b_api_key = data['sandbox']['e2b_api_key']
-            if 'e2b_tier' in data['sandbox']:
-                config.sandbox.e2b_tier = data['sandbox']['e2b_tier']
 
         # Override epic_testing settings
         if 'epic_testing' in data:
@@ -316,6 +283,13 @@ class Config:
             if 'run_existing_tests_after_changes' in data['brownfield']:
                 config.brownfield.run_existing_tests_after_changes = data['brownfield']['run_existing_tests_after_changes']
 
+        # Override spec_analysis settings
+        if 'spec_analysis' in data:
+            if 'enabled' in data['spec_analysis']:
+                config.spec_analysis.enabled = data['spec_analysis']['enabled']
+            if 'model' in data['spec_analysis']:
+                config.spec_analysis.model = data['spec_analysis']['model']
+
         # Override parallel settings
         if 'parallel' in data:
             if 'enabled' in data['parallel']:
@@ -325,13 +299,6 @@ class Config:
             if 'max_tasks_per_worker' in data['parallel']:
                 val = data['parallel']['max_tasks_per_worker']
                 config.parallel.max_tasks_per_worker = int(val) if val is not None else None
-            if 'parallel_expansion' in data['parallel']:
-                config.parallel.parallel_expansion = data['parallel']['parallel_expansion']
-            if 'max_expansion_workers' in data['parallel']:
-                config.parallel.max_expansion_workers = min(int(data['parallel']['max_expansion_workers']), 4)
-            elif 'expansion_workers' in data['parallel']:
-                # Backward compat for old config key
-                config.parallel.max_expansion_workers = min(int(data['parallel']['expansion_workers']), 4)
 
         return config
 
@@ -385,20 +352,11 @@ class Config:
                 'database_url': self.database.database_url,
             },
             'project': {
-                'default_generations_dir': self.project.default_generations_dir,
+                'default_projects_dir': self.project.default_projects_dir,
                 'max_iterations': self.project.max_iterations,
             },
             'review': {
                 'min_reviews_for_analysis': self.review.min_reviews_for_analysis,
-            },
-            'sandbox': {
-                'type': self.sandbox.type,
-                'docker_image': self.sandbox.docker_image,
-                'docker_network': self.sandbox.docker_network,
-                'docker_memory_limit': self.sandbox.docker_memory_limit,
-                'docker_cpu_limit': self.sandbox.docker_cpu_limit,
-                'e2b_api_key': self.sandbox.e2b_api_key,
-                'e2b_tier': self.sandbox.e2b_tier,
             },
         }
         return yaml.dump(data, default_flow_style=False, sort_keys=False)

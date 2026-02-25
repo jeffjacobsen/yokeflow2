@@ -1,7 +1,7 @@
 """
 Test suite for the Claude SDK client configuration.
 
-Tests Claude SDK client setup with MCP and Docker integration.
+Tests Claude SDK client setup with MCP integration.
 """
 
 import json
@@ -15,7 +15,7 @@ import pytest
 # Add parent directory to path for imports
 sys.path.append(str(Path(__file__).parent.parent))
 
-from server.client.playwright import (
+from server.client.claude import (
     get_mcp_env,
     create_client
 )
@@ -47,17 +47,6 @@ class TestMCPEnvironment:
             # Should generate consistent UUID for same project name
             expected_uuid = str(uuid.uuid5(uuid.NAMESPACE_DNS, "my-app"))
             assert env["PROJECT_ID"] == expected_uuid
-
-    def test_get_mcp_env_with_docker_container(self):
-        """Test MCP environment with Docker container."""
-        project_dir = Path("/test/project")
-        docker_container = "test-container-123"
-
-        with patch.dict(os.environ, {"DATABASE_URL": "postgresql://test"}):
-            env = get_mcp_env(project_dir, docker_container=docker_container)
-
-            assert "DOCKER_CONTAINER_NAME" in env
-            assert env["DOCKER_CONTAINER_NAME"] == docker_container
 
     def test_get_mcp_env_missing_database_url(self):
         """Test MCP environment fails without DATABASE_URL."""
@@ -105,30 +94,18 @@ class TestClaudeClient:
             assert "PROJECT_ID" in env
             assert env["PROJECT_ID"] == "test-id-123"
 
-    def test_get_mcp_env_with_docker(self):
-        """Test MCP environment includes Docker container name."""
-        project_dir = Path("/test/project")
-
-        with patch.dict(os.environ, {"DATABASE_URL": "postgresql://test"}):
-            env = get_mcp_env(project_dir, project_id="test-id", docker_container="test-container")
-
-            assert "DOCKER_CONTAINER_NAME" in env
-            assert env["DOCKER_CONTAINER_NAME"] == "test-container"
-
     def test_create_client_requires_mcp_server(self):
-        """Test create_client handles missing MCP server gracefully."""
+        """Test create_client raises error when MCP server not found."""
         project_dir = Path("/test/project")
 
         with patch('server.client.claude.get_oauth_token', return_value="test-token"):
             with patch.dict(os.environ, {"DATABASE_URL": "postgresql://test"}, clear=True):
-                # Client now handles missing MCP server gracefully instead of raising exception
-                client = create_client(
-                    project_dir=project_dir,
-                    model="claude-3-sonnet-20240229"
-                )
-
-                # Client should be created even if MCP server doesn't exist
-                assert client is not None
+                # create_client validates MCP server existence via pre-flight check
+                with pytest.raises(FileNotFoundError):
+                    create_client(
+                        project_dir=project_dir,
+                        model="claude-sonnet-4-6"
+                    )
 
 
 class TestSecurityHooks:
@@ -153,19 +130,6 @@ class TestSecurityHooks:
         })
         assert result.get("decision") == "block"
         assert "blocked" in result.get("reason", "").lower()
-
-    def test_sandbox_management(self):
-        """Test sandbox management functions."""
-        from server.sandbox.hooks import set_active_sandbox, clear_active_sandbox, get_active_sandbox
-
-        # Test setting and clearing sandbox
-        mock_sandbox = Mock()
-        set_active_sandbox(mock_sandbox)
-        assert get_active_sandbox() is mock_sandbox
-
-        clear_active_sandbox()
-        assert get_active_sandbox() is None
-
 
 def run_tests():
     """Run the test suite."""

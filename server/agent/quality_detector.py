@@ -34,7 +34,7 @@ class TaskVerificationTracking:
     """Track verification attempts for a task."""
     task_id: str
     task_type: TaskType = TaskType.UNKNOWN
-    task_description: str = ""
+    task_name: str = ""
     verification_attempts: List[Dict] = field(default_factory=list)
     verification_methods_used: Set[str] = field(default_factory=set)
     marked_complete: bool = False
@@ -119,7 +119,7 @@ class QualityPatternDetector:
         "bash_for_file_write": r"(echo|printf).*>",
         "bash_for_search": r"(grep|find|rg)\s+",
         "incorrect_docker_mode": r"mcp__task-manager__bash_docker",
-        "playwright_for_config": r"browser_(navigate|click|snapshot).*config",
+        "browser_for_config": r"browser_(navigate|click|snapshot).*config",
     }
 
     def __init__(self, environment: str = "docker", config: Optional[Dict] = None):
@@ -145,20 +145,20 @@ class QualityPatternDetector:
         self.verification_abandonment_threshold = self.config.get("verification_abandonment_threshold", 5)
         self.error_recovery_threshold = self.config.get("error_recovery_threshold", 0.3)
 
-    def infer_task_type(self, task_description: str) -> TaskType:
+    def infer_task_type(self, task_name: str) -> TaskType:
         """
-        Infer task type from description using keyword matching.
+        Infer task type from name using keyword matching.
 
         Args:
-            task_description: Task description text
+            task_name: Task name text
 
         Returns:
             Inferred TaskType
         """
-        if not task_description:
+        if not task_name:
             return TaskType.UNKNOWN
 
-        desc_lower = task_description.lower()
+        desc_lower = task_name.lower()
 
         # Count keyword matches for each type
         matches = {}
@@ -173,20 +173,20 @@ class QualityPatternDetector:
 
         return TaskType.UNKNOWN
 
-    def start_task(self, task_id: str, task_description: str):
+    def start_task(self, task_id: str, task_name: str):
         """
         Begin tracking a new task.
 
         Args:
             task_id: Task identifier
-            task_description: Task description for type inference
+            task_name: Task name for type inference
         """
-        task_type = self.infer_task_type(task_description)
+        task_type = self.infer_task_type(task_name)
 
         tracking = TaskVerificationTracking(
             task_id=task_id,
             task_type=task_type,
-            task_description=task_description,
+            task_name=task_name,
             required_verification=self.VERIFICATION_REQUIREMENTS.get(task_type)
         )
 
@@ -197,7 +197,7 @@ class QualityPatternDetector:
 
         # Log if this is a UI task (critical for verification)
         if task_type == TaskType.UI:
-            logger.warning(f"⚠️ UI task detected - browser verification REQUIRED: {task_description[:100]}")
+            logger.warning(f"⚠️ UI task detected - browser verification REQUIRED: {task_name[:100]}")
 
     def track_verification_attempt(
         self,
@@ -325,8 +325,8 @@ class QualityPatternDetector:
 
         # Check for browser testing on config tasks
         if self.current_task and self.current_task.task_type == TaskType.CONFIG:
-            if "browser" in tool_name.lower() or "playwright" in tool_name.lower():
-                return "playwright_for_config"
+            if "browser" in tool_name.lower() or "agent-browser" in tool_name.lower():
+                return "browser_for_config"
 
         return None
 
@@ -359,7 +359,7 @@ class QualityPatternDetector:
                     description=f"UI task being completed without browser verification",
                     evidence={
                         "task_id": task_id,
-                        "task_description": tracking.task_description[:200],
+                        "task_name": tracking.task_name[:200],
                         "methods_used": list(tracking.verification_methods_used)
                     },
                     requires_intervention=True

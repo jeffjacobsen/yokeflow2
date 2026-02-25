@@ -526,19 +526,19 @@ class QualityGates:
                 return None
 
             # Create the rework task
-            description = f"QUALITY GATE: Fix {issue}"
+            task_name = f"QUALITY GATE: Fix {issue}"
             if action:
-                task_action = action
+                task_description = action
             else:
-                task_action = f"Address the following quality issue: {issue}"
+                task_description = f"Address the following quality issue: {issue}"
 
             task_id = await self.db.pool.fetchval("""
                 INSERT INTO tasks (
-                    epic_id, description, action, priority,
+                    epic_id, name, description, priority,
                     done, verified, needs_review, review_reason
                 ) VALUES ($1, $2, $3, $4, false, false, true, $5)
                 RETURNING id
-            """, epic_id, description, task_action, priority,
+            """, epic_id, task_name, task_description, priority,
                 f"Auto-generated from quality gate failure: {issue}")
 
             # Store quality gate relationship

@@ -2,7 +2,7 @@
  * ProjectDetailsModal - Unified modal for project configuration and roadmap
  *
  * Contains three tabs:
- * - Settings: Model configuration, sandbox type, max iterations
+ * - Settings: Model configuration, max iterations
  * - Environment: .env file configuration
  * - Epics: Project roadmap with tasks and tests
  */
@@ -164,7 +164,7 @@ export function ProjectDetailsModal({
                 >
                   <div className="font-medium mb-1">Configure Project Settings</div>
                   <div className="text-sm text-gray-600 dark:text-gray-400">
-                    Model selection, sandbox type, iteration limits
+                    Model selection, iteration limits
                   </div>
                 </button>
               </div>

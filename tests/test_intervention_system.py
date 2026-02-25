@@ -66,7 +66,7 @@ async def test_critical_error_detector():
     detector = BlockerDetector()
 
     # Test port conflict error
-    error_text = "Error: listen EADDRINUSE: address already in use :::3000"
+    error_text = "Error: listen EADDRINUSE: address already in use :::3010"
     is_critical, blocker_info = detector.check_for_blocker(error_text)
     assert is_critical, "Port conflict should be detected"
     assert blocker_info["type"] == "address_in_use"
@@ -124,7 +124,7 @@ async def test_intervention_manager():
     # Test critical error with a fresh manager (to avoid notification_sent flag)
     manager2 = InterventionManager(config)
     manager2.set_session_info("test-session-456", "test-project")
-    result_text = "Error: listen EADDRINUSE: address already in use :::3000"
+    result_text = "Error: listen EADDRINUSE: address already in use :::3010"
     is_blocked, reason = await manager2.check_tool_error(result_text)
     assert is_blocked, "Critical error should block"
     print(f"✅ Critical error detected: {reason}")
@@ -181,7 +181,7 @@ async def test_pause_resume_session():
             project_id=project_id,
             reason="Test retry limit exceeded",
             pause_type="retry_limit",
-            current_task={"id": "task-1", "description": "Test task"},
+            current_task={"id": "task-1", "name": "Test task"},
             message_count=5
         )
         print(f"✅ Session paused with ID: {paused_id}")

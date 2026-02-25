@@ -26,7 +26,7 @@ The MCP task manager is automatically enabled when you run sessions:
 
 ```bash
 # Via Web UI
-# Navigate to http://localhost:3000 and click "Start Session"
+# Navigate to http://localhost:3010 and click "Start Session"
 ```
 
 No configuration needed - MCP is automatically set up.
@@ -393,7 +393,6 @@ python tests/test_mcp.py
 - **[mcp-task-manager/README.md](../mcp-task-manager/README.md)** - Complete MCP server documentation
 - **[developer-guide.md](developer-guide.md)** - Platform architecture and development
 - **[configuration.md](configuration.md)** - Configuration options
-- **[docker-sandbox-implementation.md](docker-sandbox-implementation.md)** - Docker integration (includes `bash_docker` MCP tool)
 
 ---
 

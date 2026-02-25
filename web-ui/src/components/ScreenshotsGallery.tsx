@@ -57,11 +57,12 @@ export function ScreenshotsGallery({ projectId }: ScreenshotsGalleryProps) {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
 
-  // Parse task description from filename
+  // Parse description from filename
   // Format: task_10_default_user_seed.png → "Default User Seed"
-  function parseTaskDescription(filename: string): string | null {
-    // Match: task_[number]_[description].png
-    const match = filename.match(/^task_\d+_(.+)\.png$/);
+  // Format: epic_5_checkout_workflow.png → "Checkout Workflow"
+  function parseScreenshotDescription(filename: string): string | null {
+    // Match: task_[number]_[description].png or epic_[number]_[description].png
+    const match = filename.match(/^(?:task|epic)_\d+_(.+)\.png$/);
 
     if (!match) {
       return null;
@@ -83,19 +84,34 @@ export function ScreenshotsGallery({ projectId }: ScreenshotsGalleryProps) {
     link.click();
   }
 
-  // Group screenshots by task ID
+  // Group screenshots by task ID or epic ID
   const groupedScreenshots = screenshots.reduce((acc, screenshot) => {
-    const key = screenshot.task_id?.toString() || 'other';
+    let key: string;
+    if (screenshot.task_id) {
+      key = `task_${screenshot.task_id}`;
+    } else if (screenshot.epic_id) {
+      key = `epic_${screenshot.epic_id}`;
+    } else {
+      key = 'other';
+    }
     if (!acc[key]) acc[key] = [];
     acc[key].push(screenshot);
     return acc;
   }, {} as Record<string, Screenshot[]>);
 
-  // Sort groups: numbered tasks in descending order (newest first), then 'other'
+  // Sort groups: tasks descending, then epics descending, then 'other'
   const sortedGroups = Object.keys(groupedScreenshots).sort((a, b) => {
     if (a === 'other') return 1;
     if (b === 'other') return -1;
-    return parseInt(b) - parseInt(a); // Reversed for newest first
+    const aIsTask = a.startsWith('task_');
+    const bIsTask = b.startsWith('task_');
+    // Tasks before epics
+    if (aIsTask && !bIsTask) return -1;
+    if (!aIsTask && bIsTask) return 1;
+    // Within same type, sort by ID descending (newest first)
+    const aId = parseInt(a.split('_')[1]);
+    const bId = parseInt(b.split('_')[1]);
+    return bId - aId;
   });
 
   // Sort screenshots within each group by modified_at (newest first)
@@ -142,14 +158,16 @@ export function ScreenshotsGallery({ projectId }: ScreenshotsGalleryProps) {
         const groupScreenshots = groupedScreenshots[group];
         const isExpanded = expandedGroups.has(group);
 
-        // Get task description from first screenshot in group
-        const taskDescription = group !== 'other' && groupScreenshots[0]
-          ? parseTaskDescription(groupScreenshots[0].filename)
+        // Get description from first screenshot in group
+        const screenshotDescription = group !== 'other' && groupScreenshots[0]
+          ? parseScreenshotDescription(groupScreenshots[0].filename)
           : null;
 
         const groupTitle = group === 'other'
           ? 'Other Screenshots'
-          : `Task #${group}`;
+          : group.startsWith('task_')
+            ? `Task #${group.split('_')[1]}`
+            : `Epic #${group.split('_')[1]}`;
 
         return (
           <div key={group} className="border rounded-lg overflow-hidden">
@@ -164,11 +182,11 @@ export function ScreenshotsGallery({ projectId }: ScreenshotsGalleryProps) {
                   <ChevronRight className="h-5 w-5 text-gray-500 flex-shrink-0" />
                 )}
                 <h3 className="text-base font-medium">{groupTitle}</h3>
-                {taskDescription && (
+                {screenshotDescription && (
                   <>
                     <span className="text-gray-600 dark:text-gray-400">•</span>
-                    <p className="text-sm text-gray-600" title={taskDescription}>
-                      {taskDescription}
+                    <p className="text-sm text-gray-600" title={screenshotDescription}>
+                      {screenshotDescription}
                     </p>
                   </>
                 )}

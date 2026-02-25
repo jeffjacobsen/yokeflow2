@@ -19,7 +19,7 @@ import { useProjectWebSocket } from '@/lib/websocket';
 import { api } from '@/lib/api';
 import { truncate } from '@/lib/utils';
 import type { Project, Session } from '@/lib/types';
-import { Settings, AlertCircle } from 'lucide-react';
+import { Settings, AlertCircle, Map } from 'lucide-react';
 
 export default function ProjectDetailPage() {
   const params = useParams();
@@ -33,7 +33,6 @@ export default function ProjectDetailPage() {
   const [isInitializing, setIsInitializing] = useState(false);
   const [isStartingCoding, setIsStartingCoding] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
-  const [isCancellingExpansion, setIsCancellingExpansion] = useState(false);
   const [activeTab, setActiveTab] = useState<'current' | 'history' | 'quality' | 'logs' | 'screenshots' | 'interventions'>('current');
   const [isStopping, setIsStopping] = useState(false);
   const [isStoppingAfterCurrent, setIsStoppingAfterCurrent] = useState(false);
@@ -81,20 +80,6 @@ export default function ProjectDetailPage() {
       // Reload project to get updated progress when a test result changes
       console.log(`[ProjectDetail] Test ${testId} updated: passes=${passes}`);
       loadProject();
-    },
-    onExpansionStarted: (numWorkers, totalEpics) => {
-      console.log(`[ProjectDetail] Expansion started: ${numWorkers} workers, ${totalEpics} epics`);
-      loadSessions();
-    },
-    onExpansionWorkerComplete: (workerId, _sessionNumber, status) => {
-      console.log(`[ProjectDetail] Expansion worker ${workerId} complete: ${status}`);
-      loadSessions();
-      loadProject();  // Refresh progress counters
-    },
-    onExpansionComplete: (totalExpanded, totalEpics, _errors) => {
-      console.log(`[ProjectDetail] Expansion complete: ${totalExpanded}/${totalEpics} epics`);
-      loadSessions();
-      loadProject();  // Refresh progress counters
     },
   });
 
@@ -241,24 +226,6 @@ export default function ProjectDetailPage() {
       });
     } finally {
       setIsCancelling(false);
-    }
-  }
-
-  async function handleCancelExpansion() {
-    setIsCancellingExpansion(true);
-    setError(null);
-    try {
-      await api.cancelExpansion(projectId);
-      await Promise.all([loadProject(), loadSessions()]);
-      toast.success('Expansion cancelled', {
-        description: 'Expansion workers have been stopped'
-      });
-    } catch (err: any) {
-      console.error('Failed to cancel expansion:', err);
-      const errorMsg = err.response?.data?.detail || err.message || 'Unknown error';
-      toast.error(`Failed to cancel expansion: ${errorMsg}`);
-    } finally {
-      setIsCancellingExpansion(false);
     }
   }
 
@@ -409,21 +376,16 @@ export default function ProjectDetailPage() {
   const { progress, next_task, is_initialized } = project;
   const isComplete = progress.completed_tasks === progress.total_tasks && progress.total_tasks > 0;
   const hasRunningSession = sessions.some(s => s.status === 'running' || s.status === 'pending');
-  const hasCodingSessions = sessions.some(s => s.session_number > 0 && s.session_type !== 'expansion');
+  const hasCodingSessions = sessions.some(s => s.session_number > 0);
 
   // All currently running/pending sessions
   const runningSessions = sessions.filter(s => s.status === 'running' || s.status === 'pending');
 
-  // Check if there's a running initialization or expansion session
+  // Check if there's a running initialization session
   const runningInitSession = sessions.find(s =>
     (s.status === 'running' || s.status === 'pending') &&
     (s.type === 'initializer' || s.session_type === 'initializer')
   );
-  const runningExpansionSessions = sessions.filter(s =>
-    (s.status === 'running' || s.status === 'pending') &&
-    (s.type === 'expansion' || s.session_type === 'expansion')
-  );
-  const isExpanding = runningExpansionSessions.length > 0;
 
   // Check if there's a running coding session
   const runningCodingSession = sessions.find(s =>
@@ -432,7 +394,7 @@ export default function ProjectDetailPage() {
   );
 
   // For Current Session tab: show user-selected session, or the most relevant running session
-  // Priority: user selection > coding > initializer > expansion (first one)
+  // Priority: user selection > coding > initializer > first running
   const selectedSession = selectedSessionId ? runningSessions.find(s => s.session_id === selectedSessionId) : null;
   const currentSession = selectedSession || runningCodingSession || runningInitSession || runningSessions[0] || sessions[0] || null;
 
@@ -485,7 +447,7 @@ export default function ProjectDetailPage() {
                 <button
                   onClick={handleStartRename}
                   className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-gray-700 rounded"
-                  title="Rename project (note: directory name in generations/ folder will not change)"
+                  title="Rename project (note: directory name in projects/ folder will not change)"
                 >
                   <svg className="w-4 h-4 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
@@ -502,11 +464,6 @@ export default function ProjectDetailPage() {
                 Live
               </span>
             )}
-            {projectSettings?.sandbox_type && (
-              <span className="px-2 py-1 rounded bg-gray-700/50 text-gray-300 border border-gray-600/50 text-xs font-mono">
-                {projectSettings.sandbox_type === 'docker' ? '🐳 Docker' : '💻 Local'}
-              </span>
-            )}
             {isComplete && (
               <span className="px-3 py-1 rounded-full bg-green-500/20 text-green-400 border border-green-500/30 text-sm">
                 Complete
@@ -517,6 +474,16 @@ export default function ProjectDetailPage() {
 
         {/* Actions */}
         <div className="flex items-center gap-3">
+          {is_initialized && (
+            <Link
+              href={`/projects/${projectId}/roadmap`}
+              className="px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 rounded-lg transition-colors font-medium flex items-center gap-2"
+              title="View project roadmap"
+            >
+              <Map className="w-4 h-4" />
+              Roadmap
+            </Link>
+          )}
           <button
             onClick={() => {
               if (activePanel === 'session') {
@@ -542,7 +509,7 @@ export default function ProjectDetailPage() {
             )}
           </button>
           {/* Conditional buttons based on initialization state */}
-          {!is_initialized && !runningInitSession && !isExpanding && (
+          {!is_initialized && !runningInitSession && (
             <button
               onClick={() => {
                 setActivePanel('session');
@@ -567,28 +534,7 @@ export default function ProjectDetailPage() {
             </button>
           )}
 
-          {isExpanding && (
-            <>
-              <button
-                disabled
-                className="px-4 py-2 bg-blue-800 cursor-not-allowed text-white rounded-lg transition-colors font-medium flex items-center gap-2"
-                title={`${runningExpansionSessions.length} expansion workers creating tasks and tests`}
-              >
-                <span className="w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></span>
-                Expanding Epics...
-              </button>
-              <button
-                onClick={handleCancelExpansion}
-                disabled={isCancellingExpansion}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-800 disabled:cursor-not-allowed text-white rounded-lg transition-colors font-medium"
-                title="Stop all expansion workers"
-              >
-                {isCancellingExpansion ? 'Cancelling...' : 'Cancel Expansion'}
-              </button>
-            </>
-          )}
-
-          {is_initialized && !runningCodingSession && !isExpanding && !isComplete && (
+          {is_initialized && !runningCodingSession && !isComplete && (
             <button
               onClick={() => {
                 setActivePanel('session');
@@ -654,7 +600,7 @@ export default function ProjectDetailPage() {
                 </ul>
                 <p className="mt-2"><strong>To fix:</strong></p>
                 <ul className="list-disc list-inside ml-2 space-y-0.5">
-                  <li>Check <code className="bg-gray-800 px-1 rounded">generations/{project.name}/.env</code> and remove ANTHROPIC_API_KEY</li>
+                  <li>Check <code className="bg-gray-800 px-1 rounded">projects/{project.name}/.env</code> and remove ANTHROPIC_API_KEY</li>
                   <li>Restart API server to use CLAUDE_CODE_OAUTH_TOKEN instead</li>
                 </ul>
                 <p className="mt-2 text-orange-300">
@@ -854,7 +800,6 @@ export default function ProjectDetailPage() {
                 isInitialized={is_initialized}
                 isInitializing={isInitializing}
                 isStartingCoding={isStartingCoding}
-                isExpanding={isExpanding}
               />
             )}
 

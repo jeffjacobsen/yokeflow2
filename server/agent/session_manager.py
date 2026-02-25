@@ -64,7 +64,7 @@ class PausedSessionManager:
 
         # Extract task info
         current_task_id = current_task.get("id") if current_task else None
-        current_task_description = current_task.get("description") if current_task else None
+        current_task_description = current_task.get("name") if current_task else None
 
         # Save to database
         async with DatabaseManager() as db:
@@ -85,7 +85,7 @@ class PausedSessionManager:
         print(f"  Reason: {reason}")
         print(f"  Type: {pause_type}")
         if current_task:
-            print(f"  Task: {current_task.get('description', 'Unknown')}")
+            print(f"  Task: {current_task.get('name', 'Unknown')}")
 
         return str(paused_session_id)
 

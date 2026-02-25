@@ -241,8 +241,8 @@ export function TestCoverageReport({ projectId }: TestCoverageReportProps) {
                     <ul className="space-y-1">
                       {epic.tasks.slice(0, 10).map((task) => (
                         <li key={task.id} className="text-xs text-gray-500 pl-4">
-                          • Task {task.id}: {task.description.slice(0, 80)}
-                          {task.description.length > 80 ? '...' : ''}
+                          • Task {task.id}: {task.name.slice(0, 80)}
+                          {task.name.length > 80 ? '...' : ''}
                         </li>
                       ))}
                       {epic.tasks.length > 10 && (

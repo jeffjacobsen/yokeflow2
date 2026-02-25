@@ -319,8 +319,8 @@ class TestComplianceAnalyzer:
                                 'notes_preview': verification_notes[:100]
                             })
 
-                # Track verification methods
-                elif tool_name == 'mcp__task-manager__bash_docker':
+                # Track verification methods from Bash commands
+                elif tool_name == 'Bash':
                     command = params.get('command', '').lower()
 
                     # Detect verification method
@@ -344,18 +344,16 @@ class TestComplianceAnalyzer:
         Analyze compliance with prompt instructions.
 
         Checks for:
-        - Using correct tools (bash_docker vs Bash)
         - Proper file paths (no /workspace/ prefix)
         - Timeout usage in curl commands
         - Screenshot directory compliance
+        - Python version usage
         """
         metrics = {
             'total_violations': 0,
-            'bash_vs_docker': 0,
             'workspace_prefix': 0,
             'missing_timeouts': 0,
             'screenshot_directory': 0,
-            'heredoc_usage': 0,
             'python_vs_python3': 0
         }
 
@@ -364,19 +362,8 @@ class TestComplianceAnalyzer:
                 tool_name = event.get('tool_name', '')
                 params = event.get('input') or event.get('parameters', {})
 
-                # Check for Bash usage (should be bash_docker)
-                if tool_name == 'Bash':
-                    metrics['bash_vs_docker'] += 1
-                    metrics['total_violations'] += 1
-                    self.issues.append({
-                        'type': 'wrong_tool',
-                        'severity': 'high',
-                        'message': 'Used Bash instead of bash_docker',
-                        'timestamp': event.get('timestamp')
-                    })
-
                 # Check for /workspace/ prefix in file operations
-                elif tool_name in ['Read', 'Write', 'Edit']:
+                if tool_name in ['Read', 'Write', 'Edit']:
                     file_path = params.get('file_path', '')
                     if '/workspace/' in file_path:
                         metrics['workspace_prefix'] += 1
@@ -388,8 +375,8 @@ class TestComplianceAnalyzer:
                             'path': file_path
                         })
 
-                # Check bash_docker commands
-                elif tool_name == 'mcp__task-manager__bash_docker':
+                # Check Bash commands for compliance issues
+                elif tool_name == 'Bash':
                     command = params.get('command', '')
 
                     # Check curl without timeout
@@ -400,17 +387,6 @@ class TestComplianceAnalyzer:
                             'type': 'missing_timeout',
                             'severity': 'medium',
                             'message': 'curl command without --max-time',
-                            'command': command[:100]
-                        })
-
-                    # Check for heredocs
-                    if '<<' in command and 'EOF' in command:
-                        metrics['heredoc_usage'] += 1
-                        metrics['total_violations'] += 1
-                        self.issues.append({
-                            'type': 'heredoc_usage',
-                            'severity': 'high',
-                            'message': 'Attempted to use heredoc',
                             'command': command[:100]
                         })
 
@@ -426,9 +402,10 @@ class TestComplianceAnalyzer:
                         })
 
                     # Check screenshot directory
-                    if 'screenshot' in command and 'yokeflow/screenshots' not in command:
-                        # Check if it's being moved in a follow-up command
-                        if not self._check_screenshot_move(event.get('timestamp')):
+                    if 'agent-browser screenshot' in command or 'agent-browser screenshot' in command.lower():
+                        # The standard workflow pipes agent-browser screenshot through xargs mv/cp
+                        # to yokeflow/screenshots/. Check if this command or a follow-up does that.
+                        if 'yokeflow/screenshots' not in command and not self._check_screenshot_move(event.get('timestamp')):
                             metrics['screenshot_directory'] += 1
                             self.issues.append({
                                 'type': 'screenshot_directory',
@@ -499,23 +476,25 @@ class TestComplianceAnalyzer:
         return min(100, score)
 
     def _check_screenshot_move(self, timestamp: str) -> bool:
-        """Check if a screenshot is moved to yokeflow/screenshots/ after being taken."""
-        # Look for mv command within next few events
+        """Check if a screenshot is moved/copied to yokeflow/screenshots/ after being taken."""
+        # Look for mv or cp command within next few events
         found_timestamp = False
+        events_checked = 0
         for event in self.events:
             if event.get('timestamp') == timestamp:
                 found_timestamp = True
                 continue
 
             if found_timestamp and event.get('event') == 'tool_use':
+                events_checked += 1
                 tool_name = event.get('tool_name', '')
-                if tool_name == 'mcp__task-manager__bash_docker':
+                if tool_name == 'Bash':
                     command = event.get('input', {}).get('command', '')
-                    if 'mv' in command and 'yokeflow/screenshots' in command:
+                    if ('mv' in command or 'cp' in command) and 'yokeflow/screenshots' in command:
                         return True
 
                 # Only check next 3 tool uses
-                if found_timestamp and event.get('event') == 'tool_use':
+                if events_checked >= 3:
                     break
 
         return False
@@ -570,16 +549,6 @@ class TestComplianceAnalyzer:
                 'description': 'Agent is marking tasks complete without retrieving test requirements',
                 'prompt_change': 'Add explicit check: "STOP if get_task_tests not called before update_task_status"',
                 'expected_impact': 'Prevent tasks being marked complete without verification'
-            })
-
-        if issue_counts.get('wrong_tool', 0) > 0:
-            self.recommendations.append({
-                'priority': 'high',
-                'category': 'tool_usage',
-                'title': 'Reinforce bash_docker usage',
-                'description': f"Agent used Bash instead of bash_docker {issue_counts.get('wrong_tool', 0)} times",
-                'prompt_change': 'Add warning box: "⚠️ NEVER use Bash - ALWAYS use mcp__task-manager__bash_docker"',
-                'expected_impact': 'Eliminate wrong tool usage'
             })
 
         # Medium-priority recommendations

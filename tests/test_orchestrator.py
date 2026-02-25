@@ -40,7 +40,7 @@ class TestAgentOrchestrator:
         with patch('server.agent.orchestrator.Config') as mock_config:
             mock_config.load_default.return_value = MagicMock(
                 project=MagicMock(
-                    default_generations_dir="generations",
+                    default_projects_dir="projects",
                     max_iterations=None
                 ),
                 models=MagicMock(
@@ -105,7 +105,8 @@ class TestAgentOrchestrator:
             mock_db.update_project.return_value = None
             mock_db.update_project_settings.return_value = None
 
-            with patch('server.agent.orchestrator.Path') as mock_path:
+            with patch('server.agent.orchestrator.Path') as mock_path, \
+                 patch('server.client.claude.copy_agent_skills'):
                 mock_path_instance = MagicMock()
                 mock_path.return_value = mock_path_instance
                 mock_path_instance.__truediv__.return_value = mock_path_instance
@@ -146,7 +147,8 @@ class TestAgentOrchestrator:
             mock_db.update_project.return_value = None
             mock_db.update_project_settings.return_value = None
 
-            with patch('server.agent.orchestrator.Path') as mock_path:
+            with patch('server.agent.orchestrator.Path') as mock_path, \
+                 patch('server.client.claude.copy_agent_skills'):
                 mock_path_instance = MagicMock()
                 mock_path.return_value = mock_path_instance
                 mock_path_instance.__truediv__.return_value = mock_path_instance
@@ -175,7 +177,8 @@ class TestAgentOrchestrator:
             mock_db.update_project.return_value = None
             mock_db.update_project_settings.return_value = None
 
-            with patch('server.agent.orchestrator.Path') as mock_path_cls:
+            with patch('server.agent.orchestrator.Path') as mock_path_cls, \
+                 patch('server.client.claude.copy_agent_skills'):
                 mock_path_cls.return_value = MagicMock()
 
                 with patch('server.agent.orchestrator.copy_spec_to_project') as mock_copy:
@@ -196,7 +199,8 @@ class TestAgentOrchestrator:
             mock_db.update_project.return_value = None
             mock_db.update_project_settings.return_value = None
 
-            with patch('server.agent.orchestrator.Path') as mock_path:
+            with patch('server.agent.orchestrator.Path') as mock_path, \
+                 patch('server.client.claude.copy_agent_skills'):
                 mock_path_instance = MagicMock()
                 mock_path.return_value = mock_path_instance
                 mock_path_instance.__truediv__.return_value = mock_path_instance
@@ -235,7 +239,7 @@ class TestAgentOrchestrator:
             }
             mock_db.get_next_task.return_value = {
                 'id': uuid4(),
-                'description': 'Implement authentication'
+                'name': 'Implement authentication'
             }
             mock_db.get_active_session.return_value = None
 
@@ -499,7 +503,8 @@ class TestAgentOrchestrator:
             mock_db.update_project.return_value = None
             mock_db.update_project_settings.return_value = None
 
-            with patch('server.agent.orchestrator.Path') as mock_path:
+            with patch('server.agent.orchestrator.Path') as mock_path, \
+                 patch('server.client.claude.copy_agent_skills'):
                 mock_path_instance = MagicMock()
                 mock_path.return_value = mock_path_instance
                 mock_path_instance.__truediv__.return_value = mock_path_instance

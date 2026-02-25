@@ -19,8 +19,8 @@ export interface Epic {
 export interface Task {
   id: EntityId;
   epic_id: EntityId;
+  name: string;
   description: string;
-  action: string;
   priority: number;
   done: 0 | 1;
   created_at: string;
@@ -56,6 +56,8 @@ export interface ProjectStatus {
   passing_tests: number;
   task_completion_pct: number;
   test_pass_pct: number;
+  tasks_without_tests: number;
+  tasks_with_tests: number;
 }
 
 export interface EpicProgress {
@@ -110,8 +112,8 @@ export interface NewEpic {
 
 export interface NewTask {
   epic_id: EntityId;
+  name: string;
   description: string;
-  action: string;
   priority?: number;
 }
 

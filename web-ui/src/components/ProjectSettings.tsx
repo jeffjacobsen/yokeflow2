@@ -24,7 +24,7 @@ export function ProjectSettingsModal({ projectId, onClose, onSaved }: ProjectSet
   const [error, setError] = useState<string | null>(null);
 
   // Form state
-  const [codingModel, setCodingModel] = useState('claude-sonnet-4-5-20250929');
+  const [codingModel, setCodingModel] = useState('claude-sonnet-4-6');
   const [maxIterations, setMaxIterations] = useState<string>('0'); // 0 = unlimited
 
   useEffect(() => {
@@ -136,7 +136,7 @@ export function ProjectSettingsModal({ projectId, onClose, onSaved }: ProjectSet
                   value={codingModel}
                   onChange={(e) => setCodingModel(e.target.value)}
                   className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
-                  placeholder="claude-sonnet-4-5-20250929"
+                  placeholder="claude-sonnet-4-6"
                 />
                 <p className="text-sm text-gray-400 mt-1">
                   Model used for coding sessions (Session 2+). Sonnet is recommended for speed and cost.
@@ -180,7 +180,7 @@ export function ProjectSettingsForm({ projectId, onSaved }: ProjectSettingsFormP
   const [error, setError] = useState<string | null>(null);
 
   // Form state
-  const [codingModel, setCodingModel] = useState('claude-sonnet-4-5-20250929');
+  const [codingModel, setCodingModel] = useState('claude-sonnet-4-6');
   const [maxIterations, setMaxIterations] = useState<string>('0'); // 0 = unlimited
 
   useEffect(() => {
@@ -278,7 +278,7 @@ export function ProjectSettingsForm({ projectId, onSaved }: ProjectSettingsFormP
               value={codingModel}
               onChange={(e) => setCodingModel(e.target.value)}
               className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
-              placeholder="claude-sonnet-4-5-20250929"
+              placeholder="claude-sonnet-4-6"
             />
             <p className="text-sm text-gray-400 mt-1">
               Model used for coding sessions (Session 2+). Sonnet is recommended for speed and cost.

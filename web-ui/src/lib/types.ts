@@ -22,8 +22,8 @@ export interface Progress {
 export interface Task {
   id: number;
   epic_id: number;
+  name: string;
   description: string;
-  action: string;
   priority: number;
   done: boolean;
   created_at: string;
@@ -103,7 +103,6 @@ export interface Project {
   created_at: string;
   updated_at: string;
   status: string;
-  sandbox_type?: string;  // Sandbox type: 'docker', 'local', etc.
   is_initialized: boolean;  // NEW: Whether initialization (Session 1) is complete
   completed_at: string | null;  // Timestamp when all tasks completed
   total_cost_usd: number;  // Total cost across all sessions
@@ -125,7 +124,7 @@ export interface Project {
   project_path?: string;  // Deprecated
 }
 
-export type SessionType = 'initializer' | 'expansion' | 'coding';
+export type SessionType = 'initializer' | 'coding';
 export type SessionStatus = 'pending' | 'running' | 'completed' | 'error' | 'interrupted';
 
 export interface SessionMetrics {
@@ -209,10 +208,7 @@ export interface WebSocketMessage {
     | 'prompt_improvement_failed'  // Prompt improvement analysis failed
     | 'deep_review_started'  // Deep review started for a session
     | 'deep_review_completed'  // Deep review completed successfully
-    | 'deep_review_failed'  // Deep review failed with error
-    | 'expansion_started'  // Parallel expansion started
-    | 'expansion_worker_complete'  // An expansion worker finished
-    | 'expansion_complete';  // All expansion workers finished
+    | 'deep_review_failed';  // Deep review failed with error
   progress?: Progress;
   session_id?: string;
   status?: SessionStatus;
@@ -243,12 +239,6 @@ export interface WebSocketMessage {
     is_error?: boolean;
   };
   project_id?: string;  // For all events
-  // Expansion event fields
-  num_workers?: number;  // For expansion_started
-  total_epics?: number;  // For expansion_started and expansion_complete
-  worker_id?: string;  // For expansion_worker_complete
-  total_epics_expanded?: number;  // For expansion_complete
-  errors?: string[];  // For expansion_complete
 }
 
 export interface HealthResponse {
@@ -258,7 +248,7 @@ export interface HealthResponse {
 }
 
 export interface InfoResponse {
-  generations_dir: string;
+  projects_dir: string;
   default_models: {
     initializer: string;
     coding: string;
@@ -267,14 +257,12 @@ export interface InfoResponse {
 }
 
 export interface ProjectSettings {
-  sandbox_type: 'docker' | 'local';
   coding_model: string;
   initializer_model: string;
   max_iterations: number | null;
 }
 
 export interface UpdateSettingsRequest {
-  sandbox_type?: 'docker' | 'local';
   coding_model?: string;
   initializer_model?: string;
   max_iterations?: number | null;
@@ -409,7 +397,7 @@ export interface PromptProposal {
   created_at: string;
 
   // Change details
-  prompt_file: string;  // 'coding_prompt_docker.md' or 'coding_prompt_local.md'
+  prompt_file: string;  // 'coding_prompt.md'
   section_name: string | null;
   line_start: number | null;
   line_end: number | null;
@@ -446,7 +434,6 @@ export interface PromptAnalysisSummary {
   status: AnalysisStatus;
 
   // Scope
-  sandbox_type: string;  // 'docker' or 'local'
   num_projects: number;  // Number of projects analyzed
   sessions_analyzed: number;
 
@@ -479,7 +466,6 @@ export interface PromptAnalysisDetail extends PromptAnalysisSummary {
  */
 export interface TriggerAnalysisRequest {
   project_ids?: string[];  // Optional: specific projects to analyze
-  sandbox_type?: string;  // 'docker' or 'local'
   last_n_days?: number;  // Time window (default: 7)
 }
 
@@ -568,25 +554,7 @@ export interface Screenshot {
   size: number;
   modified_at: string;
   task_id: number | null;
+  epic_id: number | null;
   url: string;
 }
 
-/**
- * Docker container status
- */
-export interface ContainerStatus {
-  container_exists: boolean;
-  status?: string; // 'running', 'exited', 'paused', etc.
-  container_id?: string;
-  container_name?: string;
-  ports?: Record<string, any>;
-  sandbox_type: string;
-  message?: string;
-}
-
-export interface ContainerActionResponse {
-  message: string;
-  started?: boolean;
-  stopped?: boolean;
-  deleted?: boolean;
-}

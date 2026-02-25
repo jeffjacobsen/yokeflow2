@@ -229,8 +229,8 @@ CREATE TABLE tasks (
     epic_id INTEGER NOT NULL REFERENCES epics(id) ON DELETE CASCADE,
     project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
 
-    description TEXT NOT NULL,
-    action TEXT,
+    name TEXT NOT NULL,
+    description TEXT,
     priority INTEGER DEFAULT 0,
     done BOOLEAN DEFAULT FALSE,
 
@@ -363,7 +363,7 @@ CREATE TABLE prompt_improvement_analyses (
     date_range_end TIMESTAMPTZ,
 
     -- Configuration
-    analysis_model VARCHAR(100) DEFAULT 'claude-sonnet-4-5-20250929',
+    analysis_model VARCHAR(100) DEFAULT 'claude-sonnet-4-6',
     sandbox_type VARCHAR(20),
 
     -- Results
@@ -480,8 +480,8 @@ GROUP BY p.id, p.name;
 CREATE OR REPLACE VIEW v_next_task AS
 SELECT DISTINCT ON (p.id)
     t.id as task_id,
-    t.description,
-    t.action,
+    t.name as task_name,
+    t.description as task_description,
     e.id as epic_id,
     e.name as epic_name,
     e.description as epic_description,
@@ -966,7 +966,7 @@ SELECT
     cp.checkpoint_type,
     cp.created_at,
     cp.current_task_id,
-    t.description as current_task_description,
+    t.name as current_task_name,
     cp.message_count,
     cp.recovery_count,
     cp.last_resumed_at,
@@ -1609,7 +1609,7 @@ SELECT
     tt.last_result,
     tt.last_execution,
     tt.verification_notes,
-    t.description as task_name,
+    t.name as task_name,
     t.epic_id,
     e.name as epic_name
 FROM task_tests tt
@@ -2393,7 +2393,7 @@ CREATE TABLE project_completion_reviews (
     review_text TEXT, -- Full Claude analysis
 
     -- Model used
-    review_model VARCHAR(100) DEFAULT 'claude-sonnet-4-5-20250929',
+    review_model VARCHAR(100) DEFAULT 'claude-sonnet-4-6',
 
     CONSTRAINT recommendation_valid CHECK (
         recommendation IN ('complete', 'needs_work', 'failed')

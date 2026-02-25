@@ -160,3 +160,21 @@ body {
     @apply bg-background text-foreground;
   }
 }
+
+/* Print styles for Roadmap page */
+@media print {
+  header, footer, .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  main {
+    max-width: 100% !important;
+    padding: 0 !important;
+  }
+}

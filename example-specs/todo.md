@@ -213,8 +213,8 @@ Project is complete when:
 
 ## Expected Timeline
 
-- **Initialization (Session 1):** 3-5 minutes - Create roadmap (3 epics, ~8 tasks)
-- **Coding (Sessions 2-4):** 5-10 minutes - Implement features
+- **Initialization (Session 0):** 3-5 minutes - Create roadmap (3 epics, ~8 tasks)
+- **Coding (Sessions 1-3):** 5-10 minutes - Implement features
 - **Total:** ~10-15 minutes for complete project
 
 This is intentionally simple to enable quick testing of the platform UI/UX without long waiting times.
@@ -228,4 +228,4 @@ This is intentionally simple to enable quick testing of the platform UI/UX witho
 - Include CORS for browser testing
 - Focus on working code over optimization
 - Verify every endpoint with curl before marking tests complete
-- Use browser verification via Playwright to test endpoints
+- Use browser verification via agent-browser to test endpoints

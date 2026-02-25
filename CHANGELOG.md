@@ -89,14 +89,14 @@ Complete implementation of the comprehensive quality system across 8 phases:
 - Configuration in `.yokeflow.yaml` (strict/autonomous modes)
 - MCP tool integration with mode checking in `checkEpicCompletion()`
 - Orchestrator handles blocked sessions gracefully
-- Blocker info written to `claude-progress.md`
+- Blocker info written to `yokeflow/agent-progress.md`
 - 5 passing tests in `test_epic_test_blocking.py`
 
 **Phase 4.1: Test Viewer UI** (February 2, 2026)
 - Epic and task tests visible with requirements
 - Fixed database queries for requirements-based testing
 - Updated TypeScript types (Test and EpicTest interfaces)
-- Tested and verified with Playwright
+- Tested and verified with browser automation
 - Component: `EpicAccordion.tsx` (lines 149-181)
 
 **Phase 5: Epic Re-testing** (February 2, 2026)
@@ -123,8 +123,7 @@ Complete implementation of the comprehensive quality system across 8 phases:
 
 **Phase 7: Project Completion Review** (February 2, 2026)
 - Specification parser: `spec_parser.py` (450 lines, 25 tests)
-- Requirement matcher: `requirement_matcher.py` (550 lines, hybrid keyword + semantic)
-- Completion analyzer: `completion_analyzer.py` (400 lines)
+- Completion review: Not yet implemented (see `COMPLETION_REVIEW.md`)
 - Database: 2 tables, 4 views, 5 indexes
 - REST API: 5 new endpoints
 - Web UI: `CompletionReviewDashboard.tsx` (500 lines)
@@ -148,7 +147,7 @@ Complete implementation of the comprehensive quality system across 8 phases:
 
 #### AI-Powered Specification Generation (January 20, 2026)
 - **Natural language to specification** - Users can describe their app in plain English
-- **Claude Agent SDK integration** - Uses same authentication as main agent (claude-sonnet-4-5-20250929)
+- **Claude Agent SDK integration** - Uses same authentication as main agent (claude-sonnet-4-6)
 - **Real-time streaming** - Server-Sent Events (SSE) for progressive generation display
 - **Context file support** - Upload mockups, requirements docs for enhanced generation
 - **Automatic validation** - Validates generated specs with errors, warnings, and suggestions
@@ -341,7 +340,7 @@ YokeFlow 2.0 represents a major milestone with complete platform functionality, 
 
 #### Prerequisites
 1. **Fresh install required** - v2.0 is not backward compatible
-2. Backup any existing projects in `generations/`
+2. Backup any existing projects in `projects/`
 3. PostgreSQL must be running
 
 #### Steps
@@ -398,7 +397,7 @@ YokeFlow 2.0 represents a major milestone with complete platform functionality, 
    python scripts/test_quick.py
 
    # Check API
-   curl http://localhost:8000/health/detailed
+   curl http://localhost:8010/health/detailed
    ```
 
 ---

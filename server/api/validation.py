@@ -14,7 +14,7 @@ Design Principles:
 - Integration with FastAPI automatic validation
 """
 
-from typing import Optional, List, Dict, Any, Literal
+from typing import Optional, List, Dict, Any
 from pathlib import Path
 from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic.types import PositiveInt, NonNegativeFloat
@@ -25,13 +25,6 @@ import re
 # =============================================================================
 # Enums and Constants
 # =============================================================================
-
-class SandboxType(str, Enum):
-    """Supported sandbox types."""
-    NONE = "none"
-    DOCKER = "docker"
-    E2B = "e2b"
-
 
 class SessionType(str, Enum):
     """Session types."""
@@ -58,18 +51,14 @@ class TaskStatus(str, Enum):
 
 
 # Model name patterns (Claude model names)
-# Matches: claude-opus-4-5-20251101, claude-sonnet-4-5-20250929, claude-3-opus, claude-3-5-sonnet
+# Matches: claude-opus-4-6, claude-sonnet-4-6, claude-haiku-4-5, claude-opus-4-6-20260101
 VALID_MODEL_PATTERN = re.compile(
-    r"^claude-(opus|sonnet|haiku)-\d+-\d+-\d{8}$|"  # claude-opus-4-5-20251101
-    r"^claude-(3|3-5)-(opus|sonnet|haiku)$"  # claude-3-opus, claude-3-5-sonnet
+    r"^claude-(opus|sonnet|haiku)-\d+-\d+(-\d{8})?$"
 )
 
 # Project name constraints
 MAX_PROJECT_NAME_LENGTH = 100
 VALID_PROJECT_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_\-\.]+$")
-
-# Memory limit pattern (e.g., "2g", "512m")
-VALID_MEMORY_PATTERN = re.compile(r"^\d+[kmg]$", re.IGNORECASE)
 
 
 # =============================================================================
@@ -144,7 +133,6 @@ class ImportProjectRequest(BaseModel):
         min_length=10,
         description="Description of changes to make (at least 10 characters)"
     )
-    sandbox_type: str = Field("docker")
     initializer_model: Optional[str] = None
     coding_model: Optional[str] = None
 
@@ -228,7 +216,7 @@ class SessionStartRequest(BaseModel):
             raise ValueError(
                 f"Invalid Claude model name: {v}. "
                 f"Expected format: claude-(opus|sonnet|haiku)-X-X-YYYYMMDD "
-                f"or claude-3-(opus|sonnet|haiku)"
+                f"or claude-(opus|sonnet|haiku)-X-X"
             )
         return v
 
@@ -262,7 +250,7 @@ class ParallelCodingRequest(BaseModel):
             raise ValueError(
                 f"Invalid Claude model name: {v}. "
                 f"Expected format: claude-(opus|sonnet|haiku)-X-X-YYYYMMDD "
-                f"or claude-3-(opus|sonnet|haiku)"
+                f"or claude-(opus|sonnet|haiku)-X-X"
             )
         return v
 
@@ -334,11 +322,11 @@ class TokenResponse(BaseModel):
 class ModelConfigValidator(BaseModel):
     """Validation model for model configuration."""
     initializer: str = Field(
-        default="claude-opus-4-5-20251101",
+        default="claude-opus-4-6",
         description="Model for initialization sessions"
     )
     coding: str = Field(
-        default="claude-sonnet-4-5-20250929",
+        default="claude-sonnet-4-6",
         description="Model for coding sessions"
     )
 
@@ -369,7 +357,7 @@ class TimingConfigValidator(BaseModel):
         description="Seconds for UI refresh (1-60)"
     )
     web_ui_port: PositiveInt = Field(
-        default=3000,
+        default=3010,
         ge=1024,
         le=65535,
         description="Web UI port number (1024-65535)"
@@ -420,101 +408,16 @@ class DatabaseConfigValidator(BaseModel):
 
 class ProjectConfigValidator(BaseModel):
     """Validation model for project configuration."""
-    default_generations_dir: str = Field(
-        default="generations",
+    default_projects_dir: str = Field(
+        default="projects",
         min_length=1,
-        description="Directory for generated projects"
+        description="Directory for projects"
     )
     max_iterations: Optional[PositiveInt] = Field(
         None,
         le=10000,
         description="Maximum session count (None = unlimited)"
     )
-
-
-class SandboxConfigValidator(BaseModel):
-    """Validation model for sandbox configuration."""
-    type: SandboxType = Field(
-        default=SandboxType.NONE,
-        description="Sandbox type: none, docker, or e2b"
-    )
-
-    # Docker-specific settings
-    docker_image: str = Field(
-        default="yokeflow-sandbox:latest",
-        min_length=1,
-        description="Docker image name"
-    )
-    docker_network: str = Field(
-        default="bridge",
-        description="Docker network mode"
-    )
-    docker_memory_limit: str = Field(
-        default="2g",
-        description="Docker memory limit (e.g., 2g, 512m)"
-    )
-    docker_cpu_limit: str = Field(
-        default="2.0",
-        description="Docker CPU limit (cores)"
-    )
-    docker_ports: List[str] = Field(
-        default_factory=list,
-        description="Port mappings (e.g., '5173:5173')"
-    )
-
-    # E2B-specific settings
-    e2b_api_key: Optional[str] = Field(
-        None,
-        min_length=1,
-        description="E2B API key"
-    )
-    e2b_tier: Literal["free", "pro"] = Field(
-        default="free",
-        description="E2B tier"
-    )
-
-    @field_validator('docker_memory_limit')
-    @classmethod
-    def validate_memory_limit(cls, v: str) -> str:
-        """Validate memory limit format."""
-        if not VALID_MEMORY_PATTERN.match(v):
-            raise ValueError(
-                f"Invalid memory limit: {v}. "
-                f"Expected format: number followed by k, m, or g (e.g., 2g, 512m)"
-            )
-        return v.lower()
-
-    @field_validator('docker_cpu_limit')
-    @classmethod
-    def validate_cpu_limit(cls, v: str) -> str:
-        """Validate CPU limit."""
-        try:
-            cpu = float(v)
-            if cpu <= 0 or cpu > 32:
-                raise ValueError("CPU limit must be between 0 and 32")
-        except ValueError:
-            raise ValueError(
-                f"Invalid CPU limit: {v}. Must be a number between 0 and 32"
-            )
-        return v
-
-    @field_validator('docker_ports')
-    @classmethod
-    def validate_port_mappings(cls, v: List[str]) -> List[str]:
-        """Validate port mapping format."""
-        port_pattern = re.compile(r'^\d+:\d+$')
-        invalid_ports = []
-
-        for port_mapping in v:
-            if not port_pattern.match(port_mapping):
-                invalid_ports.append(port_mapping)
-
-        if invalid_ports:
-            raise ValueError(
-                f"Invalid port mappings: {', '.join(invalid_ports)}. "
-                f"Expected format: 'host_port:container_port' (e.g., '5173:5173')"
-            )
-        return v
 
 
 class InterventionConfigValidator(BaseModel):
@@ -612,7 +515,6 @@ class ConfigValidator(BaseModel):
     security: SecurityConfigValidator = Field(default_factory=SecurityConfigValidator)
     database: DatabaseConfigValidator = Field(default_factory=DatabaseConfigValidator)
     project: ProjectConfigValidator = Field(default_factory=ProjectConfigValidator)
-    sandbox: SandboxConfigValidator = Field(default_factory=SandboxConfigValidator)
     intervention: InterventionConfigValidator = Field(default_factory=InterventionConfigValidator)
     verification: VerificationConfigValidator = Field(default_factory=VerificationConfigValidator)
 

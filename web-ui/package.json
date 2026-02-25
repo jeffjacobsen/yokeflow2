@@ -4,10 +4,10 @@
   "description": "YokeFlow web interface - autonomous AI development platform",
   "private": true,
   "scripts": {
-    "dev": "NODE_OPTIONS='--max-old-space-size=4096' next dev",
+    "dev": "NODE_OPTIONS='--max-old-space-size=4096' next dev -p 3010",
     "dev:stable": "./dev-server.sh",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -p 3010",
     "clean": "rm -rf .next"
   },
   "dependencies": {

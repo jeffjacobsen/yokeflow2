@@ -30,11 +30,11 @@ class TestCreateBrownfieldProject:
 
     @pytest.fixture
     def orchestrator(self, tmp_path):
-        """Create orchestrator with temp generations dir."""
+        """Create orchestrator with temp projects dir."""
         with patch('server.agent.orchestrator.Config') as mock_config:
             mock_config.load_default.return_value = MagicMock(
                 project=MagicMock(
-                    default_generations_dir=str(tmp_path / "generations"),
+                    default_projects_dir=str(tmp_path / "projects"),
                     max_iterations=None
                 ),
                 models=MagicMock(
@@ -111,7 +111,7 @@ class TestCreateBrownfieldProject:
         self, orchestrator, mock_db, mock_import_result, mock_analysis, tmp_path
     ):
         """Test creating brownfield project from local path."""
-        (tmp_path / "generations").mkdir()
+        (tmp_path / "projects").mkdir()
 
         with patch('server.agent.orchestrator.DatabaseManager', return_value=mock_db):
             with patch('server.agent.orchestrator.CodebaseImporter') as MockImporter:
@@ -136,7 +136,7 @@ class TestCreateBrownfieldProject:
         self, orchestrator, mock_db, mock_import_result, mock_analysis, tmp_path
     ):
         """Test creating brownfield project from GitHub URL."""
-        (tmp_path / "generations").mkdir()
+        (tmp_path / "projects").mkdir()
         mock_import_result.source_type = 'github'
 
         with patch('server.agent.orchestrator.DatabaseManager', return_value=mock_db):
@@ -159,7 +159,7 @@ class TestCreateBrownfieldProject:
     @pytest.mark.asyncio
     async def test_create_brownfield_no_source_raises(self, orchestrator, mock_db, tmp_path):
         """Test that no source raises ValueError."""
-        (tmp_path / "generations").mkdir()
+        (tmp_path / "projects").mkdir()
 
         with patch('server.agent.orchestrator.DatabaseManager', return_value=mock_db):
             with pytest.raises(ValueError, match="source_url or source_path"):
@@ -173,7 +173,7 @@ class TestCreateBrownfieldProject:
         self, orchestrator, mock_db, tmp_path
     ):
         """Test that existing project name raises ValueError."""
-        (tmp_path / "generations").mkdir()
+        (tmp_path / "projects").mkdir()
         mock_db.get_project_by_name = AsyncMock(return_value={'id': uuid4(), 'name': 'exists'})
 
         with patch('server.agent.orchestrator.DatabaseManager', return_value=mock_db):
@@ -189,7 +189,7 @@ class TestCreateBrownfieldProject:
         self, orchestrator, mock_db, tmp_path
     ):
         """Test that import failure cleans up the project directory."""
-        gens = tmp_path / "generations"
+        gens = tmp_path / "projects"
         gens.mkdir()
 
         failed_result = ImportResult(
@@ -218,7 +218,7 @@ class TestCreateBrownfieldProject:
         self, orchestrator, mock_db, mock_import_result, mock_analysis, tmp_path
     ):
         """Test that change_spec.md and app_spec.txt are written."""
-        gens = tmp_path / "generations"
+        gens = tmp_path / "projects"
         gens.mkdir()
 
         with patch('server.agent.orchestrator.DatabaseManager', return_value=mock_db):
@@ -235,16 +235,16 @@ class TestCreateBrownfieldProject:
                 )
 
         project_dir = gens / "test-spec"
-        assert (project_dir / "change_spec.md").exists()
-        assert "dark mode" in (project_dir / "change_spec.md").read_text()
-        assert (project_dir / "app_spec.txt").exists()
+        specs_dir = project_dir / "yokeflow" / "specs"
+        assert (specs_dir / "change_spec.md").exists()
+        assert "dark mode" in (specs_dir / "change_spec.md").read_text()
 
     @pytest.mark.asyncio
     async def test_create_brownfield_stores_analysis(
         self, orchestrator, mock_db, mock_import_result, mock_analysis, tmp_path
     ):
         """Test that codebase analysis is passed to create_project."""
-        (tmp_path / "generations").mkdir()
+        (tmp_path / "projects").mkdir()
 
         with patch('server.agent.orchestrator.DatabaseManager', return_value=mock_db):
             with patch('server.agent.orchestrator.CodebaseImporter') as MockImporter:
@@ -280,7 +280,7 @@ class TestRollbackBrownfieldChanges:
         with patch('server.agent.orchestrator.Config') as mock_config:
             mock_config.load_default.return_value = MagicMock(
                 project=MagicMock(
-                    default_generations_dir="generations",
+                    default_projects_dir="projects",
                     max_iterations=None
                 ),
                 models=MagicMock(

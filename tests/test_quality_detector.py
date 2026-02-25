@@ -162,9 +162,9 @@ class TestToolMisuseDetection:
         assert not is_blocked
         assert detector.tool_usage.incorrect_tool_count == 1
 
-        # Using bash_docker in Docker is correct
+        # Using Bash tool is the correct tool
         is_blocked, reason = detector.track_tool_use(
-            "mcp__task-manager__bash_docker",
+            "Bash",
             {"command": "ls"},
             "docker"
         )

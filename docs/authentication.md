@@ -32,7 +32,7 @@ python api/start_api.py
 # Start Web UI
 cd web-ui && npm run dev
 
-# Visit http://localhost:3000
+# Visit http://localhost:3010
 # ✓ Direct access - no login required
 ```
 
@@ -231,7 +231,7 @@ python api/start_api.py
 
 ### Step 3: Verify
 
-Visit http://localhost:3000:
+Visit http://localhost:3010:
 - Should redirect to `/login`
 - Enter your password
 - Should access dashboard on success

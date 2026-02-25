@@ -23,7 +23,6 @@ import pytest
 sys.path.append(str(Path(__file__).parent.parent))
 
 from server.utils.config import ParallelConfig, Config
-from server.sandbox.manager import DockerSandbox, SandboxManager
 from server.agent.parallel_orchestrator import (
     ParallelOrchestrator,
     WorkerStatus,
@@ -109,83 +108,6 @@ parallel:
 # ============================================================
 # Docker Container Naming Tests
 # ============================================================
-
-@pytest.mark.unit
-class TestDockerWorkerNaming:
-    """Tests for Docker container naming with worker_id."""
-
-    def test_container_naming_with_worker_id(self, tmp_path):
-        """Test that worker_id config is stored on DockerSandbox."""
-        project_dir = tmp_path / "test_project"
-        project_dir.mkdir()
-
-        config = {
-            "image": "test-image:latest",
-            "session_type": "coding",
-            "worker_id": "worker-1",
-        }
-
-        sandbox = DockerSandbox(project_dir, config)
-        # Verify the config is stored (container_name is set during start())
-        assert sandbox.config.get("worker_id") == "worker-1"
-
-    def test_container_naming_without_worker_id(self, tmp_path):
-        """Test backward-compatible naming without worker_id."""
-        project_dir = tmp_path / "test_project"
-        project_dir.mkdir()
-
-        config = {
-            "image": "test-image:latest",
-            "session_type": "coding",
-        }
-
-        sandbox = DockerSandbox(project_dir, config)
-        assert sandbox.config.get("worker_id") is None
-
-    def test_stop_docker_with_worker_id(self):
-        """Test stop_docker_container with worker_id generates correct name."""
-        import docker as docker_module
-
-        with patch('docker.from_env') as mock_from_env, \
-             patch('subprocess.run') as mock_subprocess_run:
-            mock_result = MagicMock()
-            mock_result.returncode = 1  # Force from_env fallback
-            mock_subprocess_run.return_value = mock_result
-
-            mock_client = MagicMock()
-            mock_from_env.return_value = mock_client
-
-            mock_container = MagicMock()
-            mock_container.status = 'running'
-            mock_client.containers.get.return_value = mock_container
-
-            result = SandboxManager.stop_docker_container("myproject", worker_id="worker-2")
-
-            # Should look for container with worker_id suffix
-            mock_client.containers.get.assert_called_with("yokeflow-myproject-worker-2")
-            assert result is True
-
-    def test_stop_docker_without_worker_id(self):
-        """Test stop_docker_container without worker_id uses standard name."""
-        with patch('docker.from_env') as mock_from_env, \
-             patch('subprocess.run') as mock_subprocess_run:
-            mock_result = MagicMock()
-            mock_result.returncode = 1
-            mock_subprocess_run.return_value = mock_result
-
-            mock_client = MagicMock()
-            mock_from_env.return_value = mock_client
-
-            mock_container = MagicMock()
-            mock_container.status = 'running'
-            mock_client.containers.get.return_value = mock_container
-
-            result = SandboxManager.stop_docker_container("myproject")
-
-            # Should look for container without worker_id suffix
-            mock_client.containers.get.assert_called_with("yokeflow-myproject")
-            assert result is True
-
 
 # ============================================================
 # WorkerInfo and ParallelSessionResult Tests
@@ -342,7 +264,7 @@ class TestParallelOrchestrator:
                 'completed_at': None,
                 'local_path': '/tmp/test',
                 'project_type': 'greenfield',
-                'metadata': '{"settings": {"sandbox_type": "none"}}',
+                'metadata': '{"settings": {}}',
             }
 
         mock_db.get_project = mock_get_project
@@ -355,13 +277,7 @@ class TestParallelOrchestrator:
         mock_db.__aenter__ = AsyncMock(return_value=mock_db)
         mock_db.__aexit__ = AsyncMock(return_value=False)
 
-        with patch('server.agent.parallel_orchestrator.DatabaseManager', return_value=mock_db), \
-             patch('server.agent.parallel_orchestrator.SandboxManager') as mock_sandbox_mgr:
-
-            # Mock sandbox
-            mock_sandbox = AsyncMock()
-            mock_sandbox.container_name = None
-            mock_sandbox_mgr.create_sandbox.return_value = mock_sandbox
+        with patch('server.agent.parallel_orchestrator.DatabaseManager', return_value=mock_db):
 
             result = await orchestrator.run_parallel_coding(
                 project_id=project_id,
@@ -400,11 +316,11 @@ class TestParallelCodingRequestValidation:
         """Test valid request with all fields."""
         request = ParallelCodingRequest(
             num_workers=3,
-            coding_model="claude-sonnet-4-5-20250929",
+            coding_model="claude-sonnet-4-6",
             max_tasks_per_worker=5,
         )
         assert request.num_workers == 3
-        assert request.coding_model == "claude-sonnet-4-5-20250929"
+        assert request.coding_model == "claude-sonnet-4-6"
         assert request.max_tasks_per_worker == 5
 
     def test_num_workers_min(self):
@@ -425,9 +341,9 @@ class TestParallelCodingRequestValidation:
     def test_valid_model_names(self):
         """Test various valid Claude model names."""
         valid_models = [
-            "claude-sonnet-4-5-20250929",
-            "claude-3-opus",
-            "claude-3-5-sonnet",
+            "claude-sonnet-4-6",
+            "claude-opus-4-6",
+            "claude-haiku-4-5",
         ]
         for model in valid_models:
             request = ParallelCodingRequest(coding_model=model)
@@ -483,8 +399,8 @@ class TestClaimNextTask:
         task_data = {
             'id': 42,
             'epic_id': 1,
-            'description': 'Implement login page',
-            'action': 'Create login.tsx',
+            'name': 'Implement login page',
+            'description': 'Create login.tsx',
             'priority': 1,
             'done': False,
             'session_notes': 'worker-1 claimed at 2026-02-14',

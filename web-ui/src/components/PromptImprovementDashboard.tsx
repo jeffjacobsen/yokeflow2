@@ -32,7 +32,6 @@ export default function PromptImprovementDashboard() {
   const [triggerReviewsDialog, setTriggerReviewsDialog] = useState(false);
 
   // Form state for triggering new analysis
-  const [sandboxType, setSandboxType] = useState<'docker' | 'local'>('docker');
   const [lastNDays, setLastNDays] = useState(7);
   const [configuredMinReviews, setConfiguredMinReviews] = useState(5); // From config file
 
@@ -143,7 +142,6 @@ export default function PromptImprovementDashboard() {
       setSuccess(null);
 
       const request: TriggerAnalysisRequest = {
-        sandbox_type: sandboxType,
         last_n_days: lastNDays,
         ...(selectedProjectId && { project_ids: [selectedProjectId] }),
       };
@@ -431,11 +429,6 @@ export default function PromptImprovementDashboard() {
                       >
                         {analysis.status}
                       </span>
-                      {analysis.sandbox_type && (
-                        <span className="inline-block px-2 py-1 text-xs bg-purple-100 text-purple-800 rounded">
-                          {analysis.sandbox_type}
-                        </span>
-                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">

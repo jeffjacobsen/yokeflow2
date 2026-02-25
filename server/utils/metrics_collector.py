@@ -8,7 +8,7 @@ post-session log parsing.
 
 Key Features:
 1. Single source of truth for all metrics
-2. Unified browser detection (agent-browser and Playwright MCP)
+2. Unified browser detection (agent-browser)
 4. Efficient storage in session_end event
 """
 
@@ -26,14 +26,8 @@ class MetricsCollector:
     rather than parsing logs after the session.
     """
 
-    def __init__(self, sandbox_type: str = "local"):
-        """Initialize the metrics collector.
-
-        Args:
-            sandbox_type: Type of sandbox ("docker" or "local")
-        """
-        # Store sandbox type for adherence checking
-        self.sandbox_type = sandbox_type
+    def __init__(self):
+        """Initialize the metrics collector."""
 
         # Basic counts
         self.tool_use_count = 0
@@ -125,12 +119,8 @@ class MetricsCollector:
         # Start timing for this tool
         self.tool_timings[tool_id] = time.time()
 
-        # Analyze bash commands instead of just counting tools
-        if tool_name == 'mcp__task-manager__bash_docker':
-            self._analyze_bash_command(params.get('command', '') if params else '')
-        
-        # Track other important tools
-        elif tool_name in ['Edit', 'Read', 'Write']:
+        # Track important tools
+        if tool_name in ['Edit', 'Read', 'Write']:
             self.command_analysis['command_patterns']['file_operations'] += 1
 
         # Detect browser operations (unified for both modes)
@@ -168,15 +158,6 @@ class MetricsCollector:
         """
         Detect prompt adherence violations.
         """
-        # Check for wrong bash command usage (should use bash_docker in Docker)
-        if tool_name == 'Bash' and self.sandbox_type == 'docker':
-            self.adherence_violations.append({
-                'type': 'wrong_bash_command',
-                'timestamp': time.time(),
-                'context': f"Used Bash instead of bash_docker: {params.get('command', '')[:100]}",
-                'impact': 'Command may fail in Docker environment'
-            })
-
         # Check for workspace prefix in file paths
         if tool_name in ['Read', 'Write', 'Edit']:
             file_path = params.get('file_path', '')
@@ -189,7 +170,7 @@ class MetricsCollector:
                 })
 
         # Check for cd usage (should use subshells)
-        if tool_name in ['Bash', 'mcp__task-manager__bash_docker']:
+        if tool_name == 'Bash':
             command = params.get('command', '')
             if command.strip().startswith('cd ') and not '&&' in command:
                 self.adherence_violations.append({
@@ -291,33 +272,9 @@ class MetricsCollector:
 
     def _detect_browser_operation(self, tool_name: str, params: Dict):
         """
-        Unified browser operation detection for both agent-browser and Playwright MCP.
-
-        Handles:
-        1. Docker mode: agent-browser commands via bash_docker
-        2. Local mode: Playwright MCP tools (mcp__playwright__*)
+        Detect agent-browser operations via Bash commands.
         """
-        # Playwright MCP tools (Local mode)
-        if tool_name.startswith('mcp__playwright'):
-            self.browser_verifications += 1
-
-            # Track verification method for current task (Bug #2 fix)
-            if self.current_task:
-                self.track_verification_method(self.current_task, 'browser')
-
-            # Categorize operation type
-            if 'screenshot' in tool_name.lower() or 'snapshot' in tool_name.lower():
-                self.browser_operations['screenshots'] += 1
-            elif 'navigate' in tool_name.lower() or 'open' in tool_name.lower():
-                self.browser_operations['navigations'] += 1
-            elif 'evaluate' in tool_name.lower():
-                self.browser_operations['evaluations'] += 1
-            elif any(action in tool_name.lower() for action in ['click', 'fill', 'type', 'select']):
-                self.browser_operations['interactions'] += 1
-
-
-        # Agent-browser via bash_docker (Docker mode)
-        elif tool_name == 'mcp__task-manager__bash_docker':
+        if tool_name == 'Bash':
             command = params.get('command', '').lower()
 
             if 'agent-browser' in command:

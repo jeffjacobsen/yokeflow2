@@ -12,7 +12,6 @@ YokeFlow 2.1 adds comprehensive quality system endpoints and project completion 
 
 - **Project Completion Reviews** - AI-powered verification against original specs (5 endpoints)
 - **Intervention Management** - Handle session blockers gracefully (5 endpoints)
-- **Container Management** - Direct Docker container control (4 endpoints)
 - **Enhanced Quality Monitoring** - Deep reviews and statistics (4 endpoints)
 - **Screenshot Access** - Visual verification artifacts (2 endpoints)
 - **Administration Tools** - Cleanup and validation utilities (3 endpoints)
@@ -31,7 +30,6 @@ See [QUALITY_SYSTEM_SUMMARY.md](../QUALITY_SYSTEM_SUMMARY.md) for complete imple
 | View deep reviews | `/api/projects/{id}/deep-reviews` | `GET` |
 | Get review statistics | `/api/projects/{id}/review-stats` | `GET` |
 | List screenshots | `/api/projects/{id}/screenshots` | `GET` |
-| Check container status | `/api/projects/{id}/container/status` | `GET` |
 | Clean orphaned sessions | `/api/admin/cleanup-orphaned-sessions` | `POST` |
 
 ---
@@ -45,16 +43,16 @@ See [QUALITY_SYSTEM_SUMMARY.md](../QUALITY_SYSTEM_SUMMARY.md) for complete imple
 docker-compose up -d
 
 # Start API server
-uvicorn server.api.app:app --host 0.0.0.0 --port 8000 --reload
+uvicorn server.api.app:app --host 0.0.0.0 --port 8010 --reload
 ```
 
-Server runs at: http://localhost:8000
+Server runs at: http://localhost:8010
 
 ### Interactive Documentation
 
-- **Swagger UI**: http://localhost:8000/docs (try endpoints interactively)
-- **ReDoc**: http://localhost:8000/redoc (reference documentation)
-- **Health Check**: http://localhost:8000/api/health
+- **Swagger UI**: http://localhost:8010/docs (try endpoints interactively)
+- **ReDoc**: http://localhost:8010/redoc (reference documentation)
+- **Health Check**: http://localhost:8010/api/health
 
 ---
 
@@ -63,10 +61,9 @@ Server runs at: http://localhost:8000
 ### 1. Create a New Project
 
 ```bash
-curl -X POST http://localhost:8000/api/projects \
+curl -X POST http://localhost:8010/api/projects \
   -F "name=my-todo-app" \
-  -F "spec_file=@app_spec.txt" \
-  -F "sandbox_type=docker"
+  -F "spec_file=@app_spec.txt"
 ```
 
 **Response:**
@@ -81,7 +78,7 @@ curl -X POST http://localhost:8000/api/projects \
 ### 2. Initialize Project (Session 0)
 
 ```bash
-curl -X POST http://localhost:8000/api/projects/550e8400-.../initialize
+curl -X POST http://localhost:8010/api/projects/550e8400-.../initialize
 ```
 
 **Response:**
@@ -98,7 +95,7 @@ This creates the complete roadmap (epics → tasks → tests).
 ### 3. Check Progress
 
 ```bash
-curl http://localhost:8000/api/projects/550e8400-.../progress
+curl http://localhost:8010/api/projects/550e8400-.../progress
 ```
 
 **Response:**
@@ -115,7 +112,7 @@ curl http://localhost:8000/api/projects/550e8400-.../progress
 ### 4. Start Coding Session
 
 ```bash
-curl -X POST http://localhost:8000/api/projects/550e8400-.../coding/start
+curl -X POST http://localhost:8010/api/projects/550e8400-.../coding/start
 ```
 
 **Response:**
@@ -131,7 +128,7 @@ curl -X POST http://localhost:8000/api/projects/550e8400-.../coding/start
 
 ```javascript
 // JavaScript example
-const ws = new WebSocket('ws://localhost:8000/api/ws/550e8400-...');
+const ws = new WebSocket('ws://localhost:8010/api/ws/550e8400-...');
 
 ws.onmessage = (event) => {
   const data = JSON.parse(event.data);
@@ -238,15 +235,6 @@ YokeFlow provides **60+ RESTful endpoints** for complete platform control.
 | `GET` | `/api/projects/{id}/notifications/preferences` | Get notification settings |
 | `POST` | `/api/projects/{id}/notifications/preferences` | Update notification settings |
 
-### Container Management ⭐ NEW v2.1
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/projects/{id}/container/status` | Check Docker container status |
-| `POST` | `/api/projects/{id}/container/start` | Start Docker container |
-| `POST` | `/api/projects/{id}/container/stop` | Stop Docker container |
-| `DELETE` | `/api/projects/{id}/container` | Remove Docker container |
-
 ### Administration ⭐ NEW v2.1
 
 | Method | Endpoint | Description |
@@ -272,7 +260,7 @@ YokeFlow provides **60+ RESTful endpoints** for complete platform control.
 
 **Total: 60+ endpoints** | ⭐ **v2.1 additions** marked above | See detailed examples below
 
-**Interactive Documentation**: http://localhost:8000/docs (Swagger UI with try-it-out functionality)
+**Interactive Documentation**: http://localhost:8010/docs (Swagger UI with try-it-out functionality)
 
 ---
 
@@ -284,7 +272,7 @@ No authentication required when `UI_PASSWORD` is not set:
 
 ```bash
 # Just call the API directly
-curl http://localhost:8000/api/projects
+curl http://localhost:8010/api/projects
 ```
 
 ### Production Mode
@@ -293,7 +281,7 @@ When `UI_PASSWORD` is set, you need a JWT token:
 
 **1. Login:**
 ```bash
-curl -X POST http://localhost:8000/api/auth/login \
+curl -X POST http://localhost:8010/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"password": "your-password"}'
 ```
@@ -308,7 +296,7 @@ curl -X POST http://localhost:8000/api/auth/login \
 
 **2. Use Token:**
 ```bash
-curl http://localhost:8000/api/projects \
+curl http://localhost:8010/api/projects \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
 ```
 
@@ -321,7 +309,7 @@ curl http://localhost:8000/api/projects \
 Subscribe to project updates:
 
 ```javascript
-const ws = new WebSocket('ws://localhost:8000/api/ws/PROJECT_ID');
+const ws = new WebSocket('ws://localhost:8010/api/ws/PROJECT_ID');
 
 ws.onmessage = (event) => {
   const data = JSON.parse(event.data);
@@ -358,7 +346,7 @@ ws.onmessage = (event) => {
 ```python
 import requests
 
-API_URL = "http://localhost:8000"
+API_URL = "http://localhost:8010"
 
 # 1. Create project
 with open('app_spec.txt', 'rb') as f:
@@ -366,8 +354,7 @@ with open('app_spec.txt', 'rb') as f:
         f"{API_URL}/api/projects",
         files={'spec_file': f},
         data={
-            'name': 'automated-project',
-            'sandbox_type': 'docker'
+            'name': 'automated-project'
         }
     )
     project = response.json()
@@ -411,7 +398,7 @@ print("Coding session started")
 ```python
 import requests
 
-API_URL = "http://localhost:8000"
+API_URL = "http://localhost:8010"
 PROJECT_ID = "550e8400-..."
 
 # Get current progress
@@ -433,7 +420,7 @@ import websockets
 import json
 
 async def monitor_project(project_id):
-    uri = f"ws://localhost:8000/api/ws/{project_id}"
+    uri = f"ws://localhost:8010/api/ws/{project_id}"
 
     async with websockets.connect(uri) as websocket:
         while True:
@@ -460,7 +447,7 @@ asyncio.run(monitor_project("550e8400-..."))
 import requests
 import time
 
-API_URL = "http://localhost:8000"
+API_URL = "http://localhost:8010"
 PROJECT_ID = "550e8400-..."
 
 # 1. Check if project is complete
@@ -530,14 +517,14 @@ else:
 The API supports CORS for web applications:
 
 **Default allowed origins:**
-- `http://localhost:3000` (Next.js dev server)
+- `http://localhost:3010` (Next.js dev server)
 - `http://localhost:5173` (Vite dev server)
 
 **To add custom origins:**
 
 Set `CORS_ORIGINS` in `.env`:
 ```bash
-CORS_ORIGINS=http://localhost:3000,https://my-domain.com
+CORS_ORIGINS=http://localhost:3010,https://my-domain.com
 ```
 
 ---
@@ -580,7 +567,7 @@ Currently no rate limiting is implemented. For production deployment, consider a
 
 **Check server is running:**
 ```bash
-curl http://localhost:8000/api/health
+curl http://localhost:8010/api/health
 ```
 
 **Should return:**
@@ -610,7 +597,7 @@ psql $DATABASE_URL -c "SELECT 1;"
 
 **Check project exists:**
 ```bash
-curl http://localhost:8000/api/projects/PROJECT_ID
+curl http://localhost:8010/api/projects/PROJECT_ID
 ```
 
 **Check firewall/proxy settings** - WebSocket needs persistent connection
@@ -626,7 +613,7 @@ Automatically verify projects meet original specifications with AI-powered analy
 #### Get Latest Completion Review
 
 ```bash
-curl http://localhost:8000/api/projects/PROJECT_ID/completion-review
+curl http://localhost:8010/api/projects/PROJECT_ID/completion-review
 ```
 
 **Response:**
@@ -645,13 +632,13 @@ curl http://localhost:8000/api/projects/PROJECT_ID/completion-review
 #### Trigger Completion Review
 
 ```bash
-curl -X POST http://localhost:8000/api/projects/PROJECT_ID/completion-review
+curl -X POST http://localhost:8010/api/projects/PROJECT_ID/completion-review
 ```
 
 #### Get Requirement Breakdown
 
 ```bash
-curl http://localhost:8000/api/completion-reviews/review-123/requirements
+curl http://localhost:8010/api/completion-reviews/review-123/requirements
 ```
 
 **Response:**
@@ -689,7 +676,7 @@ Handle session blockers and interruptions gracefully.
 #### List Active Interventions
 
 ```bash
-curl http://localhost:8000/api/interventions/active
+curl http://localhost:8010/api/interventions/active
 ```
 
 **Response:**
@@ -715,7 +702,7 @@ curl http://localhost:8000/api/interventions/active
 #### Resume from Intervention
 
 ```bash
-curl -X POST http://localhost:8000/api/interventions/int-456/resume \
+curl -X POST http://localhost:8010/api/interventions/int-456/resume \
   -H "Content-Type: application/json" \
   -d '{"resolution_notes": "Fixed authentication tests"}'
 ```
@@ -724,10 +711,10 @@ curl -X POST http://localhost:8000/api/interventions/int-456/resume \
 
 ```bash
 # Get preferences
-curl http://localhost:8000/api/projects/PROJECT_ID/notifications/preferences
+curl http://localhost:8010/api/projects/PROJECT_ID/notifications/preferences
 
 # Update preferences
-curl -X POST http://localhost:8000/api/projects/PROJECT_ID/notifications/preferences \
+curl -X POST http://localhost:8010/api/projects/PROJECT_ID/notifications/preferences \
   -H "Content-Type: application/json" \
   -d '{
     "email_enabled": true,
@@ -737,40 +724,6 @@ curl -X POST http://localhost:8000/api/projects/PROJECT_ID/notifications/prefere
   }'
 ```
 
-### Container Management
-
-Direct control over Docker containers for debugging and management.
-
-#### Check Container Status
-
-```bash
-curl http://localhost:8000/api/projects/PROJECT_ID/container/status
-```
-
-**Response:**
-```json
-{
-  "container_id": "abc123...",
-  "status": "running",
-  "uptime_seconds": 3600,
-  "cpu_usage": "2.5%",
-  "memory_usage": "512MB"
-}
-```
-
-#### Start/Stop Container
-
-```bash
-# Start container
-curl -X POST http://localhost:8000/api/projects/PROJECT_ID/container/start
-
-# Stop container
-curl -X POST http://localhost:8000/api/projects/PROJECT_ID/container/stop
-
-# Remove container
-curl -X DELETE http://localhost:8000/api/projects/PROJECT_ID/container
-```
-
 ### Deep Reviews & Statistics
 
 Enhanced quality monitoring with detailed analytics.
@@ -778,7 +731,7 @@ Enhanced quality monitoring with detailed analytics.
 #### List Deep Reviews
 
 ```bash
-curl http://localhost:8000/api/projects/PROJECT_ID/deep-reviews?limit=10
+curl http://localhost:8010/api/projects/PROJECT_ID/deep-reviews?limit=10
 ```
 
 **Response:**
@@ -806,7 +759,7 @@ curl http://localhost:8000/api/projects/PROJECT_ID/deep-reviews?limit=10
 #### Get Review Statistics
 
 ```bash
-curl http://localhost:8000/api/projects/PROJECT_ID/review-stats
+curl http://localhost:8010/api/projects/PROJECT_ID/review-stats
 ```
 
 **Response:**
@@ -824,7 +777,7 @@ curl http://localhost:8000/api/projects/PROJECT_ID/review-stats
 #### Batch Trigger Reviews
 
 ```bash
-curl -X POST http://localhost:8000/api/projects/PROJECT_ID/trigger-reviews \
+curl -X POST http://localhost:8010/api/projects/PROJECT_ID/trigger-reviews \
   -H "Content-Type: application/json" \
   -d '{
     "review_type": "comprehensive",
@@ -839,7 +792,7 @@ Access visual verification artifacts from browser testing.
 #### List Screenshots
 
 ```bash
-curl http://localhost:8000/api/projects/PROJECT_ID/screenshots
+curl http://localhost:8010/api/projects/PROJECT_ID/screenshots
 ```
 
 **Response:**
@@ -862,7 +815,7 @@ curl http://localhost:8000/api/projects/PROJECT_ID/screenshots
 
 ```bash
 # Download screenshot
-curl http://localhost:8000/api/projects/PROJECT_ID/screenshots/login-page.png \
+curl http://localhost:8010/api/projects/PROJECT_ID/screenshots/login-page.png \
   --output login-page.png
 ```
 
@@ -878,10 +831,10 @@ Retrieve structured logs for a session with pagination and filtering:
 
 ```bash
 # Get latest 100 log entries
-curl "http://localhost:8000/api/sessions/SESSION_ID/logs?offset=0&limit=100"
+curl "http://localhost:8010/api/sessions/SESSION_ID/logs?offset=0&limit=100"
 
 # Filter by log level
-curl "http://localhost:8000/api/sessions/SESSION_ID/logs?level=error"
+curl "http://localhost:8010/api/sessions/SESSION_ID/logs?level=error"
 ```
 
 **Response:**
@@ -905,10 +858,10 @@ curl "http://localhost:8000/api/sessions/SESSION_ID/logs?level=error"
 
 ```bash
 # Pause an active session
-curl -X POST http://localhost:8000/api/sessions/SESSION_ID/pause
+curl -X POST http://localhost:8010/api/sessions/SESSION_ID/pause
 
 # Resume a paused session
-curl -X POST http://localhost:8000/api/sessions/SESSION_ID/resume
+curl -X POST http://localhost:8010/api/sessions/SESSION_ID/resume
 ```
 
 Both return `204 No Content` on success.
@@ -918,7 +871,7 @@ Both return `204 No Content` on success.
 #### Get Task Details
 
 ```bash
-curl http://localhost:8000/api/tasks/42
+curl http://localhost:8010/api/tasks/42
 ```
 
 **Response:**
@@ -935,7 +888,7 @@ curl http://localhost:8000/api/tasks/42
 #### Update Task Status
 
 ```bash
-curl -X PATCH http://localhost:8000/api/tasks/42 \
+curl -X PATCH http://localhost:8010/api/tasks/42 \
   -H "Content-Type: application/json" \
   -d '{"status": "completed"}'
 ```
@@ -943,7 +896,7 @@ curl -X PATCH http://localhost:8000/api/tasks/42 \
 #### Get Epic Progress
 
 ```bash
-curl http://localhost:8000/api/epics/5/progress
+curl http://localhost:8010/api/epics/5/progress
 ```
 
 **Response:**
@@ -965,7 +918,7 @@ curl http://localhost:8000/api/epics/5/progress
 #### Trigger Quality Review
 
 ```bash
-curl -X POST http://localhost:8000/api/sessions/SESSION_ID/quality-review \
+curl -X POST http://localhost:8010/api/sessions/SESSION_ID/quality-review \
   -H "Content-Type: application/json" \
   -d '{"review_type": "comprehensive"}'
 ```
@@ -983,7 +936,7 @@ curl -X POST http://localhost:8000/api/sessions/SESSION_ID/quality-review \
 #### Get Quality Metrics
 
 ```bash
-curl http://localhost:8000/api/projects/PROJECT_ID/quality-metrics
+curl http://localhost:8010/api/projects/PROJECT_ID/quality-metrics
 ```
 
 **Response:**
@@ -1005,7 +958,7 @@ curl http://localhost:8000/api/projects/PROJECT_ID/quality-metrics
 Get component-level health information:
 
 ```bash
-curl http://localhost:8000/health/detailed
+curl http://localhost:8010/health/detailed
 ```
 
 **Response:**
@@ -1057,8 +1010,8 @@ curl http://localhost:8000/health/detailed
 
 ## Need Help?
 
-- **Interactive docs:** http://localhost:8000/docs
-- **API reference:** http://localhost:8000/redoc
+- **Interactive docs:** http://localhost:8010/docs
+- **API reference:** http://localhost:8010/redoc
 - **GitHub issues:** Report bugs or request features
 
 The Swagger UI at `/docs` is the best place to explore and test the API interactively!

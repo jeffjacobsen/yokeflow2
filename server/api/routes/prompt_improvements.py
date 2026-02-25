@@ -33,10 +33,6 @@ class TriggerAnalysisRequest(BaseModel):
         None,
         description="Specific projects to analyze (None = all eligible)"
     )
-    sandbox_type: str = Field(
-        "docker",
-        description="Which prompt to improve: 'docker' or 'local'"
-    )
     last_n_days: int = Field(
         7,
         description="Only analyze sessions from last N days",
@@ -51,7 +47,7 @@ class AnalysisSummary(BaseModel):
     created_at: str
     completed_at: Optional[str]
     status: str
-    sandbox_type: str  # Required: 'docker' or 'local' - determines which prompt file to modify
+    sandbox_type: str = "local"  # Legacy field, always 'local'
     num_projects: int
     sessions_analyzed: int
     quality_impact_estimate: Optional[float]
@@ -67,7 +63,7 @@ class AnalysisDetail(BaseModel):
     created_at: str
     completed_at: Optional[str]
     status: str
-    sandbox_type: str  # Required: 'docker' or 'local' - determines which prompt file to modify
+    sandbox_type: str = "local"  # Legacy field, always 'local'
     projects_analyzed: List[str]
     num_projects: int  # Count of projects_analyzed array
     sessions_analyzed: int
@@ -147,28 +143,22 @@ async def trigger_analysis(request: TriggerAnalysisRequest, background_tasks: Ba
         if not request.project_ids or len(request.project_ids) == 0:
             # Auto-discover first eligible project
             async with db.acquire() as conn:
-                # Get projects with sandbox_type matching request
-                # that have deep reviews with recommendations in the date range
+                # Get projects that have deep reviews with recommendations in the date range
                 query = """
                     SELECT p.id, p.name, COUNT(DISTINCT dr.id) as review_count
                     FROM projects p
                     JOIN sessions s ON s.project_id = p.id
                     JOIN session_deep_reviews dr ON dr.session_id = s.id
-                    WHERE (
-                        (p.metadata::jsonb->'settings'->>'sandbox_type' = $1)
-                        OR (p.metadata::jsonb->'settings' IS NULL AND $1 = 'docker')
-                    )
-                    AND s.created_at >= NOW() - $2::text::interval
+                    WHERE s.created_at >= NOW() - $1::text::interval
                     AND jsonb_array_length(dr.prompt_improvements) > 0
                     GROUP BY p.id, p.name
-                    HAVING COUNT(DISTINCT dr.id) >= $3
+                    HAVING COUNT(DISTINCT dr.id) >= $2
                     ORDER BY review_count DESC, p.created_at DESC
                     LIMIT 1
                 """
 
                 row = await conn.fetchrow(
                     query,
-                    request.sandbox_type,
                     f'{request.last_n_days} days',
                     min_reviews_required
                 )
@@ -214,11 +204,10 @@ async def trigger_analysis(request: TriggerAnalysisRequest, background_tasks: Ba
                     triggered_by,
                     notes
                 )
-                VALUES ($1, $2, 'running', $3, $4, $5, $6)
+                VALUES ($1, $2, 'running', 'local', $3, $4, $5)
                 """,
                 analysis_id,
                 datetime.now(),
-                request.sandbox_type,
                 [project_id],  # Pass as UUID array
                 "manual",
                 f"Analyzing project: {project_name}"

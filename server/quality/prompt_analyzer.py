@@ -243,8 +243,8 @@ class PromptImprovementAnalyzer:
         """
         # Theme keywords for categorization
         theme_keywords = {
-            'browser_verification': ['browser', 'screenshot', 'playwright', 'visual', 'verify', 'ui'],
-            'docker_mode': ['docker', 'bash_docker', 'container', 'sandbox'],
+            'browser_verification': ['browser', 'screenshot', 'agent-browser', 'visual', 'verify', 'ui'],
+            'tool_usage': ['tool', 'bash', 'command', 'wrong tool'],
             'error_handling': ['error', 'recovery', 'debugging', 'fix', 'retry', 'exception'],
             'git_commits': ['commit', 'git', 'message', 'co-author', 'version control'],
             'testing': ['test', 'testing', 'unit test', 'e2e', 'coverage', 'verification'],
@@ -624,7 +624,7 @@ Just return the exact, concise text to use as the replacement."""
         # Use Claude to consolidate
         from server.quality.reviews import create_review_client
 
-        model = os.getenv('DEFAULT_REVIEW_MODEL', 'claude-3-5-sonnet-20241022')
+        model = os.getenv('DEFAULT_REVIEW_MODEL', 'claude-sonnet-4-6')
         client = create_review_client(model=model)
 
         try:
