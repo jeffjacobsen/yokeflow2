@@ -215,7 +215,7 @@ class ApiClient {
     return response.data;
   }
 
-  // Sessions (NEW Phase 1 endpoints)
+  // Sessions
   async initializeProject(projectId: string, initializerModel?: string): Promise<StartSessionResponse> {
     const response = await this.client.post<StartSessionResponse>(
       `/api/projects/${projectId}/initialize`,

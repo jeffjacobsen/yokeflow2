@@ -307,7 +307,7 @@ CREATE INDEX IF NOT EXISTS idx_epic_tests_test_type ON epic_tests(test_type);
 COMMENT ON TABLE epic_tests IS 'Integration test requirements for epics - end-to-end workflow verification';
 
 -- -----------------------------------------------------------------------------
--- Deep Review Results (Phase 2 Review System)
+-- Deep Review Results
 -- -----------------------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS session_deep_reviews (
@@ -342,7 +342,7 @@ CREATE INDEX IF NOT EXISTS idx_deep_reviews_improvements ON session_deep_reviews
 COMMENT ON TABLE session_deep_reviews IS 'Deep review results for coding sessions. Automated or on-demand Claude-powered reviews for prompt improvement analysis.';
 
 -- -----------------------------------------------------------------------------
--- Prompt Improvement System Tables (Phase 4)
+-- Prompt Improvement System Tables
 -- -----------------------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS prompt_improvement_analyses (

@@ -5,7 +5,7 @@ Quality Pattern Detection for YokeFlow Intervention System
 Detects quality degradation patterns during sessions that don't manifest
 as technical blockers but indicate poor quality practices.
 
-This module implements Phase 2 of the Quality Improvement Plan.
+This module implements the Quality Improvement Plan.
 """
 
 import re

@@ -1,7 +1,7 @@
 /**
  * TestHealthDashboard - Display test health aggregates
  *
- * Shows slow, flaky, and currently failing tests across the project.
+ * Shows slow and currently failing tests across the project.
  * Data comes from the /api/projects/{id}/test-health endpoint.
  */
 
@@ -14,7 +14,6 @@ import type { TestHealthResponse, TestWithContext, EpicTestWithContext } from '@
 import {
   AlertTriangle,
   Clock,
-  RefreshCw,
   XCircle,
   CheckCircle,
   Activity,
@@ -82,7 +81,6 @@ export function TestHealthDashboard({ projectId }: TestHealthDashboardProps) {
 
   const { summary } = health;
   const hasSlowTests = health.slow_task_tests.length > 0 || health.slow_epic_tests.length > 0;
-  const hasFlakyTests = health.flaky_task_tests.length > 0 || health.flaky_epic_tests.length > 0;
   const hasFailingTests = health.failed_task_tests.length > 0 || health.failed_epic_tests.length > 0;
 
   const toggleSection = (section: string) => {
@@ -107,11 +105,10 @@ export function TestHealthDashboard({ projectId }: TestHealthDashboardProps) {
           highlight={summary.failed_count > 0}
         />
         <SummaryCard
-          label="Flaky"
-          value={summary.flaky_count}
-          icon={<RefreshCw className="w-5 h-5 text-amber-400" />}
-          color="amber"
-          highlight={summary.flaky_count > 0}
+          label="Healthy"
+          value={summary.healthy_count}
+          icon={<CheckCircle className="w-5 h-5 text-green-400" />}
+          color="green"
         />
         <SummaryCard
           label="Slow"
@@ -123,11 +120,11 @@ export function TestHealthDashboard({ projectId }: TestHealthDashboardProps) {
       </div>
 
       {/* No Issues */}
-      {!hasFailingTests && !hasFlakyTests && !hasSlowTests && (
+      {!hasFailingTests && !hasSlowTests && (
         <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-6 text-center">
           <CheckCircle className="w-8 h-8 text-green-400 mx-auto mb-2" />
           <p className="text-green-400 font-medium">All tests healthy</p>
-          <p className="text-gray-400 text-sm mt-1">No failing, flaky, or slow tests detected</p>
+          <p className="text-gray-400 text-sm mt-1">No failing or slow tests detected</p>
         </div>
       )}
 
@@ -149,35 +146,6 @@ export function TestHealthDashboard({ projectId }: TestHealthDashboardProps) {
           {health.failed_epic_tests.map((test) => (
             <EpicTestRow key={test.id} test={test} metric={
               <span className="text-red-400 text-xs">Failed</span>
-            } />
-          ))}
-        </TestSection>
-      )}
-
-      {/* Flaky Tests */}
-      {hasFlakyTests && (
-        <TestSection
-          title="Flaky Tests"
-          icon={<RefreshCw className="w-4 h-4 text-amber-400" />}
-          count={health.flaky_task_tests.length + health.flaky_epic_tests.length}
-          color="amber"
-          expanded={expandedSection === 'flaky'}
-          onToggle={() => toggleSection('flaky')}
-        >
-          {health.flaky_task_tests.map((test) => (
-            <TaskTestRow key={test.id} test={test} metric={
-              <span className="text-amber-400 text-xs flex items-center gap-1">
-                <RefreshCw className="w-3 h-3" />
-                Flaky
-              </span>
-            } />
-          ))}
-          {health.flaky_epic_tests.map((test) => (
-            <EpicTestRow key={test.id} test={test} metric={
-              <span className="text-amber-400 text-xs flex items-center gap-1">
-                <RefreshCw className="w-3 h-3" />
-                Flaky
-              </span>
             } />
           ))}
         </TestSection>

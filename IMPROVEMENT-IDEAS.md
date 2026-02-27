@@ -48,13 +48,13 @@ The brownfield pipeline — import codebase, analyze, create scoped roadmap, imp
 
 **Goal**: Support backends, APIs, libraries, CLI tools, and data processing applications. Smarter test generation based on task type. Skip browser tests for non-UI code, generate performance tests for critical paths, mock generation for external dependencies.
 
-### Phase 1: Project Type Detection (3-4h)
+### 1: Project Type Detection (3-4h)
 Detect project type from spec or codebase. Support REST/GraphQL/gRPC APIs, Python libraries, npm packages, CLI tools, data pipelines, batch processors.
 
-### Phase 2: Non-UI Testing Strategies (8-10h)
+### 2: Non-UI Testing Strategies (8-10h)
 API endpoint testing, unit test generation for libraries, CLI command testing, integration test generation, performance testing for data pipelines, contract testing for APIs.
 
-### Phase 3: Browser-Independent Verification (4h)
+### 3: Browser-Independent Verification (4h)
 Adapt verification system for non-UI code. HTTP client testing, database operation verification, file I/O verification, service health checks.
 
 ---

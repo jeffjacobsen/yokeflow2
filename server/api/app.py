@@ -2982,7 +2982,7 @@ async def get_screenshot(project_id: str, filename: str):
 
 
 # =============================================================================
-# Quality Check Endpoints (Phase 1 Review System Integration)
+# Quality Check Endpoints (Review System Integration)
 # =============================================================================
 
 # Removed deprecated quality endpoints (session_quality_checks table no longer exists):
@@ -3315,7 +3315,7 @@ async def trigger_bulk_reviews(
 
 
 # =============================================================================
-# Completion Review Endpoints (Phase 7)
+# Completion Review Endpoints
 # =============================================================================
 
 @app.get("/api/projects/{project_id}/completion-review")

@@ -47,7 +47,6 @@ class AnalysisSummary(BaseModel):
     created_at: str
     completed_at: Optional[str]
     status: str
-    sandbox_type: str = "local"  # Legacy field, always 'local'
     num_projects: int
     sessions_analyzed: int
     quality_impact_estimate: Optional[float]
@@ -63,7 +62,6 @@ class AnalysisDetail(BaseModel):
     created_at: str
     completed_at: Optional[str]
     status: str
-    sandbox_type: str = "local"  # Legacy field, always 'local'
     projects_analyzed: List[str]
     num_projects: int  # Count of projects_analyzed array
     sessions_analyzed: int
@@ -199,12 +197,11 @@ async def trigger_analysis(request: TriggerAnalysisRequest, background_tasks: Ba
                     id,
                     created_at,
                     status,
-                    sandbox_type,
                     projects_analyzed,
                     triggered_by,
                     notes
                 )
-                VALUES ($1, $2, 'running', 'local', $3, $4, $5)
+                VALUES ($1, $2, 'running', $3, $4, $5)
                 """,
                 analysis_id,
                 datetime.now(),
@@ -302,7 +299,6 @@ async def list_analyses(
                 created_at=a['created_at'].isoformat() if a.get('created_at') else None,
                 completed_at=a['completed_at'].isoformat() if a.get('completed_at') else None,
                 status=a['status'],
-                sandbox_type=a['sandbox_type'],  # Required field, no default
                 num_projects=a.get('num_projects', 0),
                 sessions_analyzed=a.get('sessions_analyzed', 0),
                 quality_impact_estimate=float(a['quality_impact_estimate']) if a.get('quality_impact_estimate') else None,
@@ -684,7 +680,6 @@ async def get_raw_analysis_report(analysis_id: str):
                     created_at,
                     completed_at,
                     status,
-                    sandbox_type,
                     projects_analyzed,
                     sessions_analyzed,
                     patterns_identified,
@@ -747,7 +742,6 @@ async def get_raw_analysis_report(analysis_id: str):
                     "created_at": analysis['created_at'].isoformat() if analysis['created_at'] else None,
                     "completed_at": analysis['completed_at'].isoformat() if analysis['completed_at'] else None,
                     "status": analysis['status'],
-                    "sandbox_type": analysis['sandbox_type'],
                     "projects_analyzed": [str(p) for p in analysis['projects_analyzed']] if analysis['projects_analyzed'] else [],
                     "sessions_analyzed": analysis['sessions_analyzed'],
                     "triggered_by": analysis['triggered_by'],
@@ -827,7 +821,6 @@ async def get_analysis(analysis_id: str):
             created_at=analysis['created_at'].isoformat(),
             completed_at=analysis['completed_at'].isoformat() if analysis.get('completed_at') else None,
             status=analysis['status'],
-            sandbox_type=analysis['sandbox_type'],  # Required field - 'docker' or 'local'
             projects_analyzed=projects_analyzed,
             num_projects=len(projects_analyzed),  # Count of projects in the array
             sessions_analyzed=analysis.get('sessions_analyzed', 0),

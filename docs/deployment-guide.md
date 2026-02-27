@@ -13,7 +13,7 @@
 > - 7 new database migrations (017-020+)
 > - 60+ API endpoints (was 17)
 > - 20+ MCP tools (was 15)
-> - Enhanced quality system (8 phases)
+> - Enhanced quality system
 > - Project completion review system
 > - Epic re-testing infrastructure
 >
@@ -30,7 +30,7 @@
 > **v2.0.0 Deployment Status (Last Verified: December 30, 2025):**
 > - ✅ Deployment steps verified and working on Digital Ocean
 > - ✅ All services start successfully (PostgreSQL, API, Web UI)
-> - ✅ Database initialization works (manual step required - see Phase 5)
+> - ✅ Database initialization works (manual step required - see Step 5)
 > - ✅ Nginx reverse proxy configuration correct
 > - ✅ Docker container management operational
 > - ✅ Project initialization confirmed working (Session 0 starts)
@@ -38,7 +38,7 @@
 >
 > **v2.0.0 Known Issues (Resolved):**
 > - ✅ Database schema auto-initialization may fail silently on first run
->   - **Solution:** Manually run schema.sql as documented in Phase 5
+>   - **Solution:** Manually run schema.sql as documented in Step 5
 >
 > **v2.0.0 Testing Needed:**
 > - Complete coding sessions (Sessions 1+) with real applications
@@ -55,16 +55,16 @@
 
 **⚠️ These features have NOT been tested in production deployment:**
 
-### Quality System (8 Phases)
-- **Phase 0**: Database cleanup - Removed 34 unused objects
-- **Phase 1**: Test execution tracking - Error messages, execution time, retry counts
-- **Phase 2**: Epic test failure tracking - 22-field history, flaky test detection
-- **Phase 3**: Epic test blocking - Strict/autonomous modes
-- **Phase 4.1**: Test viewer UI - Epic/task tests visible
-- **Phase 5**: Epic re-testing - Smart selection, regression detection, stability scoring
-- **Phase 6**: Enhanced review triggers - 7 quality-based conditions
-- **Phase 7**: Project completion review - Spec parser, requirement matcher, Claude review
-- **Phase 8**: Prompt improvement aggregation (60% complete)
+### Quality System
+- Database cleanup - Removed 34 unused objects
+- Test execution tracking - Error messages, execution time, retry counts
+- Epic test failure tracking - 22-field history, flaky test detection
+- Epic test blocking - Strict/autonomous modes
+- Test viewer UI - Epic/task tests visible
+- Epic re-testing - Smart selection, regression detection, stability scoring
+- Enhanced review triggers - 7 quality-based conditions
+- Project completion review - Spec parser, requirement matcher, Claude review
+- Prompt improvement aggregation (60% complete)
 
 ### Database Changes
 - 7 new migrations (017-020+)
@@ -200,10 +200,10 @@ doctl auth init
 The deployment server (Digital Ocean Droplet) requires:
 
 - **Operating System:** Ubuntu 22.04 LTS (recommended) or Ubuntu 20.04 LTS
-- **Node.js:** Version 20 LTS or newer (installed via NVM in Phase 2)
+- **Node.js:** Version 20 LTS or newer (installed via NVM in Step 2)
 - **Docker:** Pre-installed (recommended: use "Docker on Ubuntu 22.04" from Digital Ocean Marketplace)
 - **Python:** Version 3.9+ (usually pre-installed on Ubuntu 22.04)
-- **PostgreSQL Client:** For database verification (installed in Phase 2)
+- **PostgreSQL Client:** For database verification (installed in Step 2)
 
 **Important Notes:**
 - Node.js 20+ is **required** to build the MCP task manager and Next.js web UI
@@ -265,7 +265,7 @@ The deployment server (Digital Ocean Droplet) requires:
 > 5. Verify all 60+ API endpoints are accessible
 > 6. Consider increasing Droplet size if needed (16GB RAM recommended for v2.1)
 
-### Phase 1: Create Droplet
+### Step 1: Create Droplet
 
 ```bash
 # Create Droplet with Docker pre-installed
@@ -285,7 +285,7 @@ doctl compute droplet get yokeflow --format PublicIPv4 --no-header
 - **Region:** Choose closest to users (nyc1, sfo3, lon1, etc.)
 - **Cost:** $48/month
 
-### Phase 2: Initial Server Setup
+### Step 2: Initial Server Setup
 
 ```bash
 # SSH into Droplet
@@ -322,7 +322,7 @@ git clone https://github.com/yourusername/YokeFlow.git
 cd YokeFlow
 ```
 
-### Phase 3: Configure Environment
+### Step 3: Configure Environment
 
 #### 3.1: Create YokeFlow Configuration
 
@@ -400,7 +400,7 @@ SPACES_BUCKET=autonomous-coding-backups
 SPACES_REGION=nyc3
 ```
 
-### Phase 4: Build and Start Services
+### Step 4: Build and Start Services
 
 ```bash
 # Build MCP task manager
@@ -432,7 +432,7 @@ NAME                              STATUS
 yokeflow_postgres        Up 30 seconds (healthy)
 ```
 
-### Phase 5: Initialize Database
+### Step 5: Initialize Database
 
 The database schema is automatically initialized **on first run** via the volume mount in `docker-compose.yml`:
 
@@ -484,9 +484,9 @@ docker exec yokeflow_postgres \
 docker compose ps
 ```
 
-### Phase 5.5: Configure Firewall
+### Step 5.5: Configure Firewall
 
-**IMPORTANT:** This must be done BEFORE setting up SSL certificates in Phase 6.
+**IMPORTANT:** This must be done BEFORE setting up SSL certificates in Step 6.
 The Docker image blocks ports 80 and 443 by default, which will cause certbot to fail.
 
 ```bash
@@ -533,7 +533,7 @@ To                         Action      From
 
 **Security Note:** The "Docker on Ubuntu 22.04" Marketplace image opens ports 2375 and 2376 by default. These are Docker daemon API ports that allow remote control of Docker. If exposed to the internet, attackers can run arbitrary containers, access secrets, and compromise your server. We explicitly block them above.
 
-### Phase 6: Setup Nginx Reverse Proxy
+### Step 6: Setup Nginx Reverse Proxy
 
 ```bash
 # Install Nginx
@@ -623,9 +623,9 @@ systemctl restart nginx
 systemctl enable nginx
 ```
 
-**Important:** The application services must be running before you can obtain an SSL certificate. Continue to Phase 7 first.
+**Important:** The application services must be running before you can obtain an SSL certificate. Continue to Step 7 first.
 
-### Phase 7: Start Application Services
+### Step 7: Start Application Services
 
 Create production Docker Compose configuration:
 
@@ -822,7 +822,7 @@ curl http://localhost:3010
 
 ---
 
-### Phase 8: Setup SSL with Let's Encrypt
+### Step 8: Setup SSL with Let's Encrypt
 
 Now that your application is running, obtain an SSL certificate:
 
@@ -1573,7 +1573,7 @@ curl -sSL https://repos.insights.digitalocean.com/install.sh | bash
 
 ## Scaling Strategies
 
-### Phase 1: Single Droplet (0-50 users)
+### Stage 1: Single Droplet (0-50 users)
 
 **Current setup is sufficient:**
 - 8GB RAM Droplet
@@ -1587,7 +1587,7 @@ curl -sSL https://repos.insights.digitalocean.com/install.sh | bash
 
 ---
 
-### Phase 2: Vertical Scaling (50-200 users)
+### Stage 2: Vertical Scaling (50-200 users)
 
 **Upgrade Droplet:**
 ```bash
@@ -1618,7 +1618,7 @@ doctl databases create autonomous-coding-db \
 
 ---
 
-### Phase 3: Horizontal Scaling (200-1000 users)
+### Stage 3: Horizontal Scaling (200-1000 users)
 
 **Add Load Balancer:**
 
@@ -1653,7 +1653,7 @@ Internet → Load Balancer (HTTPS)
 
 ---
 
-### Phase 4: Kubernetes (1000+ users)
+### Stage 4: Kubernetes (1000+ users)
 
 **Migrate to Digital Ocean Kubernetes (DOKS):**
 

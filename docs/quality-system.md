@@ -11,7 +11,7 @@ YokeFlow's quality system provides comprehensive session monitoring, automatic q
 
 ## Current State
 
-### ✅ Working Features
+### Working Features
 
 1. **Real-time Metrics Collection (MetricsCollector v3.0)**
    - Tool usage tracking with categorization
@@ -39,26 +39,26 @@ YokeFlow's quality system provides comprehensive session monitoring, automatic q
    - Stored in `sessions.metrics` JSONB column
    - Instant retrieval without log parsing
 
-### 🚧 Partially Implemented
+### Partially Implemented
 
 1. **Test Execution Tracking**
    - Basic pass/fail recorded but no error details
    - No retry tracking or execution time recording
 
-### ✅ Recently Completed (February 2026)
+### Recently Completed (February 2026)
 
-**Phase 1: Test Execution Tracking** (January 31, 2026)
+**Test Execution Tracking** (January 31, 2026)
 - Both `task_tests` and `epic_tests` use `passes` (boolean) for consistent pass/fail tracking
 - `execution_time_ms` for performance monitoring
 - MCP tools: `update_task_test_result` and `update_epic_test_result`
 
-**Phase 4.1: Test Viewer UI** (February 2, 2026)
+**Test Viewer UI** (February 2, 2026)
 - Epic and task tests visible with requirements in Web UI
 - Show pass/fail status with verification notes
 - Fixed database queries for requirements-based testing
 - Tested and verified with browser automation
 
-**Phase 6: Enhanced Review Triggers** (February 2, 2026)
+**Enhanced Review Triggers** (February 2, 2026)
 - Removed periodic 5-session interval trigger
 - Added 7 quality-based trigger conditions:
   1. Low quality score (< 7/10)
@@ -69,7 +69,7 @@ YokeFlow's quality system provides comprehensive session monitoring, automatic q
   6. Low verification rate (< 50% of tasks verified)
   7. Repeated errors (same error 3+ times)
 
-**Phase 7: Project Completion Review** (February 2, 2026 - ⚠️ **Disabled**)
+**Project Completion Review** (February 2, 2026 - **Disabled**)
 - **Status**: Implemented but disabled (see YOKEFLOW_FUTURE_PLAN.md for enhancement plans)
 - **Issue**: Compares spec to epics/tasks/tests (the *plan*), not the actual working *implementation*
 - **Better Use**: Post-initialization plan review rather than post-completion verification
@@ -82,24 +82,24 @@ YokeFlow's quality system provides comprehensive session monitoring, automatic q
 - Overall score (1-100), coverage percentage, and recommendation (complete/needs_work/failed)
 - **Future**: Move to post-Session 0 for plan approval OR enhance to verify actual implementation
 
-**Phase 8 (Partial): Prompt Improvement Aggregation** (60% complete)
-- Steps 8.1-8.2 complete: recommendation extraction and proposal generation
+**Prompt Improvement Aggregation** (60% complete)
+- Steps 1-2 complete: recommendation extraction and proposal generation
 - Aggregates common recommendations by theme (8 themes)
 - Calculates confidence scores based on evidence
 - Web UI dashboard for viewing and managing proposals
-- Step 8.3 deferred: Prompt versioning and A/B testing
+- Deferred: Prompt versioning and A/B testing
 
-### ⚠️ Deferred to Future
+### Deferred to Future
 
 1. **Test Coverage Editing** - UI shows tests but can't edit (see YOKEFLOW_FUTURE_PLAN.md)
 2. **Test Failure Dashboards** - Backend tracking complete, UI visualization deferred
 3. **Checkpoint Integration** - Ready (checkpoint.py exists) but broader than quality scope
 4. **Notification Integration** - Infrastructure ready (notifications.py) but enhancement only
-5. **Prompt Versioning & A/B Testing** - Phase 8.3 (4-7 hours, deferred)
+5. **Prompt Versioning & A/B Testing** - (4-7 hours, deferred)
 
 ## Architecture
 
-### Phase 1: Real-time Collection (Every Session)
+### Real-time Collection (Every Session)
 
 ```python
 # MetricsCollector tracks everything during session
@@ -114,7 +114,7 @@ class MetricsCollector:
     - session_progression: Hourly performance trends
 ```
 
-### Phase 2: Quality Analysis
+### Quality Analysis
 
 ```python
 # At session end, metrics are stored in database
@@ -141,7 +141,7 @@ class MetricsCollector:
 }
 ```
 
-### Phase 3: Deep Reviews (Selective)
+### Deep Reviews (Selective)
 
 When triggered, the review agent receives comprehensive context:
 
@@ -183,16 +183,16 @@ epic_tests                    -- Epic-level test requirements
 -- Quality tables
 session_deep_reviews          -- AI review results
 
--- Completion review tables (Phase 7)
+-- Completion review tables
 project_completion_reviews   -- Project completion verification
 completion_requirements      -- Individual requirement tracking
 
--- Prompt improvement tables (Phase 8)
+-- Prompt improvement tables
 prompt_improvement_analyses  -- Extracted recommendations
 prompt_proposals             -- Consolidated improvement proposals
 ```
 
-### Database Cleanup (Phase 0 - January 31, 2026)
+### Database Cleanup (January 31, 2026)
 
 **Removed 34 database objects** (16 tables + 18 views):
 - Unused verification tables (duplicates/unused)
@@ -254,8 +254,8 @@ def calculate_quality_score(metrics: Dict) -> int:
 ### Testing Tools
 - `get_task_tests` - Returns test requirements for a task
 - `get_epic_tests` - Returns test requirements for an epic
-- `update_test_result` - Updates test with pass/fail, verification notes, error details (Phase 1)
-- `update_epic_test_result` - Updates epic test results, records failures automatically (Phase 2)
+- `update_test_result` - Updates test with pass/fail, verification notes, error details
+- `update_epic_test_result` - Updates epic test results, records failures automatically
 
 ### Quality Tools (Internal)
 - `task_status` - Includes quality metrics in response
@@ -290,7 +290,7 @@ auto_review_enabled: boolean
 - `GET /api/sessions/{id}/reviews` - Get review history
 - `GET /api/projects/{id}/quality-trends` - Quality over time
 
-### Completion Reviews (Phase 7)
+### Completion Reviews
 - `GET /api/projects/{id}/completion-review` - Get latest completion review
 - `POST /api/projects/{id}/completion-review` - Manually trigger completion review
 - `GET /api/completion-reviews` - List all reviews with filters
@@ -308,14 +308,14 @@ See [YOKEFLOW_FUTURE_PLAN.md](../YOKEFLOW_FUTURE_PLAN.md) for planned enhancemen
 4. **Test Editor**: Edit test requirements and coverage analysis display
 5. **Completion Review Enhancements**: Continuous tracking, spec evolution, AI-powered rework
 
-**Phase 7 Future Enhancements**:
-1. **Phase 7.1**: Continuous requirement tracking during development (8-10h)
-2. **Phase 7.2**: Spec evolution detection and version control (6-8h)
-3. **Phase 7.3**: AI-powered rework task generation (10-12h)
-4. **Phase 7.4**: Multi-spec support for versioned requirements (4-6h)
-5. **Phase 7.5**: Machine learning improvements for matching accuracy (15-20h)
+**Completion Review Future Enhancements**:
+1. Continuous requirement tracking during development (8-10h)
+2. Spec evolution detection and version control (6-8h)
+3. AI-powered rework task generation (10-12h)
+4. Multi-spec support for versioned requirements (4-6h)
+5. Machine learning improvements for matching accuracy (15-20h)
 
-**Phase 8.3**: Prompt versioning and A/B testing (4-7h, deferred)
+**Prompt Versioning & A/B Testing**: (4-7h, deferred)
 
 ## Troubleshooting
 

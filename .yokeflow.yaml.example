@@ -27,7 +27,7 @@ models:
   # Sonnet provides good analysis at lower cost
   review: claude-sonnet-4-6
 
-  # Model for prompt improvement analysis (Phase 4 quality system)
+  # Model for prompt improvement analysis
   # Opus is recommended for better reasoning and comprehensive improvements
   # This is a critical task that benefits from the most capable model
   prompt_improvement: claude-opus-4-6
@@ -75,8 +75,8 @@ review:
   # Higher values (10-15) provide more robust patterns but require more sessions
   min_reviews_for_analysis: 3  # Default: 3
 
-# Epic Testing Configuration (Phase 3 - February 2026)
-# -----------------------------------------------------
+# Epic Testing Configuration
+# --------------------------
 # Control how epic tests are handled when they fail
 epic_testing:
   # Testing mode: "strict" or "autonomous"
@@ -102,8 +102,8 @@ epic_testing:
   # Strict mode: Send notification when blocked
   strict_notify_on_block: true
 
-# Epic Re-testing Configuration (Phase 5 - February 2026)
-# ---------------------------------------------------------
+# Epic Re-testing Configuration
+# ------------------------------
 # Periodically re-test completed epics to catch regressions
 epic_retesting:
   # Enable/disable epic re-testing system
@@ -133,12 +133,9 @@ epic_retesting:
   # If a previously passing epic test fails, pause for intervention
   pause_on_regression: false
 
-  # Create rework tasks for failed re-tests
-  # Automatically creates tasks to fix regressions
-  auto_create_rework_tasks: true
 
-# Testing Configuration (Phase 2 - January 2026)
-# ------------------------------------------------
+# Testing Configuration
+# ---------------------
 # Tests are created during initialization with executable test_code
 # and run by the coding agent using run_task_tests before marking tasks complete
 #
@@ -169,7 +166,7 @@ spec_analysis:
 #    Status: Database tables exist, but system is disabled
 #
 # 2. Verification System - Would auto-generate tests
-#    Status: Replaced by Phase 2 test execution (tests created during init)
+#    Status: Replaced by test execution (tests created during init)
 #
 # 3. Epic Validation - Would run integration tests across tasks
 #    Status: Database support exists, but not yet integrated

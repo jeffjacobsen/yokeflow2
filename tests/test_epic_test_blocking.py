@@ -1,5 +1,5 @@
 """
-Test suite for Epic Test Blocking (Phase 3 Step 3.3).
+Test suite for Epic Test Blocking.
 
 Tests the orchestrator's ability to detect and handle epic test failures:
 - Epic test block error detection

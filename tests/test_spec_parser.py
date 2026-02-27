@@ -1,5 +1,5 @@
 """
-Tests for Specification Parser (Phase 7)
+Tests for Specification Parser
 Created: February 2, 2026
 """
 

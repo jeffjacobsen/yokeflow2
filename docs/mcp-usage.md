@@ -8,7 +8,7 @@ YokeFlow uses MCP (Model Context Protocol) for all task management operations. T
 
 YokeFlow 2.1 adds quality system MCP tools:
 
-- **Test Execution Tracking** (Phase 1-2): `update_task_test_result`, `update_epic_test_result` - Track error messages, execution time, retry counts
+- **Test Execution Tracking**: `update_task_test_result`, `update_epic_test_result` - Track error messages, execution time, retry counts
 
 See [QUALITY_SYSTEM_SUMMARY.md](../QUALITY_SYSTEM_SUMMARY.md) for implementation details.
 
@@ -59,8 +59,8 @@ All tools are prefixed with `mcp__task-manager__`:
 - `update_task_status` - Mark task complete/incomplete
 - `start_task` - Mark task as started
 - `update_test_result` - Mark test pass/fail (legacy)
-- `update_task_test_result` - Mark task test pass/fail with error details ⭐ NEW v2.1
-- `update_epic_test_result` - Mark epic test pass/fail with error details ⭐ NEW v2.1
+- `update_task_test_result` - Mark task test pass/fail with error details (v2.1)
+- `update_epic_test_result` - Mark epic test pass/fail with error details (v2.1)
 
 ### Create Tools
 - `create_epic` - Create new epic
@@ -74,7 +74,7 @@ All tools are prefixed with `mcp__task-manager__`:
 
 ## v2.1 New Tools
 
-### Test Execution Tracking (Phase 1-2)
+### Test Execution Tracking
 
 Enhanced test result tracking with error details, execution time, and retry counts.
 
@@ -119,18 +119,18 @@ mcp__task-manager__update_epic_test_result({
 ## Why MCP?
 
 **MCP (Model Context Protocol) provides:**
-- ✅ Structured, type-safe interface
-- ✅ Proper parameter validation
-- ✅ Better error handling
-- ✅ No shell escaping issues
-- ✅ Easier to extend
-- ✅ JSON-based communication
+- Structured, type-safe interface
+- Proper parameter validation
+- Better error handling
+- No shell escaping issues
+- Easier to extend
+- JSON-based communication
 
 **vs. Shell scripts:**
-- ❌ String parsing fragile
-- ❌ Hard to validate inputs
-- ❌ Escaping/quoting issues
-- ❌ No type safety
+- String parsing fragile
+- Hard to validate inputs
+- Escaping/quoting issues
+- No type safety
 
 ---
 

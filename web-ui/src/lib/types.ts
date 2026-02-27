@@ -212,7 +212,7 @@ export interface WebSocketMessage {
   status?: SessionStatus;
   error?: string;
   message?: string;  // For api_key_warning and other text messages
-  // NEW Phase 1.3 fields
+  // Additional event fields
   session?: Session;  // For session_started event
   session_number?: number;  // For assistant_message, tool_use, and deep review events
   message_number?: number;  // For assistant_message event
@@ -557,12 +557,11 @@ export interface Screenshot {
 }
 
 /**
- * Test health response - aggregated slow/flaky/failed test data
+ * Test health response - aggregated slow/failed test data
  */
 export interface TestHealthSummary {
   total_tests: number;
   slow_count: number;
-  flaky_count: number;
   failed_count: number;
   healthy_count: number;
 }
@@ -578,10 +577,8 @@ export interface EpicTestWithContext extends EpicTest {
 
 export interface TestHealthResponse {
   slow_task_tests: TestWithContext[];
-  flaky_task_tests: TestWithContext[];
   failed_task_tests: TestWithContext[];
   slow_epic_tests: EpicTestWithContext[];
-  flaky_epic_tests: EpicTestWithContext[];
   failed_epic_tests: EpicTestWithContext[];
   summary: TestHealthSummary;
 }

@@ -12,7 +12,7 @@ consolidated, evidence-backed prompt improvement proposals.
 4. Calculate evidence metrics (frequency, sessions, quality)
 5. Generate prioritized proposals with confidence scores
 
-**Status:** Phase 2 of Review Prompt Refactoring
+**Status:** Review Prompt Refactoring
 **Created:** December 25, 2025
 """
 
@@ -63,26 +63,16 @@ class PromptImprovementAnalyzer:
         """
         logger.info(f"Starting prompt improvement analysis for project {project_id}")
 
-        # Get project info to determine sandbox_type
+        # Get project info
         project = await self.db.get_project(project_id)
         if not project:
             raise ValueError(f"Project {project_id} not found")
-
-        # Extract sandbox_type from metadata
-        metadata = project.get('metadata', {})
-        if isinstance(metadata, str):
-            import json
-            metadata = json.loads(metadata)
-
-        # Get sandbox_type - default to 'docker' if not specified
-        sandbox_type = metadata.get('settings', {}).get('sandbox_type', 'docker')
 
         # Create analysis record if storing in DB (or use provided ID)
         if store_in_db and not analysis_id:
             # Create new analysis record
             analysis_id = await self._create_analysis_record(
                 project_ids=[project_id],
-                sandbox_type=sandbox_type,
                 triggered_by=triggered_by
             )
         # else: use the pre-created analysis_id from background task
@@ -153,14 +143,12 @@ class PromptImprovementAnalyzer:
             # Store themes for access in consolidation
             self._current_themes = themes
             proposals_consolidated = await self._consolidate_proposals_with_ai(
-                proposals,
-                sandbox_type
+                proposals
             )
 
             # 6. Store in database (always store)
             await self._store_analysis_results(
                 analysis_id,
-                sandbox_type,
                 parsed_reviews,
                 themes,
                 proposals_consolidated
@@ -502,7 +490,6 @@ class PromptImprovementAnalyzer:
     async def _create_analysis_record(
         self,
         project_ids: List[UUID],
-        sandbox_type: str,
         triggered_by: str = "manual"
     ) -> UUID:
         """Create initial analysis record in database."""
@@ -511,15 +498,13 @@ class PromptImprovementAnalyzer:
                 """
                 INSERT INTO prompt_improvement_analyses (
                     projects_analyzed,
-                    sandbox_type,
                     triggered_by,
                     status
                 )
-                VALUES ($1, $2, $3, 'running')
+                VALUES ($1, $2, 'running')
                 RETURNING id
                 """,
                 project_ids,
-                sandbox_type,
                 triggered_by
             )
             return row['id']
@@ -542,8 +527,7 @@ class PromptImprovementAnalyzer:
 
     async def _consolidate_proposals_with_ai(
         self,
-        proposals: List[Dict[str, Any]],
-        sandbox_type: str
+        proposals: List[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
         """
         For proposals with multiple recommendations, use AI to consolidate them.
@@ -662,7 +646,6 @@ Just return the exact, concise text to use as the replacement."""
     async def _store_analysis_results(
         self,
         analysis_id: UUID,
-        sandbox_type: str,
         parsed_reviews: List[Dict[str, Any]],
         themes: Dict[str, Dict[str, Any]],
         proposals: List[Dict[str, Any]]
@@ -687,8 +670,7 @@ Just return the exact, concise text to use as the replacement."""
                 analysis_id
             )
 
-            # Determine correct prompt file based on sandbox_type
-            prompt_file = f'coding_prompt_{sandbox_type}.md'
+            prompt_file = 'coding_prompt.md'
 
             # Store each proposal
             for proposal in proposals:

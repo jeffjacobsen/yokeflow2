@@ -875,7 +875,7 @@ export class TaskDatabase {
   }
 
   // =========================================================================
-  // Epic Re-testing Methods (Phase 5 - Quality System)
+  // Epic Re-testing Methods
   // =========================================================================
 
   async close(): Promise<void> {

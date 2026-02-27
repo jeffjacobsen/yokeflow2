@@ -1,6 +1,6 @@
 """
 Specification Parser for Project Completion Review
-Phase 7: Project Completion Review
+Project Completion Review
 Created: February 2, 2026
 
 Parses app_spec.txt files to extract structured requirements for comparison

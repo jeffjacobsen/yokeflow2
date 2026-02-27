@@ -1,5 +1,5 @@
 """
-Review Client - Automated Deep Session Analysis (Phase 2)
+Review Client - Automated Deep Session Analysis
 ==========================================================
 
 YokeFlow's Claude-powered session review system that runs automatically to
@@ -105,7 +105,7 @@ async def run_deep_review(
     """
     Run deep review on a completed session using Claude.
 
-    This is the main entry point for automated deep reviews (Phase 2).
+    This is the main entry point for automated deep reviews.
 
     Steps:
     1. Load session logs (JSONL + TXT)

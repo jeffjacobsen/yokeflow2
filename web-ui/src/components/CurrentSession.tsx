@@ -19,7 +19,7 @@ interface CurrentSessionProps {
   isStoppingAfterCurrent?: boolean;
   isRefreshingSessions?: boolean;
   maxIterations?: number | null;
-  // NEW Phase 2.2: Real-time session feedback
+  // Real-time session feedback
   toolCount?: number | null;
   assistantMessages?: string[];
   // Project initialization status
@@ -330,7 +330,7 @@ export function CurrentSession({
             )}
           </div>
 
-          {/* Real-time Session Feedback (Phase 2.2) */}
+          {/* Real-time Session Feedback */}
           {session.status === 'running' && (
             <div className="mt-4 space-y-3">
               {/* Tool Use Counter */}

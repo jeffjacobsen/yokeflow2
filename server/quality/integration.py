@@ -52,7 +52,7 @@ class QualityIntegration:
         session_quality: Optional[int]
     ) -> None:
         """
-        Trigger deep review if conditions are met (Phase 2 Review System).
+        Trigger deep review if conditions are met.
 
         Deep reviews are triggered when the needs_deep_review flag is set in session metrics.
         The flag is calculated by MetricsCollector during session finalization based on:
@@ -89,7 +89,7 @@ class QualityIntegration:
         project_path: Path
     ) -> None:
         """
-        Run deep review in background (Phase 2 Review System).
+        Run deep review in background.
 
         This is executed as a background task so it doesn't block the main session flow.
         Even if the deep review takes 30-60 seconds, the session can continue or complete.

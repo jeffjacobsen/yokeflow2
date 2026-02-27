@@ -18,7 +18,7 @@ This MCP server provides structured task management capabilities through a **Pos
 
 ## What's New in v2.1
 
-**Test Execution Tracking** (Phase 1-2):
+**Test Execution Tracking**:
 - Enhanced test result recording with error messages
 - Execution time tracking for performance analysis
 - Automatic retry count incrementation
@@ -384,7 +384,7 @@ mcp__task-manager__update_task_status(task_id=42, completed=True)
 - [MCP Protocol Specification](https://spec.modelcontextprotocol.io/) - Official MCP docs
 
 ### Quality System (v2.1)
-- [QUALITY_SYSTEM_SUMMARY.md](../QUALITY_SYSTEM_SUMMARY.md) - Phase-by-phase implementation summary
+- [QUALITY_SYSTEM_SUMMARY.md](../QUALITY_SYSTEM_SUMMARY.md) - Implementation summary
 - [docs/quality-system.md](../docs/quality-system.md) - Complete quality system documentation
 - [docs/configuration.md](../docs/configuration.md) - Epic testing and re-testing configuration
 

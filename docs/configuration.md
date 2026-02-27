@@ -108,7 +108,7 @@ review:
 
 See [docs/quality-system.md](quality-system.md) for complete quality system documentation.
 
-### Epic Testing (v2.1 - Phase 3)
+### Epic Testing (v2.1)
 
 Control how epic tests are handled when they fail:
 
@@ -144,7 +144,7 @@ epic_testing:
 - Critical epics block immediately even in autonomous mode
 - Customize based on your project's priorities
 
-### Epic Re-testing (v2.1 - Phase 5)
+### Epic Re-testing (v2.1)
 
 Periodically re-test completed epics to catch regressions:
 
@@ -171,8 +171,6 @@ epic_retesting:
   # Auto-pause session on critical regression
   pause_on_regression: false
 
-  # Create rework tasks for failed re-tests
-  auto_create_rework_tasks: true
 ```
 
 **Strategy:**
@@ -186,11 +184,11 @@ epic_retesting:
 - Stability scoring (0.00-1.00 scale) for reliability tracking
 - Automatic regression detection comparing new vs previous results
 
-See [QUALITY_SYSTEM_SUMMARY.md](../QUALITY_SYSTEM_SUMMARY.md) Phase 5 for implementation details.
+See [QUALITY_SYSTEM_SUMMARY.md](../QUALITY_SYSTEM_SUMMARY.md) for implementation details.
 
 ### Verification (v2.0+)
 
-**Note**: As of v2.1 (Phase 2), tests are created during initialization with executable `test_code` and run by the coding agent using MCP's `run_task_tests` before marking tasks complete. The configuration below represents future extensibility options.
+**Note**: As of v2.1, tests are created during initialization with executable `test_code` and run by the coding agent using MCP's `run_task_tests` before marking tasks complete. The configuration below represents future extensibility options.
 
 Current behavior:
 - Tests created during Session 0 (initialization)
@@ -212,7 +210,7 @@ testing:
 - Retry count incremented automatically on failures
 - Performance indexes for detecting slow/flaky tests
 
-See [docs/quality-system.md](quality-system.md) for Phase 1-2 details.
+See [docs/quality-system.md](quality-system.md) for details.
 
 ### Project
 
@@ -327,7 +325,6 @@ epic_retesting:
   trigger_frequency: 2
   foundation_retest_days: 7
   max_retests_per_trigger: 2
-  auto_create_rework_tasks: true
 ```
 
 This provides automated quality checks, regression detection, and intelligent test blocking.
@@ -364,7 +361,7 @@ project:
 review:
   min_reviews_for_analysis: 5
 
-# Epic Testing Configuration (Phase 3)
+# Epic Testing Configuration
 epic_testing:
   mode: autonomous
   critical_epics:
@@ -377,7 +374,7 @@ epic_testing:
   auto_create_fix_tasks: true
   strict_notify_on_block: true
 
-# Epic Re-testing Configuration (Phase 5)
+# Epic Re-testing Configuration
 epic_retesting:
   enabled: true
   trigger_frequency: 2
@@ -386,17 +383,17 @@ epic_retesting:
   prioritize_foundation: true
   prioritize_dependents: true
   pause_on_regression: false
-  auto_create_rework_tasks: true
+
 
 ```
 
 This configuration enables:
-- ✅ Opus for planning, Sonnet for implementation
-- ✅ Intelligent epic test blocking (autonomous mode)
-- ✅ Regression detection every 2 epics
-- ✅ Foundation epic re-testing every 7 days
-- ✅ Automatic fix task creation
-- ✅ Quality reviews with prompt improvements
+- Opus for planning, Sonnet for implementation
+- Intelligent epic test blocking (autonomous mode)
+- Regression detection every 2 epics
+- Foundation epic re-testing every 7 days
+- Automatic fix task creation
+- Quality reviews with prompt improvements
 
 ## Validation
 
@@ -425,8 +422,8 @@ See [.yokeflow.yaml.example](../.yokeflow.yaml.example) for a complete configura
 - [.yokeflow.yaml.example](../.yokeflow.yaml.example) - Full example with comments
 
 ### Quality System (v2.1)
-- [docs/quality-system.md](quality-system.md) - Complete quality system documentation (Phases 0-8)
-- [QUALITY_SYSTEM_SUMMARY.md](../QUALITY_SYSTEM_SUMMARY.md) - Phase-by-phase implementation summary
+- [docs/quality-system.md](quality-system.md) - Complete quality system documentation
+- [QUALITY_SYSTEM_SUMMARY.md](../QUALITY_SYSTEM_SUMMARY.md) - Implementation summary
 - [docs/testing-guide.md](testing-guide.md) - Testing practices and tools
 
 ### Related Documentation

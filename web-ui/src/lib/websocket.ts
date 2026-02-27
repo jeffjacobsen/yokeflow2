@@ -12,7 +12,7 @@ interface UseProjectWebSocketReturn {
   connected: boolean;
   error: string | null;
   reconnect: () => void;
-  // NEW Phase 2.2: Real-time session feedback
+  // Real-time session feedback
   toolCount: number | null;  // Cumulative tool use count for current session
   assistantMessages: string[];  // Latest assistant messages (up to 10)
   apiKeyWarning: string | null;  // Warning message if using API key instead of OAuth
@@ -21,7 +21,7 @@ interface UseProjectWebSocketReturn {
 interface UseProjectWebSocketOptions {
   onSessionComplete?: (sessionId: string, status: SessionStatus) => void;
   onSessionStarted?: (session: any) => void;
-  // NEW Phase 2.2: Real-time event callbacks
+  // Real-time event callbacks
   onAssistantMessage?: (message: string, sessionNumber: number) => void;
   onToolUse?: (toolName: string, count: number, sessionNumber: number) => void;
   // Real-time task/test progress callbacks
@@ -46,7 +46,7 @@ export function useProjectWebSocket(
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // NEW Phase 2.2: Real-time session feedback states
+  // Real-time session feedback states
   const [toolCount, setToolCount] = useState<number | null>(null);
   const [assistantMessages, setAssistantMessages] = useState<string[]>([]);
   const [apiKeyWarning, setApiKeyWarning] = useState<string | null>(null);
@@ -186,7 +186,7 @@ export function useProjectWebSocket(
               setApiKeyWarning(data.message || 'Using ANTHROPIC_API_KEY (credit-based billing)');
               break;
 
-            // NEW Phase 2.2: Real-time session feedback events
+            // Real-time session feedback events
             case 'assistant_message':
               if (data.text) {
                 console.log(`[WebSocket] Assistant message #${data.message_number}:`, data.text.substring(0, 50) + '...');
@@ -326,7 +326,7 @@ export function useProjectWebSocket(
     connected,
     error,
     reconnect,
-    // NEW Phase 2.2: Real-time session feedback
+    // Real-time session feedback
     toolCount,
     assistantMessages,
     apiKeyWarning,

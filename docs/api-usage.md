@@ -996,7 +996,7 @@ curl http://localhost:8010/health/detailed
 - **[configuration.md](configuration.md)** - Configuration reference
 
 ### Quality & Testing
-- **[quality-system.md](quality-system.md)** - Complete quality system (Phases 0-8) ⭐ NEW v2.1
+- **[quality-system.md](quality-system.md)** - Complete quality system documentation ⭐ NEW v2.1
 - **[verification-system.md](verification-system.md)** - Automatic verification system
 - **[testing-guide.md](testing-guide.md)** - Testing practices
 
@@ -1004,7 +1004,7 @@ curl http://localhost:8010/health/detailed
 - **[mcp-usage.md](mcp-usage.md)** - MCP tools documentation
 - **[input-validation.md](input-validation.md)** - Validation framework
 - **[ai-spec-generation.md](ai-spec-generation.md)** - AI specification generation ⭐ NEW v2.1
-- **[QUALITY_SYSTEM_SUMMARY.md](../QUALITY_SYSTEM_SUMMARY.md)** - Phase-by-phase implementation summary ⭐ NEW v2.1
+- **[QUALITY_SYSTEM_SUMMARY.md](../QUALITY_SYSTEM_SUMMARY.md)** - Implementation summary ⭐ NEW v2.1
 
 ---
 

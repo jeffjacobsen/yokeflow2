@@ -416,7 +416,6 @@ class TaskDatabase:
                 # Return default settings from Config
                 config = Config.load_default()
                 return {
-                    'sandbox_type': 'docker',
                     'coding_model': config.models.coding,
                     'initializer_model': config.models.initializer,
                     'max_iterations': None,  # None = unlimited (auto-continue)
@@ -433,7 +432,6 @@ class TaskDatabase:
             # Apply defaults for missing keys from Config
             config = Config.load_default()
             defaults = {
-                'sandbox_type': 'docker',
                 'coding_model': config.models.coding,
                 'initializer_model': config.models.initializer,
                 'max_iterations': None,  # None = unlimited (auto-continue)
@@ -1375,7 +1373,7 @@ class TaskDatabase:
             }
 
     # =========================================================================
-    # Session Quality Checks (Phase 1 Review System Integration)
+    # Session Quality Checks (Review System Integration)
     # =========================================================================
     # Note: Legacy methods removed in cleanup (create_review, record_github_commit,
     #       get/update_project_preferences) - tables were never used
@@ -1395,7 +1393,7 @@ class TaskDatabase:
         model: Optional[str] = None
     ) -> UUID:
         """
-        Store deep review results for a session (Phase 2 Review System).
+        Store deep review results for a session.
 
         Now stores in the dedicated session_deep_reviews table.
 
@@ -1406,7 +1404,7 @@ class TaskDatabase:
             review_text: Full review report (markdown)
             prompt_improvements: List of prompt improvement recommendations
             review_summary: Optional structured summary data (rating, one_line, summary text)
-            review_version: Version of review logic (default: "2.0" for Phase 2)
+            review_version: Version of review logic (default: "2.0")
             model: Optional model name used for review
 
         Returns:
@@ -1640,7 +1638,6 @@ class TaskDatabase:
     async def create_prompt_analysis(
         self,
         project_ids: List[UUID],
-        sandbox_type: str,
         triggered_by: str = "manual",
         user_id: Optional[UUID] = None
     ) -> UUID:
@@ -1649,7 +1646,6 @@ class TaskDatabase:
 
         Args:
             project_ids: List of project UUIDs to analyze
-            sandbox_type: 'docker' or 'local'
             triggered_by: How analysis was triggered
             user_id: Optional user ID
 
@@ -1661,15 +1657,14 @@ class TaskDatabase:
                 """
                 INSERT INTO prompt_improvement_analyses (
                     projects_analyzed,
-                    sandbox_type,
                     triggered_by,
                     user_id,
                     status
                 )
-                VALUES ($1, $2, $3, $4, 'pending')
+                VALUES ($1, $2, $3, 'pending')
                 RETURNING id
                 """,
-                project_ids, sandbox_type, triggered_by, user_id
+                project_ids, triggered_by, user_id
             )
             return row['id']
 
@@ -2297,7 +2292,7 @@ class TaskDatabase:
             return [dict(row) for row in rows]
 
     # =========================================================================
-    # Epic Re-testing Operations (Phase 5 - Quality System)
+    # Epic Re-testing Operations
     # =========================================================================
 
     async def get_completed_epic_count(self, project_id: UUID) -> int:
@@ -2322,7 +2317,7 @@ class TaskDatabase:
             return count or 0
 
     # =========================================================================
-    # Project Completion Review Methods (Phase 7)
+    # Project Completion Review Methods
     # =========================================================================
 
     @with_retry()

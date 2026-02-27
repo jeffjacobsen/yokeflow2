@@ -111,14 +111,14 @@ For detailed information about specific aspects of the project, refer to these f
 
 ## Development Workflow
 
-### Phase 1: Foundation (Epics 1-5)
+### Stage 1: Foundation (Epics 1-5)
 1. Project setup and infrastructure
 2. Database schema and migrations
 3. Authentication system
 4. Basic API structure
 5. Frontend foundation
 
-### Phase 2: Core Features (Epics 6-12)
+### Stage 2: Core Features (Epics 6-12)
 6. Workspace management
 7. Project CRUD operations
 8. Task management
@@ -127,7 +127,7 @@ For detailed information about specific aspects of the project, refer to these f
 11. File attachments
 12. User interface components
 
-### Phase 3: Enhancement (Epics 13-18)
+### Stage 3: Enhancement (Epics 13-18)
 13. Search and filtering
 14. Activity feed
 15. Notifications

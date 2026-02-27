@@ -6,17 +6,17 @@ This guide provides technical details for developers who want to understand, cus
 
 ## What's New in v2.1
 
-YokeFlow 2.1 introduces a comprehensive quality system across 8 phases:
+YokeFlow 2.1 introduces a comprehensive quality system:
 
-**Phase 0**: Database cleanup - Removed 34 unused objects
-**Phase 1**: Test execution tracking - Error messages, execution time, retry counts
-**Phase 2**: Epic test failure tracking - 22-field history, flaky test detection
-**Phase 3**: Epic test blocking - Strict/autonomous modes, orchestrator integration
-**Phase 4.1**: Test viewer UI - Epic/task tests visible with requirements
-**Phase 5**: Epic re-testing - Smart selection, regression detection, stability scoring
-**Phase 6**: Enhanced review triggers - 7 quality-based conditions
-**Phase 7**: Project completion review - Spec parser, requirement matcher, Claude review
-**Phase 8**: Prompt improvement aggregation - Recommendation extraction (60% complete)
+**Database cleanup**: Removed 34 unused objects
+**Test execution tracking**: Error messages, execution time, retry counts
+**Epic test failure tracking**: 22-field history, flaky test detection
+**Epic test blocking**: Strict/autonomous modes, orchestrator integration
+**Test viewer UI**: Epic/task tests visible with requirements
+**Epic re-testing**: Smart selection, regression detection, stability scoring
+**Enhanced review triggers**: 7 quality-based conditions
+**Project completion review**: Spec parser, requirement matcher, Claude review
+**Prompt improvement aggregation**: Recommendation extraction (60% complete)
 
 **Key Additions:**
 - 5 new MCP tools (20+ total)
@@ -164,14 +164,14 @@ server/
 │   ├── session_manager.py # Intervention system
 │   ├── checkpoint.py   # Session checkpointing
 │   ├── intervention.py # Blocker detection
-│   ├── quality_detector.py # Quality pattern detection ⭐ v2.1
+│   ├── quality_detector.py # Quality pattern detection
 │   └── models.py       # Data models
 ├── api/                # REST API & WebSocket
 │   ├── app.py          # Main FastAPI application (60+ endpoints)
 │   ├── auth.py         # Authentication
-│   ├── validation.py   # Pydantic models (19 models) ⭐ v2.1
+│   ├── validation.py   # Pydantic models (19 models)
 │   └── routes/         # API route modules
-│       └── prompt_improvements.py # Prompt improvement routes ⭐ v2.1
+│       └── prompt_improvements.py # Prompt improvement routes
 ├── client/             # External service clients
 │   ├── claude.py       # Claude SDK client
 │   └── prompts.py      # Prompt loading
@@ -179,13 +179,13 @@ server/
 │   ├── operations.py   # PostgreSQL operations
 │   ├── connection.py   # Connection pooling
 │   └── retry.py        # Retry logic with exponential backoff
-├── quality/            # Quality & review system ⭐ v2.1
-│   ├── metrics.py      # Quality metrics (Phase 1)
-│   ├── reviews.py      # Deep reviews (Phase 2)
-│   ├── integration.py  # Quality integration (Phase 6)
-│   ├── spec_parser.py  # Specification parser (Phase 7)
+├── quality/            # Quality & review system
+│   ├── metrics.py      # Quality metrics (zero-cost)
+│   ├── reviews.py      # Deep reviews
+│   ├── integration.py  # Quality integration
+│   ├── spec_parser.py  # Specification parser
 │   ├── test_compliance_analyzer.py # Test compliance
-│   └── prompt_analyzer.py # Prompt improvements (Phase 4/8)
+│   └── prompt_analyzer.py # Prompt improvements
 ├── verification/       # Testing & validation
 │   ├── task_verifier.py  # Task verification (11 tests)
 │   ├── epic_validator.py # Epic validation (14 tests)
@@ -198,11 +198,11 @@ server/
     ├── security.py     # Security validation (2 tests)
     ├── observability.py # Session logging
     ├── reset.py        # Project reset
-    ├── metrics_collector.py # Metrics collection ⭐ v2.1
+    ├── metrics_collector.py # Metrics collection
     └── cancel_initialization.py # Cancel operations
 ```
 
-**v2.1 Additions** (⭐ marked above):
+**v2.1 Additions**:
 - 10+ new files in `server/quality/` for comprehensive quality system
 - Enhanced API with validation framework
 - Quality pattern detection in agent
@@ -418,7 +418,7 @@ session_info = await orchestrator.start_session(
 
 ## Quality System (v2.1)
 
-YokeFlow 2.1 introduces a comprehensive quality system implemented across 8 phases from January 31 - February 2, 2026.
+YokeFlow 2.1 introduces a comprehensive quality system implemented from January 31 - February 2, 2026.
 
 ### Architecture
 
@@ -426,45 +426,45 @@ The quality system is distributed across multiple modules:
 
 ```
 server/quality/          # 10+ Python files (~4,000+ lines)
-├── metrics.py           # Quick metrics (Phase 1, zero-cost)
-├── reviews.py           # Deep AI reviews (Phase 2)
-├── integration.py       # Triggers & coordination (Phase 6)
-├── spec_parser.py       # Parse app_spec.txt (Phase 7)
-└── prompt_analyzer.py   # Improvement suggestions (Phase 4/8)
+├── metrics.py           # Quick metrics (zero-cost)
+├── reviews.py           # Deep AI reviews
+├── integration.py       # Triggers & coordination
+├── spec_parser.py       # Parse app_spec.txt
+└── prompt_analyzer.py   # Improvement suggestions
 
 web-ui/src/components/   # React components
-├── QualityDashboard.tsx # Phase 3 dashboard
-├── CompletionReviewDashboard.tsx # Phase 7 UI
-└── PromptImprovementDashboard.tsx # Phase 8 UI
+├── QualityDashboard.tsx # Quality dashboard
+├── CompletionReviewDashboard.tsx # Completion review UI
+└── PromptImprovementDashboard.tsx # Prompt improvement UI
 
 mcp-task-manager/src/    # MCP tools
 └── index.ts             # 5 new quality tools
 ```
 
-### Phase Breakdown
+### Feature Breakdown
 
-**Phase 0: Database Cleanup**
+**Database Cleanup**
 - Removed 34 unused objects (16 tables, 18 views)
 - Clean foundation for quality system
 - Migration: `schema/postgresql/schema.sql`
 
-**Phase 1: Test Execution Tracking**
+**Test Execution Tracking**
 - Added: `execution_time_ms` for performance tracking
 - MCP tools enhanced: `update_task_test_result`, `update_epic_test_result`
 - Both tables use `passes` (boolean) for consistent pass/fail tracking
 
-**Phase 3: Epic Test Blocking**
+**Epic Test Blocking**
 - Configuration: `epic_testing.mode` (strict/autonomous)
 - MCP integration: `checkEpicCompletion()` in task-manager
 - Orchestrator: `SessionStatus.BLOCKED` handling
 - Tests: `test_epic_test_blocking.py` (5 passing)
 
-**Phase 4.1: Test Viewer UI**
+**Test Viewer UI**
 - Epic/task tests visible in Web UI
 - Requirements-based testing display
 - Component: `EpicAccordion.tsx` (lines 149-181)
 
-**Phase 6: Enhanced Review Triggers**
+**Enhanced Review Triggers**
 - Removed periodic 5-session trigger
 - Added 7 quality-based conditions:
   1. Low quality score (< 7/10)
@@ -476,7 +476,7 @@ mcp-task-manager/src/    # MCP tools
   7. Repeated errors (3+ same error)
 - Implementation: `server/utils/observability.py:505-571`
 
-**Phase 7: Project Completion Review**
+**Project Completion Review**
 - Specification parser: 450 lines, 25 tests, 100% coverage
 - Requirement matcher: Hybrid keyword (40%) + semantic (60%) matching
 - Completion analyzer: Scoring algorithm (coverage 60%, quality 20%, bonus/penalty 20%)
@@ -485,11 +485,11 @@ mcp-task-manager/src/    # MCP tools
 - Migration: `020_project_completion_reviews.sql`
 - Automatic trigger on project completion
 
-**Phase 8: Prompt Improvement Aggregation** (60% complete)
-- Steps 8.1-8.2 complete: Recommendation extraction, proposal generation
+**Prompt Improvement Aggregation** (60% complete)
+- Steps 1-2 complete: Recommendation extraction, proposal generation
 - Database: `prompt_improvement_analyses`, `prompt_proposals`
 - Web UI: `PromptImprovementDashboard.tsx`
-- Step 8.3 deferred: Versioning & A/B testing (4-7h)
+- Deferred: Versioning & A/B testing (4-7h)
 
 ### Key Files
 
@@ -566,8 +566,8 @@ See [mcp-usage.md](mcp-usage.md) for complete tool reference.
 
 **Update Tools:**
 - update_task_status, start_task, update_test_result (legacy)
-- `update_task_test_result` - With error details ⭐ v2.1
-- `update_epic_test_result` - With error details ⭐ v2.1
+- `update_task_test_result` - With error details
+- `update_epic_test_result` - With error details
 
 **Create Tools:**
 - create_epic, create_task, create_test, expand_epic
@@ -713,9 +713,9 @@ CREATE TABLE sessions (
 );
 ```
 
-### Quality System Tables ⭐ v2.1
+### Quality System Tables
 
-**project_completion_reviews** - Final verification (Phase 7)
+**project_completion_reviews** - Final verification
 ```sql
 CREATE TABLE project_completion_reviews (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -749,7 +749,7 @@ LEFT JOIN tests test ON test.task_id = t.id
 GROUP BY p.id;
 ```
 
-### Migrations ⭐ v2.1
+### Migrations
 
 - **020**: Project completion reviews (2 tables, 4 views)
 
@@ -1353,7 +1353,7 @@ For multi-user: implement connection pool.
 
 ### Web UI
 
-**Status:** ✅ Production-ready (v2.0)
+**Status:** Production-ready (v2.0)
 
 **Features:**
 - JWT authentication with development mode
@@ -1429,8 +1429,8 @@ docker run -v $(pwd)/projects:/workspace yokeflow
 **Deployment Recommendations:**
 - Use Digital Ocean, AWS, or similar for API server
 - Deploy Next.js as static site or Node.js server
-- ✅ JWT authentication implemented (production-ready)
-- ✅ PostgreSQL in production (async operations, connection pooling)
+- JWT authentication implemented (production-ready)
+- PostgreSQL in production (async operations, connection pooling)
 
 See [TODO.md](../TODO.md) and [api/README.md](../api/README.md) for details.
 
@@ -1446,7 +1446,6 @@ See [TODO.md](../TODO.md) and [api/README.md](../api/README.md) for details.
 - [QUICKSTART.md](../QUICKSTART.md) - 5-minute setup guide
 
 **v2.1 Quality System:**
-- [QUALITY_SYSTEM_SUMMARY.md](../QUALITY_SYSTEM_SUMMARY.md) - Phase-by-phase implementation (Phases 0-8)
 - [docs/quality-system.md](quality-system.md) - Complete quality system documentation
 - [docs/testing-guide.md](testing-guide.md) - Testing practices and tools
 

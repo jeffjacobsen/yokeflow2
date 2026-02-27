@@ -44,7 +44,7 @@ from server.agent.codebase_import import CodebaseImporter
 from server.utils.observability import SessionLogger, QuietOutputFilter, create_session_logger
 from server.agent.agent import run_agent_session, SessionManager
 from server.utils.config import Config
-# Verification system removed - replaced by test execution in Phase 2
+# Verification system removed - replaced by test execution
 
 # Initialize structured logging if not already done (for CLI usage)
 if not any(isinstance(h.formatter, type(None)) for h in get_logger(__name__).handlers):
@@ -1048,7 +1048,7 @@ class AgentOrchestrator:
 
                 heartbeat_task = asyncio.create_task(send_heartbeats())
 
-                # DISABLED: Old verification system - replaced by MCP test execution in Phase 2
+                # DISABLED: Old verification system - replaced by MCP test execution
                 # The new workflow uses run_task_tests before update_task_status
                 epic_manager = None
                 # Verification system removed - function call deleted

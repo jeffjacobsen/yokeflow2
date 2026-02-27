@@ -113,7 +113,6 @@ Create a new project with specification file.
 **Request (multipart/form-data):**
 - `name` - Project name
 - `spec_file` - Application specification file (required)
-- `sandbox_type` - "docker" or "local" (default: "docker")
 - `initializer_model` - Model for Session 0 (initialization, default: opus-4-5)
 - `coding_model` - Model for Sessions 1+ (coding, default: sonnet-4-5)
 
@@ -122,7 +121,6 @@ Create a new project with specification file.
 curl -X POST http://localhost:8010/api/projects \
   -F "name=my-project" \
   -F "spec_file=@app_spec.txt" \
-  -F "sandbox_type=docker"
 ```
 
 **Response:**
@@ -133,7 +131,6 @@ curl -X POST http://localhost:8010/api/projects \
   "projects_path": "projects/my-project",
   "is_initialized": false,
   "metadata": {
-    "sandbox_type": "docker",
     "initializer_model": "claude-opus-4-6",
     "coding_model": "claude-sonnet-4-6"
   }
@@ -355,7 +352,6 @@ Get details for a specific session.
   "session_type": "initializer",
   "status": "completed",
   "model": "claude-opus-4-6",
-  "sandbox_type": "docker",
   "created_at": "2025-12-16T12:00:00Z",
   "completed_at": "2025-12-16T12:15:00Z",
   "metadata": {
@@ -712,13 +708,13 @@ echo $DATABASE_URL
 - ✅ Enhanced error handling and validation
 
 **v2.0.0** (December 2025)
-- ✅ Phase 2: Frontend integration complete
+- ✅ Frontend integration complete
 - ✅ Real-time WebSocket events (tool_use, assistant_message)
 - ✅ Smart session controls (init vs coding)
 - ✅ Three-tab session interface
 
 **v1.5.0** (December 2025)
-- ✅ Phase 1: Backend refactor complete
+- ✅ Backend refactor complete
 - ✅ Separate endpoints (/initialize, /coding/start)
 - ✅ Type-aware stale session thresholds
 - ✅ Enhanced WebSocket event types
