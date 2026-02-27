@@ -1,142 +1,56 @@
-# Example Specification Files
+# Example Specifications
 
-This directory contains example specification files demonstrating the multiple file upload feature in YokeFlow.
-
-## Purpose
-
-These examples show how to structure complex project specifications using multiple files, making them easier to organize and maintain.
+The `example-specs/` directory contains example specification files for testing YokeFlow.
 
 ---
 
 ## Examples
 
-### 1. multi-file-spec/ - Full-Stack Web Application
+### todo.md — Simple Todo API
 
-**Type:** UI-based web application (suitable for browser verification)
+A minimal REST API for managing todo items. Designed as a quick test project (10–15 minutes total).
 
-**Description:** A complete specification for a full-stack web app with authentication, demonstrating best practices for organizing specs.
+- **Tech stack:** Node.js, Express, in-memory storage
+- **Scope:** 6 API endpoints with CRUD operations, error handling, documentation
+- **Use case:** Quick platform verification — fast initialization and coding sessions
 
-**Files:**
-- `main.md` - Primary specification file (entry point)
-- `api-design.md` - API endpoint definitions
-- `database-schema.md` - Database schema and models
-- `ui-design.md` - User interface specifications
-- `example-auth.py` - Reference authentication code
-- `README.md` - Documentation about this example
+### browser-test.md — Browser Automation Test
 
-**Use Case:** Demonstrates how to split a large specification into logical components (main spec, API, database, UI, code examples).
+A minimal web application for testing agent-browser integration.
 
-**Testing Status:** Created as reference example for documentation.
+- **Tech stack:** Express backend + simple HTML frontend
+- **Scope:** Health check API, button that fetches from the API, console logging
+- **Use case:** Verifying browser automation works during coding sessions
 
----
+### multi-file-spec/ — Full-Stack Web Application
 
-### 2. prp-test/ - RAG Voice Agent
-
-**Type:** Non-UI Python application (LiveKit voice agent)
-
-**Description:** Specification for a RAG (Retrieval-Augmented Generation) voice agent using LiveKit, demonstrating how to include reference code in specifications.
+A complete specification for a Task Management SaaS application, split across multiple files to demonstrate multi-file spec support.
 
 **Files:**
-- `rag-voice-agent.md` - Primary specification file (entry point)
-- `basic_voice_assistant.py` - Example voice agent implementation
-- `db_utils.py` - Database utility reference code
-- `embedder.py` - Embedding generation reference code
-- `ingest.py` - Document ingestion reference code
-- `schema.sql` - PostgreSQL/PGVector schema
+- `main.md` — Primary specification (features, tech stack, overview)
+- `api-design.md` — REST API and WebSocket event definitions
+- `database-schema.md` — PostgreSQL schema with Prisma ORM
+- `ui-design.md` — UI/UX guidelines and component specifications
+- `example-auth.py` — Reference authentication implementation
+- `README.md` — Documentation about this example
 
-**Use Case:**
-- Demonstrates including reference Python code in specifications
-- Shows how to provide database schemas and utility code
-- Example of non-UI application specification
-
-**Testing Status:** ✅ Successfully tested with YokeFlow initializer
-- Created 18 epics, 129 tasks, 129 tests
-- Output available in `prp-test-output/` directory
-- Demonstrates multi-file spec handling works correctly
-
-**Note:** This is a non-UI application (voice agent), so it would not be suitable for the browser verification step in coding sessions. However, it successfully demonstrates that the multi-file spec feature works end-to-end for the initialization phase.
+**Use case:** Demonstrates how to organize large specifications into logical components.
 
 ---
 
-### 3. prp-test-output/ - Initialization Results
-
-**Type:** Generated output from prp-test initialization
-
-**Description:** Output directory showing what YokeFlow's initializer created from the multi-file prp-test specification.
-
-**Contents:**
-- `yokeflow/agent-progress.md` - Session 0 completion summary showing:
-  - 18 epics created
-  - 129 tasks generated
-  - 129 test cases defined
-  - Complete project structure
-  - Technology stack decisions
-  - Next steps for coding sessions
-
-**Purpose:** Demonstrates successful multi-file spec processing by the initializer.
-
----
-
-## Legacy Examples
-
-### app_spec.txt
-Original single-file specification example (legacy format).
-
-### app_spec_claude_ai.txt
-Another single-file specification example (legacy format).
-
-**Note:** These single-file examples are kept for backward compatibility but the multi-file approach is now recommended for complex projects.
-
----
-
-## Best Practices
-
-Based on these examples, here are best practices for multi-file specifications:
-
-1. **Name your primary file** `main.md` or `spec.md` (YokeFlow auto-detects this)
-2. **Reference other files** in your main spec (e.g., "See api-design.md for endpoints")
-3. **Include supporting files:**
-   - API documentation (`.md`)
-   - Database schemas (`.sql`)
-   - Reference code (`.py`, `.ts`, `.js`, etc.)
-   - Configuration examples (`.json`, `.yaml`)
-   - UI mockups/wireframes (`.md`, `.html`)
-4. **Use clear file names** that indicate purpose (e.g., `database-schema.md`, not `file2.md`)
-5. **Keep files focused** - Each file should cover a specific aspect of the project
-6. **Add a README** - Explain the structure if your spec has many files
-
----
-
-## How Multi-File Specs Work
+## Multi-File Specs
 
 When you upload multiple files to YokeFlow:
 
-1. **Files saved to `spec/` directory** in your project
-2. **Primary file auto-detected:**
+1. Files are saved to the `yokeflow/specs/` directory in your project
+2. The primary file is auto-detected:
    - First priority: `main.md`
    - Second priority: `spec.md`
-   - Fallback: Largest `.md` or `.txt` file
-3. **Initializer reads primary file first**, then lazy-loads other files as needed
-4. **Agent can search across files** using `grep -r "search term" spec/`
+   - Fallback: largest `.md` or `.txt` file
+3. The initializer reads the primary file first, then loads other files as needed
 
-This approach:
-- Saves tokens (agent only reads what it needs)
-- Improves organization (logical file separation)
-- Enables reuse (same schema/code across multiple specs)
-- Makes specs easier to maintain and version control
-
----
-
-## Creating Your Own Multi-File Spec
-
-1. Create a directory for your spec
-2. Add your primary file (name it `main.md`)
-3. Add supporting files (schemas, code examples, etc.)
-4. In Web UI: Select all files and upload together
-5. YokeFlow handles the rest automatically!
-
-For detailed documentation, see the [Multiple Specification Files](../README.md#multiple-specification-files) section in the main README.
-
----
-
-**Last Updated:** December 24, 2025
+**Best practices:**
+- Name your primary file `main.md`
+- Reference other files clearly (e.g., "See `api-design.md` for endpoints")
+- Keep files focused — each should cover a specific aspect (API, database, UI)
+- Use descriptive file names

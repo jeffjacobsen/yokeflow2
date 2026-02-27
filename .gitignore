@@ -1,15 +1,10 @@
 # Project output directories
 projects/
 
-# Test pollution (unmocked Path objects)
-MagicMock/
-
 # Log files
 logs/
 *.jsonl
 *.log
-docker-watchdog.log
-api.log
 
 # Python
 __pycache__/

@@ -1,160 +1,38 @@
 # Deployment Guide - Digital Ocean
 
-**Last Updated:** February 2, 2026
-**Version:** 2.1.0
-**Status:** ⚠️ Deployment Not Tested for v2.1
-
-> **📋 DEPLOYMENT STATUS:**
->
-> **⚠️ IMPORTANT NOTICE - v2.1.0:**
-> This deployment guide was last verified with **v2.0.0 (December 2025)**.
->
-> **YokeFlow v2.1.0 (February 2026)** has NOT been tested on Digital Ocean and includes significant changes:
-> - 7 new database migrations (017-020+)
-> - 60+ API endpoints (was 17)
-> - 20+ MCP tools (was 15)
-> - Enhanced quality system
-> - Project completion review system
-> - Epic re-testing infrastructure
->
-> **If deploying v2.1.0, expect:**
-> - Database migrations may require manual intervention
-> - Additional testing needed for quality system endpoints
-> - MCP tool compatibility verification required
-> - Increased resource usage (more complex workflows)
->
-> **Recommendation:** Test v2.1.0 deployment locally before production deployment.
->
-> ---
->
-> **v2.0.0 Deployment Status (Last Verified: December 30, 2025):**
-> - ✅ Deployment steps verified and working on Digital Ocean
-> - ✅ All services start successfully (PostgreSQL, API, Web UI)
-> - ✅ Database initialization works (manual step required - see Step 5)
-> - ✅ Nginx reverse proxy configuration correct
-> - ✅ Docker container management operational
-> - ✅ Project initialization confirmed working (Session 0 starts)
-> - ⚠️ **Full application workflow not thoroughly tested** (complete coding sessions, reviews, etc.)
->
-> **v2.0.0 Known Issues (Resolved):**
-> - ✅ Database schema auto-initialization may fail silently on first run
->   - **Solution:** Manually run schema.sql as documented in Step 5
->
-> **v2.0.0 Testing Needed:**
-> - Complete coding sessions (Sessions 1+) with real applications
-> - Browser verification with agent-browser in production
-> - WebSocket real-time updates during sessions
-> - Quality review system end-to-end
-> - Multi-project concurrent execution
->
-> If you encounter issues, please report them via [GitHub Issues](https://github.com/anthropics/yokeflow/issues).
-
----
-
-## What's New in v2.1.0 (February 2026)
-
-**⚠️ These features have NOT been tested in production deployment:**
-
-### Quality System
-- Database cleanup - Removed 34 unused objects
-- Test execution tracking - Error messages, execution time, retry counts
-- Epic test failure tracking - 22-field history, flaky test detection
-- Epic test blocking - Strict/autonomous modes
-- Test viewer UI - Epic/task tests visible
-- Epic re-testing - Smart selection, regression detection, stability scoring
-- Enhanced review triggers - 7 quality-based conditions
-- Project completion review - Spec parser, requirement matcher, Claude review
-- Prompt improvement aggregation (60% complete)
-
-### Database Changes
-- 7 new migrations (017-020+)
-- 4 new quality system tables
-- 5+ new views for analytics
-- Enhanced test tracking fields
-
-### API Expansion
-- 60+ REST API endpoints (was 17)
-- 5 new endpoint groups (completion reviews, interventions, containers, etc.)
-- Enhanced input validation (19 Pydantic models)
-
-### MCP Tools
-- 20+ MCP tools (was 15)
-- 5 new quality system tools
-- Enhanced test result tracking
-
-### Configuration
-- 4 new configuration sections in `.yokeflow.yaml`
-- Epic testing modes (strict/autonomous)
-- Epic re-testing configuration
-- Review system settings
-
-**For complete details, see [QUALITY_SYSTEM_SUMMARY.md](../QUALITY_SYSTEM_SUMMARY.md)**
-
----
-
-**v2.0.0 Updates (December 2025):**
-- ✅ JWT Authentication implemented (backend + frontend)
-- ✅ UI Login page with password protection
-- ✅ Project name validation (no spaces allowed)
-- ✅ Prompt file logging (tracks which prompt variant was used)
-- ✅ WebSocket real-time progress updates
-- ✅ Reset project git repository handling improved
-- ✅ Docker container management (auto-stop on completion)
-- ✅ Multi-file spec uploads
-- ✅ YokeFlow rebranding complete
-
----
+> **Note:** This guide has not been fully tested with the current codebase. The deployment steps were originally verified with an earlier version. Expect to make adjustments during deployment.
 
 ## Overview
 
-This guide covers deploying YokeFlow to Digital Ocean with:
+This guide covers deploying YokeFlow to a Digital Ocean Droplet with:
 - PostgreSQL database (self-hosted or managed)
 - FastAPI REST API + Next.js Web UI
 - HTTPS with Let's Encrypt
-- Download and archive options for generated applications
+- Nginx reverse proxy
 
----
-
-## Table of Contents
-
-1. [Architecture Overview](#architecture-overview)
-2. [Prerequisites](#prerequisites)
-3. [Database Options](#database-options)
-4. [Deployment Steps](#deployment-steps)
-5. [Generated Application Download](#generated-application-download)
-7. [Security & Authentication](#security--authentication)
-8. [Backup & Monitoring](#backup--monitoring)
-9. [Cost Analysis](#cost-analysis)
-10. [Scaling Strategies](#scaling-strategies)
-
----
-
-## Architecture Overview
-
-### Production Architecture
+## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│ Digital Ocean Droplet (8GB RAM / 4 vCPU - $48/mo)  │
+│ Digital Ocean Droplet (8GB RAM / 4 vCPU - $48/mo)   │
 ├─────────────────────────────────────────────────────┤
 │                                                      │
-│  Nginx (HTTPS reverse proxy)                        │
-│    ├─→ FastAPI (port 8010)                          │
-│    └─→ Next.js (port 3010)                          │
+│  Nginx (HTTPS reverse proxy)                         │
+│    ├─→ FastAPI (port 8010)                           │
+│    └─→ Next.js (port 3010)                           │
 │                                                      │
-│  Docker Compose Services:                           │
-│    ├─→ PostgreSQL (container)                       │
-│    ├─→ FastAPI (container)                          │
-│    └─→ Next.js (container)                          │
+│  Docker Compose Services:                            │
+│    └─→ PostgreSQL (container)                        │
+│                                                      │
+│  Application Services (host):                        │
+│    ├─→ FastAPI API server                            │
+│    └─→ Next.js Web UI                                │
 │                                                      │
 │  Volumes:                                            │
-│    ├─→ postgres_data (database persistence)         │
-│    └─→ /var/yokeflow/projects                       │
+│    ├─→ postgres_data (database persistence)          │
+│    └─→ projects/ (generated project files)           │
 │                                                      │
 └─────────────────────────────────────────────────────┘
-          │
-          ├─→ Digital Ocean Spaces (backups & archives)
-          └─→ GitHub (optional: code publishing)
 ```
 
 ---
@@ -165,50 +43,18 @@ This guide covers deploying YokeFlow to Digital Ocean with:
 
 - Sign up at [digitalocean.com](https://www.digitalocean.com)
 - Add payment method
-- Generate Personal Access Token (for API/CLI)
 
 ### 2. Domain Name (Optional but Recommended)
 
-- Register domain or use existing
-- Point DNS to Digital Ocean nameservers
-- Create A record pointing to Droplet IP
+- Point DNS A record to your Droplet IP
+- Required for HTTPS with Let's Encrypt
 
-### 3. Local Tools (Optional)
+### 3. Server Requirements
 
-**Note:** You can create and configure the Droplet entirely from the [Digital Ocean web console](https://cloud.digitalocean.com). The local tools are optional and only needed if you prefer command-line management.
-
-**If using the CLI:**
-
-```bash
-# Install Digital Ocean CLI
-brew install doctl  # macOS
-# or
-snap install doctl  # Linux
-
-# Authenticate
-doctl auth init
-
-# Install Docker locally (for building images - only if building custom images)
-# macOS: Docker Desktop
-# Linux: docker.io package
-```
-
-**Recommended:** Use the Digital Ocean Marketplace image "Docker on Ubuntu 22.04" when creating your Droplet. This comes with Docker pre-installed and saves setup time.
-
-### 4. Server Requirements
-
-The deployment server (Digital Ocean Droplet) requires:
-
-- **Operating System:** Ubuntu 22.04 LTS (recommended) or Ubuntu 20.04 LTS
-- **Node.js:** Version 20 LTS or newer (installed via NVM in Step 2)
-- **Docker:** Pre-installed (recommended: use "Docker on Ubuntu 22.04" from Digital Ocean Marketplace)
-- **Python:** Version 3.9+ (usually pre-installed on Ubuntu 22.04)
-- **PostgreSQL Client:** For database verification (installed in Step 2)
-
-**Important Notes:**
-- Node.js 20+ is **required** to build the MCP task manager and Next.js web UI
-- The `??` (nullish coalescing) operator and other modern JavaScript features will cause build errors on older versions
-- **Use NVM (Node Version Manager)** for installing Node.js - it's more reliable across different distributions than NodeSource
+- **OS:** Ubuntu 22.04 LTS (recommended)
+- **Node.js:** Version 20 LTS (installed via NVM)
+- **Python:** Version 3.9+
+- **Docker:** For PostgreSQL (recommended: use "Docker on Ubuntu 22.04" from Digital Ocean Marketplace)
 
 ---
 
@@ -216,110 +62,61 @@ The deployment server (Digital Ocean Droplet) requires:
 
 ### Option A: Self-Hosted PostgreSQL (Recommended for Start)
 
-**Pros:**
-- ✅ Free (included in Droplet cost)
-- ✅ Full control
-- ✅ Already configured in `docker-compose.yml`
+- Free (included in Droplet cost)
+- Full control
+- Already configured in `docker-compose.yml`
+- Manual backups required
 
-**Cons:**
-- ⚠️ Manual backups required
-- ⚠️ No automatic failover
-- ⚠️ Single point of failure
+### Option B: Digital Ocean Managed PostgreSQL
 
-**Use when:**
-- Development/staging environments
-- Small teams (< 10 concurrent projects)
-- Budget-conscious deployments
-- You have DevOps expertise
-
-### Option B: Digital Ocean Managed PostgreSQL (Recommended for Production)
-
-**Pros:**
-- ✅ Automatic backups (daily + PITR)
-- ✅ High availability with standby replicas
-- ✅ Automatic updates and security patches
-- ✅ Monitoring and alerting built-in
-- ✅ Connection pooling included
-
-**Cons:**
-- 💰 Additional cost ($15-25/month)
-- 📊 Overkill for small deployments
-
-**Use when:**
-- Production deployments
-- 10+ concurrent projects
-- Need high availability (99.99% uptime)
-- Want automated backups and recovery
-
-**Pricing:** $15/month (1GB RAM, 10GB storage, 1 vCPU)
+- Automatic backups, high availability, connection pooling
+- $15-25/month additional
+- Best for production with uptime requirements
 
 ---
 
 ## Deployment Steps
 
-> **⚠️ v2.1.0 Note:** These deployment steps were verified for v2.0.0. For v2.1.0:
-> 1. All steps below still apply
-> 2. Additional database migrations will run automatically (017-020+)
-> 3. Test all quality system features after deployment
-> 4. Monitor resource usage (v2.1 may require more resources)
-> 5. Verify all 60+ API endpoints are accessible
-> 6. Consider increasing Droplet size if needed (16GB RAM recommended for v2.1)
-
 ### Step 1: Create Droplet
 
+Using the web console or CLI:
+
 ```bash
-# Create Droplet with Docker pre-installed
 doctl compute droplet create yokeflow \
   --image docker-20-04 \
   --size s-4vcpu-8gb \
   --region nyc1 \
   --ssh-keys $(doctl compute ssh-key list --format ID --no-header)
-
-# Get Droplet IP
-doctl compute droplet get yokeflow --format PublicIPv4 --no-header
 ```
 
-**Droplet Specifications:**
-- **Image:** Docker 20.04 (Ubuntu with Docker pre-installed)
-- **Size:** 8GB RAM / 4 vCPU (s-4vcpu-8gb)
-- **Region:** Choose closest to users (nyc1, sfo3, lon1, etc.)
-- **Cost:** $48/month
+**Specs:** 8GB RAM / 4 vCPU, Docker on Ubuntu image, ~$48/month
 
 ### Step 2: Initial Server Setup
 
 ```bash
-# SSH into Droplet
 ssh root@<DROPLET_IP>
 
-# Update system packages
+# Update system
 apt update && apt upgrade -y
 
-# Install Node.js 20 LTS via NVM (Node Version Manager)
-# NVM is more reliable across different distributions than NodeSource
+# Install Node.js 20 via NVM
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
-
-# Load NVM into current session
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-
-# Install Node.js 20 LTS
 nvm install 20
 nvm use 20
 nvm alias default 20
 
-# Verify Node.js installation
+# Verify
 node --version  # Should show v20.x.x
-npm --version   # Should show v10.x.x
 
-# Install additional tools
+# Install tools
 apt install -y git curl wget vim htop postgresql-client
 
-# Create application directory
-cd /var
-
 # Clone repository
-git clone https://github.com/yourusername/YokeFlow.git
-cd YokeFlow
+cd /var
+git clone https://github.com/jeffjacobsen/yokeflow2.git
+cd yokeflow2
 ```
 
 ### Step 3: Configure Environment
@@ -327,242 +124,126 @@ cd YokeFlow
 #### 3.1: Create YokeFlow Configuration
 
 ```bash
-# Create YokeFlow configuration file
 cat > .yokeflow.yaml << 'EOF'
-# YokeFlow Configuration - Production Deployment
-
 models:
   initializer: claude-opus-4-6
   coding: claude-sonnet-4-6
 
 timing:
   auto_continue_delay: 3
-  web_ui_poll_interval: 5
 
 project:
-  default_projects_dir: /var/YokeFlow/projects  # CRITICAL: Must be host path (where you cloned repo)
-  max_iterations: null
-
-review:
-  min_reviews_for_analysis: 5
+  default_projects_dir: /var/yokeflow2/projects
 EOF
 ```
 
-**IMPORTANT - Projects Directory Path:**
-- The `default_projects_dir` must be the **host filesystem path** (not container path)
-- This is the directory where you cloned the YokeFlow repository
-- The GitHub repository is named `YokeFlow` (capital Y, F), so `git clone` creates `/var/YokeFlow/`
-- Use the exact path: `/var/YokeFlow/projects` (match the capitalization from git clone)
-- Both API and agent containers will mount this host path correctly via Docker volumes
-- **Do NOT use `/app/projects`** - that's the container internal path, not the host path
+**Important:** The `default_projects_dir` must be the host filesystem path where you cloned the repo.
 
 #### 3.2: Configure Environment Variables
 
 ```bash
-# Create production environment file
 cp .env.example .env
-
-# Edit environment variables
 vim .env
 ```
 
-**Required environment variables:**
+Key variables to set for production:
 
 ```bash
-# PostgreSQL Connection
-# IMPORTANT: Use 'postgres' (service name) not 'localhost' when using Docker Compose
+# PostgreSQL - use 'postgres' (Docker service name), not 'localhost'
 DATABASE_URL=postgresql://agent:CHANGE_THIS_PASSWORD@postgres:5432/yokeflow
 POSTGRES_PASSWORD=CHANGE_THIS_PASSWORD
 
 # Claude API
 CLAUDE_CODE_OAUTH_TOKEN=your_claude_oauth_token_here
 
-# API Configuration
+# API
 API_HOST=0.0.0.0
 API_PORT=8010
 
-# Next.js Web UI Settings
-# IMPORTANT: Use your public domain (HTTPS), NOT localhost
-# These are embedded in browser JavaScript - must be publicly accessible
+# Web UI - use your public domain (HTTPS), NOT localhost
+# These are embedded in browser JavaScript at build time
 NEXT_PUBLIC_API_URL=https://your-domain.com
 NEXT_PUBLIC_WS_URL=wss://your-domain.com
 
 # Security (generate with: openssl rand -hex 32)
 SECRET_KEY=your_secret_key_here
 
-# UI Authentication (required for production deployment)
+# UI Authentication (required for production)
 UI_PASSWORD=your_secure_password_here
-
-# Optional: Digital Ocean Spaces for backups
-SPACES_KEY=your_spaces_key
-SPACES_SECRET=your_spaces_secret
-SPACES_BUCKET=autonomous-coding-backups
-SPACES_REGION=nyc3
 ```
 
 ### Step 4: Build and Start Services
 
 ```bash
 # Build MCP task manager
-cd mcp-task-manager
-npm install
-npm run build
-cd ..
+cd mcp-task-manager && npm install && npm run build && cd ..
 
 # Build Next.js web UI
-cd web-ui
-npm install
-npm run build
-cd ..
+cd web-ui && npm install && npm run build && cd ..
 
-# Start services with Docker Compose
-# Note: Ubuntu 22.04+ uses Docker Compose V2 (docker compose, not docker-compose)
+# Start PostgreSQL via Docker Compose
 docker compose up -d
 
-# Check service status
+# Check status
 docker compose ps
-
-# View logs
-docker compose logs -f
-```
-
-**Expected output:**
-```
-NAME                              STATUS
-yokeflow_postgres        Up 30 seconds (healthy)
 ```
 
 ### Step 5: Initialize Database
 
-The database schema is automatically initialized **on first run** via the volume mount in `docker-compose.yml`:
-
-```yaml
-volumes:
-  - ./schema/postgresql:/docker-entrypoint-initdb.d:ro
-```
-
-PostgreSQL runs all `.sql` files in this directory in **alphabetical order** when starting with an empty data directory.
-
-**IMPORTANT:** This only works when PostgreSQL starts with an empty data directory. If you already have a volume from a previous run, the schema will NOT be re-initialized.
-
-#### Verify Schema Initialization
+The schema auto-initializes on first PostgreSQL start via the volume mount in `docker-compose.yml`. Verify:
 
 ```bash
-# Check if tables were created automatically
 docker exec yokeflow_postgres \
   psql -U agent -d yokeflow -c "\dt"
-
-# Expected output: 9 tables (projects, epics, tasks, tests, sessions, etc.)
 ```
 
-#### If Tables Were NOT Created (Manual Initialization)
-
-If the `\dt` command shows "Did not find any relations" or is missing tables, manually initialize the schema:
+If tables are missing, manually initialize:
 
 ```bash
-# Manually initialize schema (works for both fresh and existing databases)
 docker exec -i yokeflow_postgres \
   psql -U agent -d yokeflow < schema/postgresql/schema.sql
-
-# Verify tables exist
-docker exec yokeflow_postgres \
-  psql -U agent -d yokeflow -c "\dt"
-
-# Expected output: 9 tables listed
-```
-
-**Common cause:** If you see initialization failures in docker logs (`docker compose logs postgres`), this usually means there are multiple `.sql` files in `schema/postgresql/` that are running in the wrong order. The directory should **only contain `schema.sql`**. Migration files should have been removed in v1.1.0.
-
-#### Verify Database Connection
-
-```bash
-# Test PostgreSQL is responding
-docker exec yokeflow_postgres \
-  psql -U agent -d yokeflow -c "SELECT version();"
-
-# If container name is different, check with:
-docker compose ps
 ```
 
 ### Step 5.5: Configure Firewall
 
-**IMPORTANT:** This must be done BEFORE setting up SSL certificates in Step 6.
-The Docker image blocks ports 80 and 443 by default, which will cause certbot to fail.
+**Do this BEFORE setting up SSL certificates.**
 
 ```bash
-# Install UFW (Uncomplicated Firewall)
-apt install -y ufw
-
-# Default policies
 ufw default deny incoming
 ufw default allow outgoing
-
-# Allow SSH (CRITICAL - don't lock yourself out!)
-ufw allow 22/tcp
-
-# Allow HTTP/HTTPS (required for certbot and web access)
-ufw allow 80/tcp
-ufw allow 443/tcp
-
-# SECURITY: Block Docker daemon ports (the Marketplace image opens these by default)
-# Port 2375 = unencrypted Docker API (DANGEROUS if exposed)
-# Port 2376 = encrypted Docker API with TLS
-# These should NEVER be accessible from the internet
-ufw deny 2375/tcp
+ufw allow 22/tcp    # SSH
+ufw allow 80/tcp    # HTTP (for certbot)
+ufw allow 443/tcp   # HTTPS
+ufw deny 2375/tcp   # Block Docker API (exposed by Marketplace image)
 ufw deny 2376/tcp
-
-# Enable firewall
 ufw --force enable
-
-# Check status
-ufw status verbose
 ```
-
-**Expected output:**
-```
-Status: active
-
-To                         Action      From
---                         ------      ----
-22/tcp                     ALLOW       Anywhere
-80/tcp                     ALLOW       Anywhere
-443/tcp                     ALLOW       Anywhere
-2375/tcp                   DENY        Anywhere
-2376/tcp                   DENY        Anywhere
-```
-
-**Security Note:** The "Docker on Ubuntu 22.04" Marketplace image opens ports 2375 and 2376 by default. These are Docker daemon API ports that allow remote control of Docker. If exposed to the internet, attackers can run arbitrary containers, access secrets, and compromise your server. We explicitly block them above.
 
 ### Step 6: Setup Nginx Reverse Proxy
 
 ```bash
-# Install Nginx
 apt install -y nginx
 
-# Configure WebSocket support (required for real-time updates)
+# WebSocket support
 cat > /etc/nginx/conf.d/websocket.conf <<'EOF'
-# WebSocket upgrade mapping
 map $http_upgrade $connection_upgrade {
     default upgrade;
     '' close;
 }
 EOF
 
-# Create site configuration file
+# Site configuration
 cat > /etc/nginx/sites-available/yokeflow <<'EOF'
 server {
     listen 80;
-    server_name yokeflow.yourdomain.com;
+    server_name your-domain.com;
 
-    # ACME challenge for Let's Encrypt SSL certificate
     location /.well-known/acme-challenge/ {
         root /var/www/html;
     }
 
-    # Security headers
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
-    add_header X-XSS-Protection "1; mode=block" always;
 
     # API endpoints
     location /api {
@@ -571,14 +252,12 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-
-        # Increase timeouts for long-running sessions
         proxy_read_timeout 3600s;
         proxy_connect_timeout 60s;
         proxy_send_timeout 60s;
     }
 
-    # WebSocket for real-time updates
+    # WebSocket
     location /api/ws {
         proxy_pass http://localhost:8010;
         proxy_http_version 1.1;
@@ -588,8 +267,6 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-
-        # WebSocket timeouts
         proxy_read_timeout 86400s;
         proxy_send_timeout 86400s;
     }
@@ -603,31 +280,32 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
-    # Increase max upload size for spec files
     client_max_body_size 10M;
 }
 EOF
 
-# Enable site
 ln -s /etc/nginx/sites-available/yokeflow /etc/nginx/sites-enabled/
-rm /etc/nginx/sites-enabled/default  # Remove default site
-
-# Create ACME challenge directory for Let's Encrypt
+rm -f /etc/nginx/sites-enabled/default
 mkdir -p /var/www/html/.well-known/acme-challenge
-
-# Test configuration
-nginx -t
-
-# Restart Nginx
-systemctl restart nginx
-systemctl enable nginx
+nginx -t && systemctl restart nginx && systemctl enable nginx
 ```
-
-**Important:** The application services must be running before you can obtain an SSL certificate. Continue to Step 7 first.
 
 ### Step 7: Start Application Services
 
-Create production Docker Compose configuration:
+You can either run the API and Web UI directly on the host or containerize them. For a simple deployment, run on the host:
+
+```bash
+# Create projects directory
+mkdir -p projects
+
+# Start API server (in a tmux/screen session or as a systemd service)
+uvicorn server.api.app:app --host 0.0.0.0 --port 8010 &
+
+# Start Web UI
+cd web-ui && npm start &
+```
+
+For a containerized deployment, create a production Docker Compose file:
 
 ```bash
 cat > docker-compose.prod.yml <<'EOF'
@@ -645,7 +323,7 @@ services:
     ports:
       - "8010:8010"
     volumes:
-      - /var/YokeFlow/projects:/var/YokeFlow/projects
+      - ./projects:/app/projects
     depends_on:
       - postgres
     restart: unless-stopped
@@ -657,13 +335,9 @@ services:
       context: ./web-ui
       dockerfile: Dockerfile
       args:
-        # Pass build arguments to Dockerfile (required for Next.js build)
         - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
         - NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}
     container_name: yokeflow_web
-    environment:
-      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
-      - NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}
     ports:
       - "3010:3010"
     restart: unless-stopped
@@ -677,13 +351,8 @@ services:
       POSTGRES_DB: yokeflow
       POSTGRES_USER: agent
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    # SECURITY: Do NOT expose port 5432 to the internet
-    # The API container connects via Docker network (no port mapping needed)
-    # Exposing this port allows internet bots to attempt authentication
-    # If you need direct database access, use SSH tunnel instead:
-    #   ssh -L 5432:localhost:5432 root@your-server
-    # ports:
-    #   - "5432:5432"  # COMMENTED OUT FOR SECURITY
+    # Do NOT expose port 5432 to the internet
+    # API connects via Docker network
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./schema/postgresql:/docker-entrypoint-initdb.d:ro
@@ -716,29 +385,14 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies including Docker CLI
-# Docker CLI is needed for Docker-in-Docker (agent sessions run in containers)
-RUN apt-get update && apt-get install -y \
-    curl \
-    ca-certificates \
-    gnupg \
-    lsb-release \
-    && mkdir -p /etc/apt/keyrings \
-    && curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg \
-    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null \
-    && apt-get update \
-    && apt-get install -y docker-ce-cli \
-    && rm -rf /var/lib/apt/lists/*
-
 # Install Node.js for MCP server
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+RUN apt-get update && apt-get install -y curl \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user for security with home directory
-# Claude SDK refuses to run as root with --dangerously-skip-permissions
-RUN groupadd -r appuser && useradd -r -g appuser -m -d /home/appuser appuser \
-    && chown -R appuser:appuser /home/appuser
+# Create non-root user
+RUN groupadd -r appuser && useradd -r -g appuser -m -d /home/appuser appuser
 
 # Install Python dependencies
 COPY requirements.txt .
@@ -753,14 +407,11 @@ RUN cd mcp-task-manager && npm install && npm run build && cd ..
 # Change ownership to non-root user
 RUN chown -R appuser:appuser /app
 
-# Switch to non-root user
 USER appuser
 
-# Expose API port
 EXPOSE 8010
 
-# Start API server
-CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8010"]
+CMD ["uvicorn", "server.api.app:app", "--host", "0.0.0.0", "--port", "8010"]
 EOF
 
 # Web UI Dockerfile
@@ -769,27 +420,21 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Copy package files
 COPY package*.json ./
 RUN npm install
 
-# Copy application code
 COPY . .
 
-# Accept build arguments for Next.js public environment variables
-# These MUST be set at build time, not runtime
+# Build args required for Next.js (baked into static files)
 ARG NEXT_PUBLIC_API_URL
 ARG NEXT_PUBLIC_WS_URL
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_WS_URL=$NEXT_PUBLIC_WS_URL
 
-# Build Next.js (environment variables are baked into the static files)
 RUN npm run build
 
-# Expose web port
 EXPOSE 3010
 
-# Start Next.js server
 CMD ["npm", "start"]
 EOF
 ```
@@ -797,621 +442,85 @@ EOF
 Start production services:
 
 ```bash
-# Create projects directory with correct permissions
-# The API runs as non-root user (appuser, UID 999) for security
 mkdir -p projects
-chmod -R 777 projects  # Or: chown -R 999:999 projects
-
-# Build and start services
 docker compose -f docker-compose.prod.yml up -d --build
-
-# Check logs
 docker compose -f docker-compose.prod.yml logs -f
-
-# Verify services are running
-docker compose ps
-
-# Test API endpoint
-curl http://localhost:8010/api/health
-
-# Test Web UI
-curl http://localhost:3010
 ```
-
-**Wait for services to be fully running before proceeding to SSL setup.**
-
----
 
 ### Step 8: Setup SSL with Let's Encrypt
 
-Now that your application is running, obtain an SSL certificate:
-
 ```bash
-# Install Certbot (if not already installed)
 apt install -y certbot python3-certbot-nginx
-
-# Obtain SSL certificate
-# Replace with your actual domain
-certbot --nginx -d your.domain.com
-
-# Test auto-renewal
-certbot renew --dry-run
+certbot --nginx -d your-domain.com
+certbot renew --dry-run  # Test auto-renewal
 ```
 
-**Certbot will automatically:**
-- Validate domain ownership via ACME HTTP-01 challenge
-- Generate SSL certificate from Let's Encrypt
-- Update Nginx configuration to use HTTPS
-- Setup auto-renewal cron job (runs twice daily)
-
-#### Troubleshooting: 404 Error During Authentication
-
-**Symptom:**
-```
-Detail: Invalid response from http://your.domain.com/.well-known/acme-challenge/...: 404
-```
-
-**Cause:** Nginx can't serve the ACME challenge files because the location block is missing.
-
-**Solution:**
-
-Add an ACME challenge location block to your Nginx configuration:
-
-```bash
-# Edit Nginx config
-vim /etc/nginx/sites-available/yokeflow
-```
-
-Add this location block **at the top of the server block**, before the proxy locations:
-
-```nginx
-server {
-    listen 80;
-    server_name your.domain.com;
-
-    # ACME challenge for Let's Encrypt (ADD THIS FIRST)
-    location /.well-known/acme-challenge/ {
-        root /var/www/html;
-    }
-
-    # Security headers
-    add_header X-Frame-Options "SAMEORIGIN" always;
-    # ... rest of config
-}
-```
-
-Then:
-
-```bash
-# Create the challenge directory
-mkdir -p /var/www/html/.well-known/acme-challenge
-
-# Test and reload Nginx
-nginx -t && systemctl reload nginx
-
-# Try Certbot again
-certbot --nginx -d your.domain.com
-```
-
-#### Alternative: Standalone Mode
-
-If Nginx integration continues to fail:
-
-```bash
-# Stop Nginx temporarily
-systemctl stop nginx
-
-# Get certificate using Certbot's built-in webserver
-certbot certonly --standalone -d your.domain.com
-
-# Manually configure Nginx SSL
-vim /etc/nginx/sites-available/autonomous-coding
-```
-
-Add SSL configuration:
-
-```nginx
-server {
-    listen 443 ssl http2;
-    server_name your.domain.com;
-
-    ssl_certificate /etc/letsencrypt/live/your.domain.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/your.domain.com/privkey.pem;
-
-    # Strong SSL configuration
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers HIGH:!aNULL:!MD5;
-    ssl_prefer_server_ciphers on;
-
-    # ... rest of your proxy configuration
-}
-
-# Redirect HTTP to HTTPS
-server {
-    listen 80;
-    server_name your.domain.com;
-    return 301 https://$server_name$request_uri;
-}
-```
-
-Then:
-
-```bash
-# Start Nginx
-nginx -t && systemctl start nginx
-```
-
----
-
-## Generated Application Download
-
-### Option 1: ZIP Download API (Recommended for Start)
-
-Add download endpoint to `api/main.py`:
-
-```python
-from fastapi.responses import FileResponse
-import zipfile
-import tempfile
-import shutil
-
-@app.get("/api/projects/{project_id}/download")
-async def download_project(project_id: str):
-    """
-    Download generated project as ZIP file.
-
-    Excludes:
-    - .git directory
-    - node_modules
-    - __pycache__
-    - logs
-    """
-    try:
-        project = await db.get_project(project_id)
-        project_path = Path(project['projects_path'])
-
-        if not project_path.exists():
-            raise HTTPException(status_code=404, detail="Project directory not found")
-
-        # Create temporary ZIP file
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.zip', mode='wb') as tmp:
-            with zipfile.ZipFile(tmp, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                for file_path in project_path.rglob('*'):
-                    if file_path.is_file():
-                        # Skip excluded directories
-                        if any(part in ['.git', 'node_modules', '__pycache__', 'logs']
-                               for part in file_path.parts):
-                            continue
-
-                        # Add file to ZIP with relative path
-                        arcname = file_path.relative_to(project_path)
-                        zipf.write(file_path, arcname)
-
-            tmp_path = tmp.name
-
-        # Return ZIP file
-        return FileResponse(
-            tmp_path,
-            media_type='application/zip',
-            filename=f"{project['name']}.zip",
-            background=BackgroundTask(lambda: Path(tmp_path).unlink())  # Cleanup
-        )
-
-    except Exception as e:
-        logger.error(f"Download failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-```
-
-**Web UI Component** (`web-ui/src/app/projects/[id]/page.tsx`):
-
-```typescript
-async function handleDownloadProject() {
-  try {
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL}/api/projects/${projectId}/download`
-    );
-
-    if (!response.ok) throw new Error('Download failed');
-
-    const blob = await response.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${project.name}.zip`;
-    a.click();
-    window.URL.revokeObjectURL(url);
-
-    toast.success('Project downloaded successfully');
-  } catch (err) {
-    toast.error('Failed to download project');
-  }
-}
-
-// Add button to UI
-<button
-  onClick={handleDownloadProject}
-  className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg"
->
-  📦 Download Project
-</button>
-```
-
-### Option 2: GitHub Integration (Best UX)
-
-Install PyGithub:
-
-```bash
-pip install PyGithub
-```
-
-Add GitHub publish endpoint:
-
-```python
-from github import Github, GithubException
-
-@app.post("/api/projects/{project_id}/publish-to-github")
-async def publish_to_github(
-    project_id: str,
-    github_token: str,  # User's personal access token
-    repo_name: str,
-    private: bool = True,
-    description: str = ""
-):
-    """
-    Create GitHub repository and push generated code.
-
-    Requires user's GitHub personal access token with 'repo' scope.
-    """
-    try:
-        project = await db.get_project(project_id)
-        project_path = Path(project['projects_path'])
-
-        # Authenticate with GitHub
-        g = Github(github_token)
-        user = g.get_user()
-
-        # Create repository
-        try:
-            repo = user.create_repo(
-                repo_name,
-                private=private,
-                description=description or f"Generated by Autonomous Coding Agent - {project['name']}",
-                auto_init=False
-            )
-        except GithubException as e:
-            if e.status == 422:
-                raise HTTPException(status_code=409, detail="Repository already exists")
-            raise
-
-        # Configure git remote
-        subprocess.run(
-            ['git', 'remote', 'remove', 'origin'],
-            cwd=project_path,
-            capture_output=True  # Ignore errors if remote doesn't exist
-        )
-
-        subprocess.run(
-            ['git', 'remote', 'add', 'origin', repo.clone_url],
-            cwd=project_path,
-            check=True
-        )
-
-        # Push code
-        result = subprocess.run(
-            ['git', 'push', '-u', 'origin', 'main'],
-            cwd=project_path,
-            capture_output=True,
-            text=True
-        )
-
-        if result.returncode != 0:
-            raise Exception(f"Git push failed: {result.stderr}")
-
-        return {
-            "repo_url": repo.html_url,
-            "clone_url": repo.clone_url,
-            "ssh_url": repo.ssh_url
-        }
-
-    except GithubException as e:
-        logger.error(f"GitHub API error: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        logger.error(f"Publish to GitHub failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-```
-
-**Web UI for GitHub publish:**
-
-```typescript
-const [githubToken, setGithubToken] = useState('');
-const [repoName, setRepoName] = useState('');
-const [isPublishing, setIsPublishing] = useState(false);
-
-async function handlePublishToGitHub() {
-  setIsPublishing(true);
-  try {
-    const response = await api.publishToGitHub(
-      projectId,
-      githubToken,
-      repoName,
-      true  // private repo
-    );
-
-    toast.success('Published to GitHub!');
-    window.open(response.repo_url, '_blank');
-  } catch (err) {
-    toast.error('Failed to publish to GitHub');
-  } finally {
-    setIsPublishing(false);
-  }
-}
-```
-
-### Option 3: Digital Ocean Spaces (S3-Compatible Storage)
-
-**Use case:** Archive completed projects for long-term storage.
-
-Install boto3:
-
-```bash
-pip install boto3
-```
-
-Configure Spaces client:
-
-```python
-import boto3
-from botocore.client import Config
-
-# Initialize Spaces client
-s3 = boto3.client('s3',
-    endpoint_url=f'https://{os.getenv("SPACES_REGION")}.digitaloceanspaces.com',
-    aws_access_key_id=os.getenv('SPACES_KEY'),
-    aws_secret_access_key=os.getenv('SPACES_SECRET'),
-    config=Config(signature_version='s3v4')
-)
-
-@app.post("/api/projects/{project_id}/archive")
-async def archive_project(project_id: str):
-    """Archive completed project to Digital Ocean Spaces."""
-    try:
-        project = await db.get_project(project_id)
-
-        # Create ZIP file
-        zip_path = await create_project_zip(project_id)
-
-        # Upload to Spaces
-        bucket = os.getenv('SPACES_BUCKET')
-        key = f'{project_id}/{project["name"]}.zip'
-
-        s3.upload_file(
-            str(zip_path),
-            bucket,
-            key,
-            ExtraArgs={'ACL': 'private'}
-        )
-
-        # Generate presigned URL (expires in 7 days)
-        download_url = s3.generate_presigned_url(
-            'get_object',
-            Params={'Bucket': bucket, 'Key': key},
-            ExpiresIn=604800  # 7 days
-        )
-
-        # Cleanup local ZIP
-        zip_path.unlink()
-
-        return {
-            "archive_url": f"https://{bucket}.{os.getenv('SPACES_REGION')}.digitaloceanspaces.com/{key}",
-            "download_url": download_url,
-            "expires_in": "7 days"
-        }
-
-    except Exception as e:
-        logger.error(f"Archive failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-```
-
-**Pricing:** ~$5/month for 250GB storage + $0.01/GB egress
+If certbot fails with a 404 on the ACME challenge, ensure the `/.well-known/acme-challenge/` location block is in your Nginx config and `mkdir -p /var/www/html/.well-known/acme-challenge` has been run.
 
 ---
 
 ## Security & Authentication
 
-**IMPORTANT:** By default, the deployment is **completely open** - anyone who visits your domain can create projects and consume your Claude API credits. You must enable authentication before making it publicly accessible.
-
 ### JWT Authentication (Built-in)
 
-**Status:** ✅ **IMPLEMENTED** (December 2025) - JWT authentication is built into the platform and ready for production use.
+The platform includes JWT authentication:
 
-#### 1. How JWT Authentication Works
+- **Backend:** `server/api/auth.py` — bcrypt password verification, 24-hour token expiration, all endpoints protected except `/api/auth/login` and `/health`
+- **Frontend:** Login page at `/login`, JWT stored in localStorage, auto-redirect on 401
+- **Single-user mode:** Password set via `UI_PASSWORD` environment variable
+- **Development mode:** When `UI_PASSWORD` is not set, authentication is bypassed
 
-The platform includes complete JWT authentication with the following features:
-
-**Backend (FastAPI):**
-- `api/auth.py` - Complete authentication module with JWT token management
-- Password verification using bcrypt hashing
-- Token expiration (24 hours by default)
-- All API endpoints protected (except `/api/auth/login` and `/api/health`)
-
-**Frontend (Next.js):**
-- Login page at `/login` with simple password form
-- JWT token stored in localStorage
-- Automatic token injection in API requests via Axios interceptor
-- Auto-redirect to login on 401 (token expired or invalid)
-- Logout functionality in UI header
-
-**Authentication Flow:**
-1. User visits site → Redirected to `/login` if not authenticated
-2. User enters password → POST to `/api/auth/login`
-3. Backend validates password against `UI_PASSWORD` environment variable
-4. Backend issues JWT token → Frontend stores in localStorage
-5. All subsequent API calls include JWT in `Authorization: Bearer <token>` header
-6. Backend validates token on every request → 401 if invalid/expired
-
-**Single-User Mode:**
-- Currently configured for single-user authentication (one password for all users)
-- Password set via `UI_PASSWORD` environment variable
-- No user registration needed - admin controls access via password
-
-**Development Mode:**
-- When `UI_PASSWORD` is not set in `.env`, authentication is automatically bypassed
-- Frontend detects this by testing `/api/info` endpoint accessibility
-- Useful for local development - no login required
-- **Production:** Always set `UI_PASSWORD` to enable authentication
-- See [docs/authentication.md](authentication.md) for details
-
-**Dependencies** (already installed):
+**Required environment variables:**
 ```bash
-pip install python-jose[cryptography] passlib[bcrypt]
+SECRET_KEY=your_secret_key_here        # openssl rand -hex 32
+UI_PASSWORD=your_secure_password_here
 ```
 
-**Environment Variables Required:**
-```bash
-# .env file
-SECRET_KEY=your_secret_key_here           # For general encryption (openssl rand -hex 32)
-UI_PASSWORD=your_secure_password_here     # Password for web UI login
-```
+### CORS Configuration
 
-#### 2. Environment Variable Security
-
-**Never commit secrets to git:**
-
-```bash
-# Add to .gitignore
-.env
-.env.local
-.env.production
-*.pem
-*.key
-```
-
-**Use Digital Ocean's Secrets Management:**
-
-```bash
-# Store secrets as environment variables in Droplet metadata
-doctl compute droplet tag autonomous-coding \
-  --tag-name production
-
-# Or use managed container registry with secrets
-```
-
-#### 3. Project Name Validation
-
-**Status:** ✅ **IMPLEMENTED** (December 2025)
-
-The platform now validates project names to prevent filesystem issues:
-
-**Validation Rules:**
-- Only lowercase letters, numbers, hyphens, and underscores allowed
-- No spaces permitted (prevents filesystem path issues)
-- Regex: `^[a-z0-9_-]+$`
-
-**Examples:**
-- ✅ Valid: `my-project`, `claude_clone`, `test123`
-- ❌ Invalid: `my project`, `My Project`, `claude clone`
-
-**Implementation:**
-- Frontend validation in project creation form (instant feedback)
-- Backend validation in API endpoint (security layer)
-- Clear error message: "Project name must contain only lowercase letters, numbers, hyphens, and underscores (no spaces)"
-
-This validation is already included in the codebase and requires no additional configuration.
-
----
-
-#### 4. Rate Limiting
-
-Install slowapi:
-
-```bash
-pip install slowapi
-```
-
-Add to `api/main.py`:
+Update `allow_origins` for production:
 
 ```python
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
-
-limiter = Limiter(key_func=get_remote_address)
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-
-@app.post("/api/projects")
-@limiter.limit("10/minute")  # Max 10 projects per minute per IP
-async def create_project(request: Request):
-    # ...
-```
-
-#### 4. CORS Configuration
-
-Update the `allow_origins` in `api/main.py` to restrict to your domain:
-
-```python
-# Production: restrict to your domain only
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://your-domain.com",
-        "https://www.your-domain.com"
-    ],
+    allow_origins=["https://your-domain.com"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 ```
 
-**Note:** The `CORSMiddleware` import and `app.add_middleware` are already in the code. You only need to update the `allow_origins` list with your actual domain.
+### Rate Limiting (Optional)
+
+```bash
+pip install slowapi
+```
+
+See [slowapi documentation](https://slowapi.readthedocs.io/) for integration with FastAPI.
 
 ---
 
 ## Backup & Monitoring
 
-### Automated Backups
-
-#### PostgreSQL Backup Script
+### PostgreSQL Backup Script
 
 ```bash
-# Create backup script
 cat > /usr/local/bin/backup-postgres.sh <<'EOF'
 #!/bin/bash
 set -e
 
-# Configuration
 BACKUP_DIR="/var/backups/yokeflow"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-POSTGRES_CONTAINER="yokeflow_postgres"
-DATABASE="yokeflow"
-USER="agent"
-
-# Retention (keep backups for 30 days)
 RETENTION_DAYS=30
 
-# Create backup directory
 mkdir -p $BACKUP_DIR
 
-# Backup database
-echo "Starting PostgreSQL backup..."
-docker exec $POSTGRES_CONTAINER \
-  pg_dump -U $USER -d $DATABASE -F c -b -v \
+docker exec yokeflow_postgres \
+  pg_dump -U agent -d yokeflow -F c -b -v \
   > $BACKUP_DIR/postgres_${TIMESTAMP}.dump
 
-# Compress backup
 gzip $BACKUP_DIR/postgres_${TIMESTAMP}.dump
 
-# Optional: Upload to Digital Ocean Spaces
-if [ -n "$SPACES_KEY" ]; then
-  echo "Uploading backup to Spaces..."
-  aws s3 cp \
-    $BACKUP_DIR/postgres_${TIMESTAMP}.dump.gz \
-    s3://autonomous-coding-backups/postgres/ \
-    --endpoint-url https://nyc3.digitaloceanspaces.com
-fi
-
-# Delete old backups
 find $BACKUP_DIR -name "postgres_*.dump.gz" -mtime +$RETENTION_DAYS -delete
 
 echo "Backup completed: postgres_${TIMESTAMP}.dump.gz"
@@ -1420,854 +529,108 @@ EOF
 chmod +x /usr/local/bin/backup-postgres.sh
 ```
 
-#### Setup Cron Job
+Schedule daily backup:
 
 ```bash
-# Run backup daily at 2 AM
-crontab -e
-
-# Add line:
+# Add to crontab (crontab -e):
 0 2 * * * /usr/local/bin/backup-postgres.sh >> /var/log/postgres-backup.log 2>&1
 ```
 
-#### Restore from Backup
+### Restore from Backup
 
 ```bash
-# List available backups
-ls -lh /var/backups/yokeflow/
-
-# Restore from backup
-gunzip /var/backups/yokeflow/postgres_20250118_020000.dump.gz
+gunzip /var/backups/yokeflow/postgres_YYYYMMDD_HHMMSS.dump.gz
 
 docker exec -i yokeflow_postgres \
   pg_restore -U agent -d yokeflow --clean \
-  < /var/backups/yokeflow/postgres_20250118_020000.dump
+  < /var/backups/yokeflow/postgres_YYYYMMDD_HHMMSS.dump
 ```
 
 ### Monitoring
 
-#### 1. System Monitoring with htop
-
 ```bash
-apt install -y htop
-htop  # Interactive process viewer
-```
+# Docker containers
+docker compose ps
 
-#### 2. Docker Monitoring
-
-```bash
-# Install ctop (container top)
-wget https://github.com/bcicen/ctop/releases/download/v0.7.7/ctop-0.7.7-linux-amd64 \
-  -O /usr/local/bin/ctop
-chmod +x /usr/local/bin/ctop
-
-# Run ctop
-ctop
-```
-
-#### 3. Log Monitoring
-
-```bash
-# View API logs
+# API logs
 docker compose logs -f api
-# Press Ctrl+C to exit
 
-# View database logs
-docker compose logs -f postgres
-# Press Ctrl+C to exit
-
-# View Nginx logs
-tail -f /var/log/nginx/access.log
+# Nginx logs
 tail -f /var/log/nginx/error.log
-# Press Ctrl+C to exit
 
-# View agent session logs (inside project directory)
-cd projects/<project-name>/logs
-ls -lah  # List all session logs
-
-# View human-readable session log
-cat session_001_20251219_120000.txt
-
-# View structured JSONL events log (for analysis)
-cat session_001_20251219_120000.jsonl | jq '.'
-```
-
-**Session Log Features (December 2025):**
-- ✅ **Dual-format logging**: Both human-readable (TXT) and structured (JSONL)
-- ✅ **Prompt file tracking**: Logs now record which prompt file was used (`initializer_prompt_local.md`, etc.)
-- ✅ **Real-time progress**: WebSocket updates for live session monitoring
-- ✅ **Session metadata**: Model used, session type, duration, tool usage counts
-
-**Log Format:**
-```
-================================================================================
-AUTONOMOUS CODING AGENT - SESSION 1
-================================================================================
-Session Type: CODING
-Model: claude-sonnet-4-6
-Prompt File: coding_prompt_docker.md
-Started: 2025-12-19 12:00:00
-================================================================================
-```
-
-#### 4. Disk Space Monitoring
-
-```bash
-# Check disk usage
+# Disk space
 df -h
 
-# Check Docker disk usage
+# Docker disk usage
 docker system df
-
-# Clean up Docker resources
-docker system prune -a -f --volumes
-```
-
-#### 5. Setup Alerts (Optional)
-
-Use Digital Ocean Monitoring:
-
-```bash
-# Install monitoring agent
-curl -sSL https://repos.insights.digitalocean.com/install.sh | bash
-
-# Configure alerts in Digital Ocean dashboard
-# - CPU > 80%
-# - Memory > 80%
-# - Disk > 90%
 ```
 
 ---
 
 ## Cost Analysis
 
-### Monthly Costs (Recommended Configuration)
-
-| Component | Option | Monthly Cost | Notes |
-|-----------|--------|--------------|-------|
-| **Droplet** | 8GB RAM / 4 vCPU | $48 | Required for platform hosting |
-| **Database** | Self-hosted (in Droplet) | $0 | Included in Droplet cost |
-| **Database** | Managed PostgreSQL (alt) | $15 | High availability option |
-| **Spaces** | 250GB storage | $5 | For backups/archives |
-| **Bandwidth** | 1TB included | $0 | Additional $0.01/GB |
-| **Domain** | .com domain | $1/month | ~$12/year |
-| **SSL** | Let's Encrypt | $0 | Free SSL certificate |
-| **Monitoring** | DO Monitoring | $0 | Free basic monitoring |
-| **Total (Self-hosted DB)** | | **$54/month** | Best for start |
-| **Total (Managed DB)** | | **$69/month** | Best for production |
-
-### Cost Optimization Tips
-
-1. **Start small:** Use self-hosted PostgreSQL until you need managed DB
-2. **Spaces:** Only enable if you need long-term archival
-3. **Droplet sizing:**
-   - Start with 4GB RAM if < 5 concurrent projects
-   - Scale to 8GB when you hit limits
-   - Monitor resource usage with `htop`
-4. **Managed DB:** Only upgrade when:
-   - Supporting 10+ concurrent projects
-   - Need 99.99% uptime
-   - Want automated backups/failover
-
----
-
-## Scaling Strategies
-
-### Stage 1: Single Droplet (0-50 users)
-
-**Current setup is sufficient:**
-- 8GB RAM Droplet
-- Self-hosted PostgreSQL
-- Nginx reverse proxy
-
-**Capacity:**
-- 5-10 concurrent agent sessions
-- 50 total projects
-- 100 requests/minute
-
----
-
-### Stage 2: Vertical Scaling (50-200 users)
-
-**Upgrade Droplet:**
-```bash
-# Resize to 16GB RAM / 8 vCPU
-doctl compute droplet-action resize <droplet-id> \
-  --size s-8vcpu-16gb \
-  --resize-disk
-```
-
-**Upgrade to Managed PostgreSQL:**
-```bash
-# Create managed database cluster
-doctl databases create autonomous-coding-db \
-  --engine pg \
-  --version 16 \
-  --size db-s-2vcpu-4gb \
-  --region nyc1
-
-# Update DATABASE_URL in .env
-```
-
-**Capacity:**
-- 20-30 concurrent agent sessions
-- 500 total projects
-- 500 requests/minute
-
-**Cost:** ~$120/month (Droplet $96 + DB $15 + Spaces $5)
-
----
-
-### Stage 3: Horizontal Scaling (200-1000 users)
-
-**Add Load Balancer:**
-
-```bash
-# Create load balancer
-doctl compute load-balancer create \
-  --name autonomous-coding-lb \
-  --region nyc1 \
-  --forwarding-rules entry_protocol:https,entry_port:443,target_protocol:http,target_port:80 \
-  --droplet-ids <droplet-1-id>,<droplet-2-id>
-```
-
-**Architecture:**
-
-```
-Internet → Load Balancer (HTTPS)
-            ├→ Droplet 1 (API + Web)
-            ├→ Droplet 2 (API + Web)
-            └→ Droplet 3 (API + Web)
-                    ↓
-            Managed PostgreSQL (shared)
-                    ↓
-            Digital Ocean Spaces (shared)
-```
-
-**Capacity:**
-- 50-100 concurrent agent sessions
-- 5000 total projects
-- 2000 requests/minute
-
-**Cost:** ~$250/month (3x Droplets + LB $20 + DB $25 + Spaces $10)
-
----
-
-### Stage 4: Kubernetes (1000+ users)
-
-**Migrate to Digital Ocean Kubernetes (DOKS):**
-
-```bash
-# Create Kubernetes cluster
-doctl kubernetes cluster create autonomous-coding \
-  --region nyc1 \
-  --node-pool "name=workers;size=s-4vcpu-8gb;count=3;auto-scale=true;min-nodes=3;max-nodes=10"
-```
-
-**Benefits:**
-- Auto-scaling based on load
-- Rolling updates with zero downtime
-- Built-in service mesh
-- Managed Kubernetes control plane
-
-**Cost:** ~$400-800/month (3-10 nodes + DB $50 + Spaces $20)
+| Component | Monthly Cost |
+|-----------|-------------|
+| Droplet (8GB/4vCPU) | $48 |
+| Self-hosted PostgreSQL | $0 (included) |
+| Managed PostgreSQL (optional) | $15-25 |
+| Let's Encrypt SSL | $0 |
+| Domain (.com) | ~$1 |
+| **Total (self-hosted DB)** | **~$49** |
+| **Total (managed DB)** | **~$64-74** |
 
 ---
 
 ## Troubleshooting
 
-### Common Issues
+### PostgreSQL Authentication Errors ("Role postgres does not exist")
 
-#### 0. UI Shows No Progress During Sessions (WebSocket Limitation)
+**Cause:** Port 5432 is exposed to the internet, allowing bots to attempt connections.
 
-**Symptom:**
-- Initialization or coding session is running (visible in API logs)
-- Web UI shows no real-time updates
-- Must manually refresh browser to see progress
+**Fix:** Remove the `ports` mapping from the postgres service in your Docker Compose file. The API container connects via Docker network and doesn't need port exposure. If you need direct access, use an SSH tunnel: `ssh -L 5432:localhost:5432 root@your-server`
 
-**Status:** Known limitation (not a critical bug - sessions work fine)
+### TypeScript Build Error: "Unexpected token '?'"
 
-**Cause:** WebSocket real-time updates not fully implemented for streaming session logs
+**Cause:** Node.js version is too old. Node.js 20 LTS is required.
 
-**Workarounds:**
-```bash
-# Option 1: Watch API logs directly (best visibility)
-docker compose -f docker-compose.prod.yml logs -f api
+**Fix:** Install via NVM: `nvm install 20 && nvm use 20 && nvm alias default 20`
 
-# Option 2: Manually refresh browser periodically
-# Press F5 or click refresh button
+### `docker-compose` Command Not Found
 
-# Option 3: Monitor WebSocket in browser console
-# Right-click → Inspect → Console tab
-```
+Ubuntu 22.04+ uses Docker Compose V2. Use `docker compose` (with a space) instead of `docker-compose`.
 
-**What works:**
-- ✅ Sessions run correctly in background
-- ✅ Database updates properly
-- ✅ Final results appear after manual refresh
-- ✅ WebSocket connects successfully
+### Web UI Still Uses localhost After Changing NEXT_PUBLIC_API_URL
 
-**What doesn't work yet:**
-- ❌ Real-time streaming of tool calls to UI during session
-- ❌ Live progress indicators during initialization
-- ❌ Automatic UI updates without manual refresh
-
-**Expected behavior during initialization (10-20 minutes):**
-- UI shows "Session Running" but no detailed progress
-- API logs show full detail (MCP tool calls, epic/task creation)
-- After session completes, refresh browser to see all epics/tasks created
-
-**Future enhancement:** Planned feature to stream session logs via WebSocket
-
----
-
-#### 1. Continuous PostgreSQL Authentication Errors - "Role postgres does not exist"
-
-**Symptom:**
-```
-yokeflow_postgres  | FATAL:  password authentication failed for user "postgres"
-yokeflow_postgres  | DETAIL:  Role "postgres" does not exist.
-```
-
-Repeating every few seconds in postgres logs.
-
-**Cause:** PostgreSQL port 5432 is exposed to the internet (`0.0.0.0:5432->5432/tcp`), allowing bots and scanners to attempt connections with default credentials.
-
-**Security Risk:** **HIGH** - Exposing database ports to the internet is a critical security vulnerability.
-
-**Solution:**
+Next.js bakes `NEXT_PUBLIC_*` variables into static files at build time. You must rebuild the web container after changing these values:
 
 ```bash
-# 1. IMMEDIATELY block port 5432 with firewall
-sudo ufw deny 5432/tcp
-sudo ufw status
-
-# 2. Edit docker-compose.prod.yml
-vim /var/yokeflow/docker-compose.prod.yml
-
-# Find the postgres service and remove/comment the ports section:
-# FROM:
-#   postgres:
-#     ports:
-#       - "5432:5432"
-# TO:
-#   postgres:
-#     # ports:  # REMOVED FOR SECURITY
-#     #   - "5432:5432"
-
-# 3. Restart postgres container
-docker compose -f docker-compose.prod.yml down postgres
-docker compose -f docker-compose.prod.yml up -d postgres
-
-# 4. Verify port is no longer exposed
-docker ps | grep postgres
-# Should NOT show "0.0.0.0:5432"
-
-# 5. Verify logs are clean (wait 30 seconds)
-docker compose -f docker-compose.prod.yml logs postgres --tail 20
-# Should see no more authentication errors
-```
-
-**Why this works:**
-- API container still connects via Docker network (no port mapping needed)
-- External bots can no longer reach the database
-- Application continues working normally
-
-**If you need database access for debugging:**
-```bash
-# Use SSH tunnel instead of exposing the port
-ssh -L 5432:localhost:5432 root@your-server
-
-# Then connect from local machine
-psql postgresql://agent:password@localhost:5432/yokeflow
-```
-
----
-
-#### 2. TypeScript Build Error: `SyntaxError: Unexpected token '?'`
-
-**Symptom:**
-```
-/var/autonomous-coding/mcp-task-manager/node_modules/typescript/lib/_tsc.js:92
-  for (let i = startIndex ?? 0; i < array.length; i++) {
-                           ^
-SyntaxError: Unexpected token '?'
-```
-
-**Cause:** Node.js version is too old (< v14). The TypeScript compiler uses modern JavaScript syntax that requires Node.js 14+, but **Node.js 20 LTS is required** for this project.
-
-**Solution:**
-```bash
-# Check current Node.js version
-node --version
-
-# If version is < 20, install via NVM
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
-
-# Load NVM
-export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-
-# Install Node.js 20 LTS
-nvm install 20
-nvm use 20
-nvm alias default 20
-
-# Verify installation
-node --version  # Should show v20.x.x
-
-# Clean and rebuild
-cd /var/autonomous-coding/mcp-task-manager
-rm -rf node_modules package-lock.json
-npm install
-npm run build
-```
-
-**Why NVM instead of NodeSource?**
-- NVM is more reliable across different Linux distributions
-- NodeSource can have compatibility issues with some Debian/Ubuntu versions
-- NVM allows easy switching between Node.js versions if needed
-
-#### 2. `docker-compose` Command Not Found
-
-**Symptom:**
-```
-Command 'docker-compose' not found
-```
-
-**Cause:** Ubuntu 22.04+ and newer Docker installations use **Docker Compose V2**, which is a subcommand of `docker` (not a standalone binary).
-
-**Solution:**
-
-Use `docker compose` (with a space) instead of `docker-compose` (with a hyphen):
-
-```bash
-# Old V1 syntax (deprecated)
-docker-compose up -d
-
-# New V2 syntax (use this)
-docker compose up -d
-```
-
-All commands in this guide use the V2 syntax. If you need to support legacy scripts, you can install the V1 standalone binary:
-
-```bash
-# Optional: Install docker-compose V1 compatibility (not recommended)
-apt install -y docker-compose
-
-# Or create an alias
-echo 'alias docker-compose="docker compose"' >> ~/.bashrc
-source ~/.bashrc
-```
-
-**Recommended:** Update all scripts to use `docker compose` instead.
-
-#### 3. Docker Permission Errors
-
-```bash
-# Add user to docker group
-usermod -aG docker $USER
-
-# Restart Docker
-systemctl restart docker
-```
-
-#### 4. Port Already in Use
-
-```bash
-# Find process using port
-lsof -i :8010
-
-# Kill process
-kill -9 <PID>
-
-# Or change port in docker-compose.yml
-```
-
-#### 5. Database Connection Refused
-
-```bash
-# Check PostgreSQL is running
-docker compose ps postgres
-
-# Check logs
-docker compose logs postgres
-
-# Verify connection string
-echo $DATABASE_URL
-
-# Test connection
-psql $DATABASE_URL -c "SELECT 1;"
-```
-
-#### 6. Docker Compose Version Warning
-
-**Symptom:**
-```
-WARN[0000] the attribute `version` is obsolete, it will be ignored
-```
-
-**Cause:** Docker Compose V2 no longer requires or uses the `version` field in `docker-compose.yml` files. It's deprecated but harmless.
-
-**Solution:**
-
-This is just a warning, not an error. Your containers will still work fine. To remove the warning:
-
-```bash
-# Edit your docker-compose.yml
-vim docker-compose.yml
-
-# Remove the version line (usually at the top):
-# DELETE THIS LINE:
-version: '3.8'
-
-# Your file should now start with:
-services:
-  postgres:
-    # ...
-```
-
-**Note:** All Docker Compose files in this guide already omit the version field to avoid this warning.
-
-#### 7. API Returns Empty Projects or Database Connection Error
-
-**Symptom:**
-```
-# API returns [] but you know you have projects
-curl http://localhost:8010/api/projects
-[]
-
-# Or you see connection errors in logs:
-docker compose logs api
-# Error: connection refused to localhost:5432
-```
-
-**Cause:** The `DATABASE_URL` in `.env` uses `localhost` instead of the Docker service name.
-
-**Why this happens:**
-- From **inside** a Docker container, `localhost` means the container itself
-- From **outside** (host machine), `localhost` means the host
-- Docker containers communicate via service names on the Docker network
-
-**Solution:**
-
-```bash
-# Edit .env file
-vim .env
-
-# Change this:
-DATABASE_URL=postgresql://agent:password@localhost:5432/yokeflow
-
-# To this (use service name 'postgres'):
-DATABASE_URL=postgresql://agent:password@postgres:5432/yokeflow
-
-# Restart API container
-docker compose -f docker-compose.prod.yml restart api
-
-# Test connection
-curl http://localhost:8010/api/projects
-```
-
-**Verify the fix:**
-```bash
-# Should see no connection errors
-docker compose logs api --tail=20
-
-# Test API endpoint
-curl https://your-domain.com/api/projects
-```
-
-#### 8. UFW Firewall Blocking External Access
-
-**Symptom:**
-- `curl http://localhost` works on server
-- `curl http://your-domain.com` fails from outside
-- Certbot ACME challenge fails with connection refused
-
-**Cause:** UFW (Uncomplicated Firewall) is blocking ports 80 and 443.
-
-**Solution:**
-```bash
-# Check firewall status
-ufw status
-
-# Allow HTTP and HTTPS
-ufw allow 80/tcp
-ufw allow 443/tcp
-
-# Verify
-ufw status
-
-# Should show:
-# 80/tcp                     ALLOW       Anywhere
-# 443/tcp                    ALLOW       Anywhere
-```
-
-**Also check Digital Ocean cloud firewall:**
-- Go to: https://cloud.digitalocean.com/networking/firewalls
-- Ensure HTTP (80) and HTTPS (443) are allowed inbound
-
-#### 9. Web UI Still Uses localhost:8010 After Changing NEXT_PUBLIC_API_URL
-
-**Symptom:**
-- `.env` has correct `NEXT_PUBLIC_API_URL=https://your-domain.com`
-- Docker container shows correct URL: `docker compose exec web env | grep NEXT_PUBLIC`
-- But browser DevTools shows API calls going to `http://localhost:8010`
-- Problem persists even on different computers (not browser cache)
-
-**Cause:** Next.js builds environment variables **into the static files at build time**. The Dockerfile needs to accept the build argument.
-
-**Solution:**
-
-```bash
-# 1. Update web-ui/Dockerfile to accept build arg
-vim web-ui/Dockerfile
-
-# Add these lines BEFORE "RUN npm run build":
-ARG NEXT_PUBLIC_API_URL
-ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
-
-# 2. Update docker-compose.prod.yml to pass build arg
-vim docker-compose.prod.yml
-
-# Add under web.build:
-  web:
-    build:
-      context: ./web-ui
-      dockerfile: Dockerfile
-      args:
-        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}  # ADD THIS
-
-# 3. Verify .env has correct value
-grep NEXT_PUBLIC_API_URL .env
-# Should be: https://your-domain.com (no port number)
-
-# 4. Force complete rebuild
-docker compose -f docker-compose.prod.yml down web
-docker rmi autonomous-coding-web 2>/dev/null || true
 docker compose -f docker-compose.prod.yml build --no-cache web
 docker compose -f docker-compose.prod.yml up -d web
-
-# 5. Verify the build used the correct URL
-docker compose -f docker-compose.prod.yml exec web grep -r "localhost:8010" /app/.next 2>/dev/null
-# Should return nothing (no matches)
 ```
 
-**Why this happens:**
-- `NEXT_PUBLIC_*` variables are embedded in browser JavaScript during `npm run build`
-- Runtime environment variables don't affect already-built static files
-- Docker build args must pass the value during the build step
+### API Returns Empty Data or Connection Error
 
-#### 10. Initialization Shows No Progress in Web UI
-
-**Symptom:**
-- Clicked "Initialize" button in Web UI
-- UI shows "Initializing..." but no other feedback
-- Initialization takes 10-20 minutes with no visible progress
-- API logs show agent is working, but UI is blank
-
-**Cause:** The Web UI doesn't yet stream session logs in real-time (documented in TODO.md Priority #5).
-
-**Workaround - Watch Progress via Logs:**
+If `DATABASE_URL` uses `localhost`, the API container can't reach PostgreSQL. Use the Docker service name `postgres` instead:
 
 ```bash
-# Option 1: Watch API container logs
-docker compose -f docker-compose.prod.yml logs -f api
-# Press Ctrl+C to exit
-
-# Option 2: Watch session log file directly
-tail -f projects/*/logs/session_001_*.txt
-# Press Ctrl+C to exit
-
-# Option 3: Poll logs via API
-curl https://your-domain.com/api/projects/{project_id}/logs
+DATABASE_URL=postgresql://agent:password@postgres:5432/yokeflow
 ```
 
-**What you'll see in the logs:**
-- Agent reading the specification
-- Creating epics (20-25 epics)
-- Expanding each epic into tasks (8-15 tasks per epic)
-- Adding tests for each task
-- Running `init.sh` to set up project structure
-- Session completion message
+### Certbot ACME Challenge Fails
 
-**Expected duration:**
-- Small projects (< 10 features): 5-10 minutes
-- Medium projects (10-20 features): 10-15 minutes
-- Large projects (20+ features): 15-25 minutes
+Ensure the firewall allows ports 80 and 443 (`ufw allow 80/tcp && ufw allow 443/tcp`) and that the Nginx config includes the `/.well-known/acme-challenge/` location block.
 
-**How to know it's done:**
-- Web UI will update automatically when initialization completes
-- Project status changes from "Initializing" to "Ready"
-- You'll see epics/tasks appear in the Overview tab
-
-**Future fix:** Real-time session log streaming is planned (see UI-NOTES.md for contribution opportunities).
-
-#### 11. WebSocket Not Working - No Real-Time Updates
-
-**Symptom:**
-- Project creation works but no real-time progress updates
-- UI doesn't update during initialization or coding sessions
-- Browser console shows WebSocket connection errors
-- Must manually refresh page to see updates
-
-**Cause:** Nginx WebSocket configuration missing or incorrect.
-
-**Solution:**
+### SSL Certificate Renewal
 
 ```bash
-# 1. Add WebSocket mapping configuration
-cat > /etc/nginx/conf.d/websocket.conf <<'EOF'
-# WebSocket upgrade mapping
-map $http_upgrade $connection_upgrade {
-    default upgrade;
-    '' close;
-}
-EOF
-
-# 2. Update the site configuration to use $connection_upgrade
-vim /etc/nginx/sites-available/autonomous-coding
-
-# Find the /api/ws location block and change:
-# FROM: proxy_set_header Connection "upgrade";
-# TO:   proxy_set_header Connection $connection_upgrade;
-
-# The complete block should look like:
-#   location /api/ws {
-#       proxy_pass http://localhost:8010;
-#       proxy_http_version 1.1;
-#       proxy_set_header Upgrade $http_upgrade;
-#       proxy_set_header Connection $connection_upgrade;
-#       proxy_set_header Host $host;
-#       proxy_set_header X-Real-IP $remote_addr;
-#       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-#       proxy_set_header X-Forwarded-Proto $scheme;
-#       proxy_read_timeout 86400s;
-#       proxy_send_timeout 86400s;
-#   }
-
-# 3. Test and reload nginx
-nginx -t && systemctl reload nginx
-```
-
-**Verify WebSocket is working:**
-
-```bash
-# Check browser console (F12 → Console)
-# Should see: "WebSocket connected" (no errors)
-
-# Test WebSocket endpoint directly
-curl -i -N -H "Connection: Upgrade" \
-     -H "Upgrade: websocket" \
-     -H "Sec-WebSocket-Version: 13" \
-     -H "Sec-WebSocket-Key: test" \
-     https://your-domain.com/api/ws/your-project-id
-
-# Should return: HTTP/1.1 101 Switching Protocols
-```
-
-**Why this happens:**
-- The hardcoded `Connection "upgrade"` breaks WebSocket handshake
-- The `map` directive properly handles both WebSocket and normal HTTP requests
-- Without it, nginx can't distinguish between upgrade requests and regular requests
-
-#### 12. Out of Disk Space
-
-```bash
-# Check disk usage
-df -h
-
-# Clean Docker resources
-docker system prune -a -f --volumes
-
-# Clean old logs
-journalctl --vacuum-time=7d
-```
-
-#### 5. SSL Certificate Issues
-
-```bash
-# Renew certificate manually
 certbot renew --force-renewal
-
-# Check certificate status
 certbot certificates
 ```
 
 ---
 
-## Maintenance Tasks
+## Maintenance
 
-### Daily
-- Monitor disk space: `df -h`
-- Check Docker containers: `docker ps`
-- Review application logs: `docker compose logs --tail=100`
-
-### Weekly
-- Clean Docker resources: `docker system prune -f`
-- Check backup integrity
-- Review error logs: `grep -i error /var/log/nginx/error.log`
-
-### Monthly
-- Update system packages: `apt update && apt upgrade`
-- Rotate log files: `logrotate -f /etc/logrotate.conf`
-- Review and optimize database: `VACUUM ANALYZE;`
-- Test disaster recovery procedure
-
-### Quarterly
-- Review and update SSL certificates (auto-renewed by Certbot)
-- Security audit: `lynis audit system`
-- Capacity planning review
-- Cost optimization review
-
----
-
-## Next Steps
-
-1. **Complete Initial Setup:**
-   - Create Digital Ocean account
-   - Deploy Droplet with Docker
-   - Configure domain and SSL
-   - Start services
-
-2. **Test Deployment:**
-   - Create test project via Web UI
-   - Run initialization session
-   - Test download functionality
-
-3. **Enable Backups:**
-   - Setup automated PostgreSQL backups
-   - Configure Digital Ocean Spaces
-   - Test restore procedure
-
-4. **Add Security:**
-   - Enable JWT authentication
-   - Configure rate limiting
-   - Setup firewall rules
-   - Enable HTTPS enforcement
-
-5. **Monitor & Optimize:**
-   - Setup monitoring alerts
-   - Track resource usage
-   - Optimize Docker resource limits
-   - Plan scaling strategy
-
----
-
-## Additional Resources
-
-- [Digital Ocean Documentation](https://docs.digitalocean.com/)
-- [Docker Documentation](https://docs.docker.com/)
-- [PostgreSQL Documentation](https://www.postgresql.org/docs/)
-- [FastAPI Documentation](https://fastapi.tiangolo.com/)
-- [Next.js Deployment](https://nextjs.org/docs/deployment)
-- [Let's Encrypt Documentation](https://letsencrypt.org/docs/)
-
----
-
-## Support
-
-For issues with:
-- **Platform bugs:** GitHub Issues
-- **Deployment questions:** GitHub Discussions
-- **Digital Ocean:** [Digital Ocean Support](https://www.digitalocean.com/support/)
+- **Daily:** Check disk space (`df -h`), check containers (`docker ps`)
+- **Weekly:** Clean Docker resources (`docker system prune -f`)
+- **Monthly:** Update system packages, vacuum database (`VACUUM ANALYZE;`)

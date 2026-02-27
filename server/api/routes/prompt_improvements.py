@@ -132,11 +132,6 @@ async def trigger_analysis(request: TriggerAnalysisRequest, background_tasks: Ba
     try:
         db = await get_db()
 
-        # Get configured minimum reviews requirement
-        from server.utils.config import Config
-        config = Config.load_default()
-        min_reviews_required = config.review.min_reviews_for_analysis
-
         # Get project ID - only single project analysis supported
         if not request.project_ids or len(request.project_ids) == 0:
             # Auto-discover first eligible project
@@ -150,21 +145,20 @@ async def trigger_analysis(request: TriggerAnalysisRequest, background_tasks: Ba
                     WHERE s.created_at >= NOW() - $1::text::interval
                     AND jsonb_array_length(dr.prompt_improvements) > 0
                     GROUP BY p.id, p.name
-                    HAVING COUNT(DISTINCT dr.id) >= $2
+                    HAVING COUNT(DISTINCT dr.id) >= 1
                     ORDER BY review_count DESC, p.created_at DESC
                     LIMIT 1
                 """
 
                 row = await conn.fetchrow(
                     query,
-                    f'{request.last_n_days} days',
-                    min_reviews_required
+                    f'{request.last_n_days} days'
                 )
 
                 if not row:
                     return {
                         "success": False,
-                        "message": f"No eligible projects found with {min_reviews_required}+ deep reviews in last {request.last_n_days} days"
+                        "message": f"No eligible projects found with deep reviews in last {request.last_n_days} days"
                     }
 
                 project_id = row['id']
@@ -322,20 +316,7 @@ async def get_config():
 
     Returns relevant configuration settings from .yokeflow.yaml.
     """
-    try:
-        from server.utils.config import Config
-        config = Config.load_default()
-
-        return {
-            "min_reviews_for_analysis": config.review.min_reviews_for_analysis
-        }
-
-    except Exception as e:
-        logger.error(f"Failed to get config: {e}")
-        # Return default if config fails
-        return {
-            "min_reviews_for_analysis": 5
-        }
+    return {}
 
 
 @router.get("/metrics", response_model=ImprovementMetrics)

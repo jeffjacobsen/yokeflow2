@@ -492,8 +492,8 @@ class ApiClient {
   /**
    * Get prompt improvement configuration
    */
-  async getPromptImprovementConfig(): Promise<{ min_reviews_for_analysis: number }> {
-    const response = await this.client.get<{ min_reviews_for_analysis: number }>(
+  async getPromptImprovementConfig(): Promise<Record<string, unknown>> {
+    const response = await this.client.get<Record<string, unknown>>(
       '/api/prompt-improvements/config'
     );
     return response.data;

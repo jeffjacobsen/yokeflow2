@@ -79,7 +79,7 @@ class ProjectConfig:
 @dataclass
 class ReviewConfig:
     """Configuration for review and prompt improvement settings."""
-    min_reviews_for_analysis: int = 5  # Minimum deep reviews required for prompt improvement analysis
+    pass
 
 
 @dataclass
@@ -197,11 +197,6 @@ class Config:
             if 'max_iterations' in data['project']:
                 config.project.max_iterations = data['project']['max_iterations']
 
-        # Override review settings
-        if 'review' in data:
-            if 'min_reviews_for_analysis' in data['review']:
-                config.review.min_reviews_for_analysis = data['review']['min_reviews_for_analysis']
-
         # Override brownfield settings
         if 'brownfield' in data:
             if 'default_feature_branch_prefix' in data['brownfield']:
@@ -273,8 +268,6 @@ class Config:
                 'default_projects_dir': self.project.default_projects_dir,
                 'max_iterations': self.project.max_iterations,
             },
-            'review': {
-                'min_reviews_for_analysis': self.review.min_reviews_for_analysis,
-            },
+            'review': {},
         }
         return yaml.dump(data, default_flow_style=False, sort_keys=False)

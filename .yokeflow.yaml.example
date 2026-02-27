@@ -6,10 +6,7 @@
 #   - .yokeflow.yaml (current directory, project-specific)
 #   - ~/.yokeflow.yaml (home directory, global defaults)
 #
-# You can also specify a custom config file with: --config path/to/config.yaml
-#
 # All settings are optional - any omitted values will use built-in defaults.
-# Command-line arguments always override config file settings.
 
 # Model Configuration
 # -------------------
@@ -28,13 +25,11 @@ models:
   review: claude-sonnet-4-6
 
   # Model for prompt improvement analysis
-  # Opus is recommended for better reasoning and comprehensive improvements
-  # This is a critical task that benefits from the most capable model
+  # Opus is recommended for better reasoning
   prompt_improvement: claude-opus-4-6
 
 # Timing Configuration
 # --------------------
-# Control delays and intervals
 timing:
   # Seconds to wait between autonomous sessions
   auto_continue_delay: 3
@@ -47,131 +42,41 @@ timing:
 
 # Security Configuration
 # ----------------------
-# Add custom commands to the blocklist
 security:
   # List of additional commands to block (beyond built-in blocklist)
-  # Examples: custom deployment scripts, dangerous utilities
   additional_blocked_commands:
     # - my-dangerous-script
     # - custom-deploy
 
 # Project Configuration
 # ---------------------
-# Project and directory settings
 project:
   # Default directory for projects
   default_projects_dir: projects
 
   # Default maximum iterations (null = unlimited)
-  # Set a number to limit iterations by default
   max_iterations: null
 
-# Review Configuration
-# --------------------
-# Settings for the quality review and prompt improvement system
-review:
-  # Minimum deep reviews required before running prompt improvement analysis
-  # Lower values (3-5) provide faster insights but less statistical significance
-  # Higher values (10-15) provide more robust patterns but require more sessions
-  min_reviews_for_analysis: 3  # Default: 3
+# Brownfield Configuration
+# ------------------------
+# Settings for importing existing codebases
+brownfield:
+  # Branch prefix for feature branches
+  default_feature_branch_prefix: yokeflow/
 
-# Epic Testing Configuration
-# --------------------------
-# Control how epic tests are handled when they fail
-epic_testing:
-  # Testing mode: "strict" or "autonomous"
-  # - strict: Block immediately on any epic test failure, require human intervention
-  # - autonomous: Continue on minor failures, block only on critical epics or >3 failures
-  mode: autonomous  # Default: autonomous (recommended for most projects)
-
-  # Critical epic patterns (will block immediately in autonomous mode)
-  # Epic names containing these substrings are considered critical
-  critical_epics:
-    - Authentication
-    - Database
-    - Payment
-    - Security
-    - Core API
-
-  # Autonomous mode: Maximum failures before blocking (non-critical epics)
-  auto_failure_tolerance: 3
-
-  # Autonomous mode: Auto-create fix tasks for failures
-  auto_create_fix_tasks: true
-
-  # Strict mode: Send notification when blocked
-  strict_notify_on_block: true
-
-# Epic Re-testing Configuration
-# ------------------------------
-# Periodically re-test completed epics to catch regressions
-epic_retesting:
-  # Enable/disable epic re-testing system
-  enabled: true
-
-  # Trigger frequency: Re-test after every N completed epics
-  # Example: 2 means after epic 3, 5, 7, 9, etc.
-  trigger_frequency: 2
-
-  # Foundation re-test interval: Re-test foundation epics if older than N days
-  # Foundation epics (database, auth, core API) are tested more frequently
-  foundation_retest_days: 7
-
-  # Maximum epics to re-test per trigger
-  # Limits testing overhead while maintaining good coverage
-  max_retests_per_trigger: 2
-
-  # Prioritize foundation epics (database, auth, core API)
-  # Foundation epics are tested more frequently than features
-  prioritize_foundation: true
-
-  # Prioritize epics with many dependents
-  # Epics that other epics depend on are tested more frequently
-  prioritize_dependents: true
-
-  # Auto-pause session on critical regression (optional)
-  # If a previously passing epic test fails, pause for intervention
-  pause_on_regression: false
-
-
-# Testing Configuration
-# ---------------------
-# Tests are created during initialization with executable test_code
-# and run by the coding agent using run_task_tests before marking tasks complete
-#
-# Currently these settings are placeholders for future configuration:
-# - Test timeout settings
-# - Test execution parallelization
-# - Test output verbosity
-#
-# The test execution system is active but configuration is not yet exposed.
+  # Run existing tests before and after changes for regression safety
+  run_existing_tests_before_changes: true
+  run_existing_tests_after_changes: true
 
 # Spec Pre-Analysis (Optional)
-# --------------------------------
+# -----------------------------
 # Pre-analyzes spec files with a fast model before initialization.
 # Generates a summary, feature list, and suggested epic structure
 # that is injected into the initializer prompt.
 # Useful for large or multi-file specifications.
 spec_analysis:
-  # Enable/disable spec pre-analysis (default: false)
   enabled: false
-  # Model for analysis (default: Haiku for cost efficiency)
   model: claude-haiku-4-5-20251001
-
-# Future Configuration Options (Not Yet Implemented)
-# ---------------------------------------------------
-# The following systems were partially implemented but are currently disabled:
-#
-# 1. Intervention System - Would detect infinite loops and blockers
-#    Status: Database tables exist, but system is disabled
-#
-# 2. Verification System - Would auto-generate tests
-#    Status: Replaced by test execution (tests created during init)
-#
-# 3. Epic Validation - Would run integration tests across tasks
-#    Status: Database support exists, but not yet integrated
-#
-# These features may be re-enabled in future versions as needed.
 
 # ============================================================================
 # Usage:
@@ -187,15 +92,3 @@ spec_analysis:
 # 2. Configuration file (.yokeflow.yaml in project dir or ~/.yokeflow.yaml)
 # 3. Environment variables (.env file)
 # 4. Built-in defaults
-#
-# ============================================================================
-# Getting Started:
-# ============================================================================
-#
-# 1. Copy this file to .yokeflow.yaml (project) or ~/.yokeflow.yaml (global)
-# 2. Start the API server: python api/start_api.py
-# 3. Start the Web UI: cd web-ui && npm run dev
-# 4. Open http://localhost:3010 to create and manage projects
-#
-# For utility scripts, see scripts/README.md
-# ============================================================================

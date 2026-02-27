@@ -6,20 +6,11 @@ This file provides guidance to Claude Code when working with this repository.
 
 **YokeFlow 2** - An autonomous AI development platform that uses Claude to build complete applications over multiple sessions.
 
-**Status**: Production Ready - v2.5.0 (February 2026)
+**Status**: Archived - v2.5.1
 
 **Architecture**: API-first platform with FastAPI + Next.js Web UI + PostgreSQL + MCP task management
 
 **Workflow**: Opus creates roadmap (Session 0: epics + tasks + tests) → Sonnet implements features (Sessions 1+)
-
-**Latest Updates** (February 2026):
-- ✅ **Simplified Initialization**: Single-agent initializer creates epics, tasks, and tests with parallel MCP tool calls
-- ✅ **MCP Pre-flight Check**: Auto-rebuilds stale MCP server, validates before sessions start
-- ✅ **Brownfield Support**: Import existing codebases from local paths or GitHub, analyze, and modify (43 tests)
-- ✅ **REST API Complete**: 60+ endpoints with comprehensive validation
-- ✅ **Quality System**: Quality system with test tracking and epic re-testing
-- ✅ **Production Hardening**: Database retry logic, session checkpointing
-- 🚀 **Clean Architecture**: No circular dependencies, clear module boundaries
 
 ## Core Workflow
 
@@ -34,11 +25,11 @@ This file provides guidance to Claude Code when working with this repository.
 - `server/agent/codebase_import.py` - Codebase import and analysis (brownfield)
 - `server/agent/agent.py` - Agent loop and session logic
 - `server/database/operations.py` - PostgreSQL abstraction (async) + retry logic
-- `server/database/retry.py` - Retry logic with exponential backoff (30 tests)
+- `server/database/retry.py` - Retry logic with exponential backoff
 - `server/client/claude.py` - Claude SDK client + MCP pre-flight check/auto-rebuild
-- `server/agent/checkpoint.py` - Session checkpointing and recovery (19 tests)
-- `server/utils/logging.py` - Structured logging with JSON/dev formatters (19 tests)
-- `server/utils/errors.py` - Error hierarchy with 30+ error types (36 tests)
+- `server/agent/checkpoint.py` - Session checkpointing and recovery
+- `server/utils/logging.py` - Structured logging with JSON/dev formatters
+- `server/utils/errors.py` - Error hierarchy with 30+ error types
 - `server/api/app.py` - REST API + WebSocket
 - `server/utils/observability.py` - Session logging (JSONL + TXT)
 - `server/utils/security.py` - Blocklist validation
@@ -66,13 +57,13 @@ This file provides guidance to Claude Code when working with this repository.
 
 ## MCP Tools
 
-The `mcp-task-manager/` provides 15+ tools (prefix: `mcp__task-manager__`):
+The `mcp-task-manager/` provides 20 tools (prefix: `mcp__task-manager__`):
 
-**Query**: `task_status`, `get_next_task`, `list_epics`, `get_epic`, `list_tasks`, `get_task`, `list_tests`
+**Query**: `task_status`, `get_next_task`, `list_epics`, `get_epic`, `list_tasks`, `get_task`, `list_tests`, `get_task_tests`, `get_epic_tests`, `get_session_history`
 
-**Update**: `update_task_status`, `start_task`, `update_test_result`
+**Update**: `update_task_status`, `start_task`, `update_task_test_result`, `update_epic_test_result`, `mark_project_complete`
 
-**Create**: `create_epic`, `create_task`, `create_test`, `expand_epic`
+**Create**: `create_epic`, `create_task`, `create_task_test`, `create_epic_test`, `expand_epic`
 
 Must build before use: `cd mcp-task-manager && npm run build`
 
@@ -103,24 +94,6 @@ Must build before use: `cd mcp-task-manager && npm run build`
 
 See [docs/api-usage.md](docs/api-usage.md) for complete endpoint reference and examples.
 
-## Input Validation
-
-**Framework**: Pydantic-based validation with 20 models and 66 tests (100% passing)
-
-**What's validated**:
-- API requests: Project names, spec content, session parameters, environment variables
-- Brownfield imports: Source URLs, local paths, change spec content
-- Configuration: Model names, timing settings, database URLs
-- Verification: Test timeouts, coverage thresholds, webhook URLs
-
-**Benefits**:
-- Type safety with runtime validation
-- Clear error messages for invalid inputs
-- Sensible defaults for configuration
-- Automatic OpenAPI schema generation
-
-See [docs/input-validation.md](docs/input-validation.md) for usage examples.
-
 ## Security
 
 **Blocklist approach**: Allows dev tools (npm, git, curl), blocks dangerous commands (rm, sudo, apt)
@@ -131,7 +104,7 @@ Edit `server/utils/security.py` `BLOCKED_COMMANDS` to modify.
 
 ```
 yokeflow2/
-├── server/                  # All server code (reorganized)
+├── server/                  # All server code
 │   ├── agent/               # Session orchestration & lifecycle
 │   │   ├── agent.py         # Agent loop and session logic
 │   │   ├── orchestrator.py  # Session lifecycle
@@ -141,6 +114,7 @@ yokeflow2/
 │   ├── api/                 # REST API & WebSocket
 │   │   ├── app.py           # Main FastAPI application
 │   │   ├── auth.py          # API authentication
+│   │   ├── validation.py    # Pydantic validation models
 │   │   ├── start.py         # API startup wrapper
 │   │   └── routes/          # API route modules
 │   ├── database/            # Database layer
@@ -151,24 +125,19 @@ yokeflow2/
 │   │   ├── claude.py        # Claude SDK client
 │   │   └── prompts.py       # Prompt loading
 │   ├── quality/             # Quality & review system
-│   │   ├── metrics.py       # Quality metrics
 │   │   ├── reviews.py       # Deep reviews
 │   │   ├── integration.py   # Quality integration
+│   │   ├── spec_parser.py   # Specification parser
 │   │   └── prompt_analyzer.py  # Prompt improvements
-│   ├── verification/        # Testing & validation
-│   │   ├── task_verifier.py  # Task verification
-│   │   ├── epic_validator.py  # Epic validation
-│   │   ├── epic_manager.py  # Epic management
-│   │   └── test_generator.py  # Test generation
-│   ├── utils/               # Shared utilities
-│   │   ├── config.py        # Configuration management
-│   │   ├── logging.py       # Structured logging
-│   │   ├── errors.py        # Error hierarchy
-│   │   ├── security.py      # Blocklist validation
-│   │   ├── observability.py # Session logging
-│   │   └── reset.py         # Project reset logic
-│   └── coverage/            # Test coverage
-│       └── analyzer.py      # Coverage analysis
+│   ├── generation/          # Spec generation
+│   ├── coverage/            # Test coverage analysis
+│   └── utils/               # Shared utilities
+│       ├── config.py        # Configuration management
+│       ├── logging.py       # Structured logging
+│       ├── errors.py        # Error hierarchy
+│       ├── security.py      # Blocklist validation
+│       ├── observability.py # Session logging
+│       └── reset.py         # Project reset logic
 ├── web-ui/                  # Next.js Web UI
 ├── mcp-task-manager/        # MCP server (TypeScript)
 ├── scripts/                 # Utility scripts
@@ -199,7 +168,7 @@ yokeflow2/
 
 **MCP server failed**: Run `cd mcp-task-manager && npm run build`
 
-**Database error**: Ensure PostgreSQL running (`docker-compose up -d`), check DATABASE_URL in `.env`
+**Database error**: Ensure PostgreSQL running (`docker compose up -d`), check DATABASE_URL in `.env`
 
 **Command blocked**: Check `server/utils/security.py` BLOCKED_COMMANDS list
 
@@ -207,53 +176,24 @@ yokeflow2/
 
 **Web UI no projects**: Ensure PostgreSQL running, verify API connection
 
-**Import errors**: Update imports to new structure:
-```python
-# Old: from core.agent import
-# New: from server.agent.agent import
-
-# Old: from api.main import
-# New: from server.api.app import
-
-# Old: from review.review_client import
-# New: from server.quality.reviews import
-```
+**Import errors**: All server imports use the `server.` prefix (e.g., `from server.agent.agent import ...`)
 
 ## Testing
 
-**Test Suite Status** (February 2026):
-- ✅ **450+ total tests** across all test files (13 MCP pre-flight, 43 brownfield), 10 skipped
-- ✅ **70% coverage achieved** (target met)
-- ✅ **Production ready** with comprehensive test infrastructure
+**173 unit tests**, all passing, ~1 second runtime. No mocks or external dependencies.
 
-**Quick Start**:
 ```bash
-# Run fast tests (recommended for development)
-python scripts/test_quick.py
-
-# Or use pytest directly
-pytest -m "not slow"
+# Run all tests
+pytest
 
 # Run with coverage
 pytest --cov=server --cov-report=html --cov-report=term-missing
+
+# Using the helper script
+python scripts/test_quick.py
 ```
 
-**Key Test Files**:
-```bash
-pytest tests/test_orchestrator.py            # Session lifecycle (17 tests)
-pytest tests/test_mcp_preflight.py           # MCP pre-flight check (13 tests)
-pytest tests/test_codebase_import.py         # Brownfield import & analysis (19 tests)
-pytest tests/test_brownfield_orchestrator.py # Brownfield orchestration (10 tests)
-pytest tests/test_brownfield_validation.py   # Brownfield validation (14 tests)
-pytest tests/test_quality_integration.py     # Quality system (10 tests)
-pytest tests/test_security.py               # Security validation (2 tests, 64 assertions)
-pytest tests/test_task_verifier.py           # Task verification (11 tests)
-pytest tests/test_test_generator.py          # Test generation (15 tests)
-```
-
-**Documentation**:
-- [docs/testing-guide.md](docs/testing-guide.md) - Comprehensive developer guide
-- [tests/README.md](tests/README.md) - Test descriptions and status
+See [docs/testing-guide.md](docs/testing-guide.md) and [tests/README.md](tests/README.md) for details.
 
 ## Important Files
 
@@ -268,13 +208,8 @@ pytest tests/test_test_generator.py          # Test generation (15 tests)
 
 **API**:
 - `server/api/app.py` - FastAPI application (60+ endpoints)
-- `server/api/validation.py` - Pydantic validation models (20 models, 66 tests)
+- `server/api/validation.py` - Pydantic validation models
 - `web-ui/src/lib/api.ts` - Frontend API client
-
-**Verification**:
-- `server/verification/task_verifier.py` - Task verification (11 tests)
-- `server/verification/test_generator.py` - Test generation (15 tests)
-- `server/verification/epic_validator.py` - Epic validation (14 tests)
 
 **Utilities**:
 - `server/utils/config.py` - Configuration
@@ -282,10 +217,9 @@ pytest tests/test_test_generator.py          # Test generation (15 tests)
 - `server/utils/security.py` - Security validation
 
 **Quality System**:
-- `server/quality/metrics.py` - Quick checks (zero-cost) ✅
-- `server/quality/reviews.py` - Deep reviews (AI-powered) ✅
-- `web-ui/src/components/QualityDashboard.tsx` - UI dashboard ✅
-- `server/quality/prompt_analyzer.py` - Prompt improvements ✅
+- `server/quality/reviews.py` - Deep reviews (AI-powered)
+- `server/quality/prompt_analyzer.py` - Prompt improvements
+- `web-ui/src/components/QualityDashboard.tsx` - UI dashboard
 
 **Other Key Files**:
 - `mcp-task-manager/src/index.ts` - MCP server
@@ -295,7 +229,7 @@ pytest tests/test_test_generator.py          # Test generation (15 tests)
 
 ## Logging & Observability
 
-**Structured Logging** (v1.4.0):
+**Structured Logging**:
 - **Terminal**: Development-friendly colored output
 - **File**: `logs/yokeflow.log` - JSON format for analysis
 - **Per-Session**: `projects/<project>/yokeflow/logs/session_*.jsonl` - Session details
@@ -317,34 +251,20 @@ export LOG_FORMAT=dev           # 'dev' (colored) or 'json' (production)
 - Exception tracking with stack traces
 - Ready for ELK/Datadog/CloudWatch integration
 
-## Production Hardening (January 2026)
+## Production Hardening
 
 ### Database Retry Logic
-**File**: `server/database/retry.py` (350+ lines, 30 tests)
+**File**: `server/database/retry.py`
 - Exponential backoff with configurable jitter
 - 20+ PostgreSQL error codes covered
 - Applied to all database operations in `server/database/operations.py`
 
 ### Session Checkpointing
-**File**: `server/agent/checkpoint.py` (420+ lines, 19 tests)
+**File**: `server/agent/checkpoint.py`
 - Complete session state preservation at key points
 - Full conversation history capture for resume
 - Tables: `session_checkpoints`; Views: `v_resumable_checkpoints`
 - Functions: `create_checkpoint()`, `invalidate_checkpoints()`, `get_latest_resumable_checkpoint()`
-
-### Intervention System (Archived)
-The intervention/pause system was implemented but never used in production. Code is preserved in `archive/intervention/` for future reference.
-
----
-
-## Version History
-
-- **v2.5.0** (Feb 2026): Codebase cleanup — removed unused DB columns/views/functions, archived intervention system, removed parallel orchestrator
-- **v2.4.0** (Feb 2026): Simplified initialization (single agent with parallel MCP calls), local-only mode (removed Docker sandbox), MCP pre-flight check
-- **v2.2.0** (Feb 2026): Brownfield support — import existing codebases from local paths or GitHub (43 tests)
-- **v2.1.0** (Feb 2026): Quality system completion — project completion reviews, prompt improvements
-- **v2.0.0** (Jan 2026): Architecture reorganization, REST API (60+ endpoints), verification system, production hardening
-- **v1.x** (Dec 2025): Browser automation, PostgreSQL migration, structured logging, error hierarchy
 
 ## Philosophy
 
@@ -356,12 +276,8 @@ The intervention/pause system was implemented but never used in production. Code
 
 **Core Principle**: One-shot success. Improve the agent system itself rather than fixing generated apps.
 
-## Release Status
-
-**Current State**: Production Ready - v2.5.0
-
 See `IMPROVEMENT-IDEAS.md` for potential future enhancements.
 
 ---
 
-**For detailed documentation, see `docs/` directory. Originally forked from Anthropic's autonomous coding demo, now evolved into YokeFlow with extensive enhancements.**
+**For detailed documentation, see `docs/` directory.**

@@ -7,6 +7,20 @@ Build complete applications using Claude Agent SDK across multiple autonomous se
 YokeFlow 2 is an autonomous coding platform that uses Claude to build applications from specifications.
 
 
+## Project Status
+
+This project is archived. No additional changes are planned.
+
+YokeFlow 2 was originally forked from Anthropic's [autonomous coding demo](https://github.com/anthropics/claude-quickstarts/tree/main/autonomous-coding) and uses the Claude Agent SDK to orchestrate multi-session development.
+
+Anthropic has made conflicting statements about whether the Agent SDK can be used with MAX subscriptions. Additionally, recent improvements to Claude Code — not yet available in the SDK — make it significantly better at coding in long sessions. For these reasons, development has been paused in favor of waiting for the SDK to catch up.
+
+For this final release, documentation has been improved and updated, and partially implemented features have been removed. The release has been tested with multiple projects on a Mac Mini with no errors and should be fully functional.
+
+**Notes:**
+- Projects are created in the local `projects/` folder. The option to create them in a Docker container has been removed. Running YokeFlow 2 itself inside a Docker container is recommended if isolation is desired.
+- YokeFlow was designed to create new projects (greenfield). Support for importing existing projects (brownfield) was added but has not been thoroughly tested. It may be useful for adding features to an existing codebase, but bug fixing is not an intended use case.
+
 ## Getting Started
 
 See [QUICKSTART.md](QUICKSTART.md) for setup instructions.
@@ -43,8 +57,8 @@ Configure via `.yokeflow.yaml`:
 models:
   initializer: claude-opus-4-6
   coding: claude-sonnet-4-6
-  review: claude-sonnet-4-6          # ⭐ NEW v2.1
-  prompt_improvement: claude-opus-4-6 # ⭐ NEW v2.1
+  review: claude-sonnet-4-6
+  prompt_improvement: claude-opus-4-6
 
 timing:
   auto_continue_delay: 3
@@ -64,27 +78,19 @@ YokeFlow 2 uses a clean, modular architecture with all server code under `server
 server/
 ├── agent/               # Session orchestration & lifecycle
 │   ├── orchestrator.py  # Session lifecycle
-│   ├── codebase_import.py  # Codebase import & analysis ⭐ v2.2
+│   ├── codebase_import.py  # Codebase import & analysis (brownfield)
 │   ├── agent.py         # Agent loop and session logic
-│   ├── session_manager.py  # Intervention system
 │   ├── checkpoint.py    # Session checkpointing
-│   └── quality_detector.py  # Quality pattern detection
+│   └── models.py        # Orchestrator data models
 ├── api/                 # REST API & WebSocket
 │   ├── app.py           # FastAPI application (60+ endpoints)
-│   ├── validation.py    # Pydantic validation models (19 models)
+│   ├── validation.py    # Pydantic validation models
 │   └── routes/          # API route modules
-│       └── prompt_improvements.py  # ⭐ v2.1
 ├── database/            # Database layer
 │   ├── operations.py    # PostgreSQL operations (async)
 │   ├── connection.py    # Connection pooling
 │   └── retry.py         # Retry logic with exponential backoff
-├── verification/        # Testing & validation
-│   ├── task_verifier.py  # Task verification (11 tests)
-│   ├── test_generator.py  # Test generation (15 tests)
-│   ├── epic_validator.py  # Epic validation (14 tests)
-│   └── integration.py   # MCP tool interception
-├── quality/             # Quality & review system ⭐ v2.1 Enhanced
-│   ├── metrics.py       # Quick checks
+├── quality/             # Quality & review system
 │   ├── reviews.py       # Deep reviews
 │   ├── integration.py   # Quality integration
 │   ├── spec_parser.py   # Specification parser
@@ -93,22 +99,22 @@ server/
 ├── client/              # External service clients
 │   ├── claude.py        # Claude SDK client
 │   └── prompts.py       # Prompt loading
+├── generation/          # Spec generation
+├── coverage/            # Test coverage analysis
 └── utils/               # Shared utilities
     ├── config.py        # Configuration management
     ├── logging.py       # Structured logging
     ├── errors.py        # Error hierarchy (30+ types)
     ├── security.py      # Blocklist validation
-    ├── observability.py # Session logging
-    └── metrics_collector.py  # Metrics collection ⭐ v2.1
+    └── observability.py # Session logging
 ```
 
 **Key Components:**
 
-- **REST API**: 60+ endpoints for complete platform control (health, sessions, tasks, epics, quality, completion reviews, interventions)
-- **Verification System**: Automated test generation for 5 test types (unit, API, browser, integration, E2E)
-- **Quality System (v2.1)**: Test tracking, epic re-testing, prompt improvements
-- **Production Features**: Database retry logic, session checkpointing, intervention system, structured logging
-- **MCP Integration**: 20+ tools for task management, quality monitoring, and epic re-testing
+- **REST API**: 60+ endpoints for complete platform control (health, sessions, tasks, epics, quality, completion reviews)
+- **Quality System**: Test tracking, epic re-testing, prompt improvements
+- **Production Features**: Database retry logic, session checkpointing, structured logging
+- **MCP Integration**: 20 tools for task management and epic re-testing
 
 ## Generated Project Structure
 
@@ -137,11 +143,11 @@ agent-browser install
 
 
 ```bash
-# Run fast tests (< 30 seconds)
-python scripts/test_quick.py
+# Run all tests (~1 second)
+pytest
 
-# Or use pytest directly
-pytest -m "not slow"
+# Or use the helper script
+python scripts/test_quick.py
 
 # Run with coverage report
 pytest --cov=server --cov-report=html --cov-report=term-missing
@@ -169,14 +175,10 @@ For detailed testing information, see:
 
 ### Systems
 - [docs/quality-system.md](docs/quality-system.md) - Automated testing
-- [docs/input-validation.md](docs/input-validation.md) - Validation framework
-
-### Database
 - [docs/postgres-setup.md](docs/postgres-setup.md) - PostgreSQL setup and schema
 
 ### Operations
 - [docs/deployment-guide.md](docs/deployment-guide.md) - Production deployment
-- [scripts/README.md](scripts/README.md) - Utility scripts reference
 
 ## Roadmap
 
@@ -188,10 +190,8 @@ MIT License
 
 ## Acknowledgments
 
-Originally forked from Anthropic's autonomous coding demo - https://github.com/anthropics/claude-quickstarts/tree/main/autonomous-coding
-
 AI Spec Generation by: https://github.com/imagicrafter
 
 ---
 
-**Built with Claude by Anthropic** 🚀
+**Built with Claude by Anthropic**

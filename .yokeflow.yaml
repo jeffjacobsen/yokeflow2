@@ -14,5 +14,3 @@ project:
   default_projects_dir: projects
   max_iterations: null  # unlimited
 
-review:
-  min_reviews_for_analysis: 1 # Minimum deep reviews required for prompt improvement analysis

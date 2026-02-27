@@ -730,7 +730,7 @@ echo $DATABASE_URL
 - [Main README](../README.md) - Platform overview
 - [CLAUDE.md](../CLAUDE.md) - Developer guide
 - [Developer Guide](../docs/developer-guide.md) - Technical deep-dive
-- [MCP Task Manager](../mcp-task-manager/README.md) - Task management server
+- [MCP Task Manager](../docs/mcp-usage.md) - Task management server
 - [Web UI](../web-ui/README.md) - Next.js frontend
 
 ## License

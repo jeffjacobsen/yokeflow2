@@ -228,5 +228,4 @@ Potential improvements for future versions:
 ## Related Documentation
 
 - [API Documentation](./api-usage.md) - Complete API reference
-- [Web UI Guide](./web-ui.md) - Frontend architecture
 - [Configuration](./configuration.md) - YokeFlow configuration options

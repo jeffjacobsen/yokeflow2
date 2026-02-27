@@ -1,277 +1,92 @@
-# MCP Task Management
+# MCP Task Manager
 
-YokeFlow uses MCP (Model Context Protocol) for all task management operations. This provides a structured, type-safe, protocol-based interface for agents to manage tasks.
+A Model Context Protocol (MCP) server for managing hierarchical task tracking in autonomous coding projects. TypeScript server using `pg` (node-postgres) for PostgreSQL operations with connection pooling.
 
-**Version**: 2.1.0
+## Building
 
-## What's New in v2.1
-
-YokeFlow 2.1 adds quality system MCP tools:
-
-- **Test Execution Tracking**: `update_task_test_result`, `update_epic_test_result` - Track error messages, execution time, retry counts
-
-See [QUALITY_SYSTEM_SUMMARY.md](../QUALITY_SYSTEM_SUMMARY.md) for implementation details.
-
-**For detailed MCP server documentation, see [mcp-task-manager/README.md](../mcp-task-manager/README.md)**
-
----
-
-## Quick Start
-
-### Running the Agent
-
-The MCP task manager is automatically enabled when you run sessions:
-
-```bash
-# Via Web UI
-# Navigate to http://localhost:3010 and click "Start Session"
-```
-
-No configuration needed - MCP is automatically set up.
-
-### Testing MCP
-
-Test the MCP integration:
-
-```bash
-python tests/test_mcp.py
-```
-
-This verifies the MCP server is working correctly with the database.
-
----
-
-## Available Tools
-
-All tools are prefixed with `mcp__task-manager__`:
-
-### Query Tools (Read)
-- `task_status` - Overall project progress
-- `get_next_task` - Next task to work on
-- `list_epics` - All epics
-- `get_epic` - Epic details with tasks
-- `list_tasks` - Tasks with filtering
-- `get_task` - Task details including tests
-- `list_tests` - Tests for a task
-- `get_session_history` - Recent sessions
-
-### Update Tools (Write)
-- `update_task_status` - Mark task complete/incomplete
-- `start_task` - Mark task as started
-- `update_test_result` - Mark test pass/fail (legacy)
-- `update_task_test_result` - Mark task test pass/fail with error details (v2.1)
-- `update_epic_test_result` - Mark epic test pass/fail with error details (v2.1)
-
-### Create Tools
-- `create_epic` - Create new epic
-- `create_task` - Create task in epic
-- `create_test` - Add test to task
-- `expand_epic` - Break epic into tasks
-
-**See [mcp-task-manager/README.md](../mcp-task-manager/README.md#features) for detailed tool documentation**
-
----
-
-## v2.1 New Tools
-
-### Test Execution Tracking
-
-Enhanced test result tracking with error details, execution time, and retry counts.
-
-#### `update_task_test_result`
-
-Record task test results with comprehensive execution details:
-
-```typescript
-mcp__task-manager__update_task_test_result({
-  test_id: 42,
-  passed: false,
-  error_message: "AssertionError: Expected 200, got 404",
-  execution_time_ms: 1250
-})
-```
-
-**What it tracks:**
-- Pass/fail status
-- Last error message (for debugging)
-- Execution time in milliseconds (for performance analysis)
-- Retry count (auto-incremented on failures)
-
-**Use cases:**
-- Debugging test failures with exact error messages
-- Detecting slow tests (execution_time_ms > threshold)
-- Identifying flaky tests (high retry count)
-
-#### `update_epic_test_result`
-
-Similar to task test results, but for epic-level integration tests:
-
-```typescript
-mcp__task-manager__update_epic_test_result({
-  epic_test_id: 15,
-  passed: true,
-  execution_time_ms: 3500
-})
-```
-
----
-
-## Why MCP?
-
-**MCP (Model Context Protocol) provides:**
-- Structured, type-safe interface
-- Proper parameter validation
-- Better error handling
-- No shell escaping issues
-- Easier to extend
-- JSON-based communication
-
-**vs. Shell scripts:**
-- String parsing fragile
-- Hard to validate inputs
-- Escaping/quoting issues
-- No type safety
-
----
-
-## Architecture
-
-```
-┌─────────────────┐     ┌─────────────────┐
-│ Autonomous      │────▶│ Claude SDK      │
-│ Agent           │     │ Client          │
-└─────────────────┘     └─────────────────┘
-                               │
-                               ▼
-                    ┌─────────────────────┐
-                    │ MCP Server          │
-                    │ (task-manager)      │
-                    └─────────────────────┘
-                               │
-                               ▼
-                    ┌─────────────────────┐
-                    │ PostgreSQL Database │
-                    │ (centralized)       │
-                    └─────────────────────┘
-```
-
-**Key Points:**
-- **MCP Server** runs as a subprocess of the agent
-- **PostgreSQL** stores all task data centrally
-- **Project Scoping** via `PROJECT_ID` environment variable
-- **Connection Pooling** for efficient database access
-
----
-
-## Database Connection
-
-The MCP server connects to PostgreSQL automatically:
-
-**Environment Variables:**
-```bash
-DATABASE_URL="postgresql://user:pass@localhost:5432/yokeflow"
-PROJECT_ID="550e8400-e29b-41d4-a716-446655440000"
-```
-
-These are automatically set by `orchestrator.py` when sessions start.
-
-**Database Schema:**
-- `projects` - Project metadata
-- `epics` - High-level feature areas (15-25 per project)
-- `tasks` - Specific work items (8-15 per epic)
-- `tests` - Test cases (1-3 per task)
-- `sessions` - Session history and metrics
-
-**See [schema/postgresql/](../schema/postgresql/) for complete schema**
-
----
-
-## Troubleshooting
-
-### MCP Server Not Found
-
-**Error:** `MCP server not found` or `dist/index.js missing`
-
-**Solution:**
 ```bash
 cd mcp-task-manager
 npm install
 npm run build
 ```
 
-### Database Connection Failed
+## Configuration
 
-**Error:** `Connection refused` or `database "yokeflow" does not exist`
+The MCP server is automatically configured by `client.py` when sessions start. It receives two environment variables:
 
-**Solution:**
-```bash
-# Start PostgreSQL
-docker-compose up -d
+- `DATABASE_URL` — PostgreSQL connection string
+- `PROJECT_ID` — UUID scoping all queries to a specific project
 
-# Initialize database
-python scripts/init_database.py
+No manual configuration is needed. Just ensure `dist/index.js` exists (run `npm run build`) and PostgreSQL is running.
 
-# Verify connection
-psql $DATABASE_URL -c "SELECT version();"
-```
+## Tools
 
-### Tools Not Available
+All tools are prefixed with `mcp__task-manager__` when called by agents.
 
-**Error:** Agent doesn't see `mcp__task-manager__*` tools
+### Query Tools
 
-**Solution:**
-1. Check MCP server is built (`ls mcp-task-manager/dist/index.js`)
-2. Verify PostgreSQL is running (`docker ps | grep postgres`)
-3. Check `DATABASE_URL` in `.env` file
-4. Restart the session
+| Tool | Description |
+|------|-------------|
+| `task_status` | Overall project progress statistics |
+| `get_next_task` | Next highest priority task to work on |
+| `list_epics` | All epics (with optional `needs_expansion` filter) |
+| `get_epic` | Epic details with all tasks |
+| `list_tasks` | Tasks with filtering (by epic, status) |
+| `get_task` | Task details including tests |
+| `list_tests` | All tests for a specific task |
+| `get_task_tests` | Task-level test cases |
+| `get_epic_tests` | Epic-level integration tests |
+| `get_session_history` | Recent work session log |
 
----
+### Mutation Tools
 
-## For Developers
+| Tool | Description |
+|------|-------------|
+| `create_epic` | Create new high-level feature area |
+| `create_task` | Create task within an epic |
+| `create_task_test` | Add test case to a task |
+| `create_epic_test` | Add integration test to an epic |
+| `expand_epic` | Break epic into multiple tasks (bulk create) |
+| `update_task_status` | Mark task complete/incomplete |
+| `start_task` | Mark task as started (tracks timing) |
+| `update_task_test_result` | Record task test pass/fail with error details and execution time |
+| `update_epic_test_result` | Record epic test pass/fail with error details and execution time |
+| `mark_project_complete` | Mark entire project as complete |
 
-### Building the MCP Server
+## Database Schema
+
+The MCP server interacts with these PostgreSQL tables:
+
+- `projects` — Project definitions (UUID primary keys, JSONB metadata)
+- `epics` — High-level feature areas
+- `tasks` — Individual coding tasks within epics
+- `task_tests` — Test cases for each task
+- `epic_tests` — Integration tests for each epic
+- `sessions` — Work session history
+
+Key views: `v_progress` (aggregate statistics), `v_epic_progress` (per-epic completion).
+
+All queries are automatically scoped by `PROJECT_ID`. See `schema/postgresql/` for complete DDL.
+
+## Development
 
 ```bash
 cd mcp-task-manager
-npm install       # Install dependencies
-npm run build     # Compile TypeScript → JavaScript
-npm run watch     # Auto-rebuild on changes
+npm run dev       # Watch mode (auto-rebuild on changes)
+npm run build     # Build once
 ```
 
 ### Adding New Tools
 
 1. Edit `mcp-task-manager/src/index.ts`
-2. Add tool to `server.setRequestHandler(ListToolsRequestSchema, ...)`
-3. Implement handler in `server.setRequestHandler(CallToolRequestSchema, ...)`
+2. Add tool definition to the `ListToolsRequestSchema` handler
+3. Add tool implementation to the `CallToolRequestSchema` handler
 4. Rebuild: `npm run build`
 
-**See [mcp-task-manager/README.md#development](../mcp-task-manager/README.md#development) for detailed development guide**
+## Troubleshooting
 
-### Testing Changes
+**"MCP server not found"** — Rebuild: `cd mcp-task-manager && npm run build`
 
-```bash
-# Test MCP server directly
-npm test
+**"Database connection error"** — Ensure PostgreSQL is running (`docker-compose up -d`) and `DATABASE_URL` is set in `.env`
 
-# Test via agent
-python tests/test_mcp.py
-```
-
----
-
-## Related Documentation
-
-- **[mcp-task-manager/README.md](../mcp-task-manager/README.md)** - Complete MCP server documentation
-- **[developer-guide.md](developer-guide.md)** - Platform architecture and development
-- **[configuration.md](configuration.md)** - Configuration options
-
----
-
-## Historical Note
-
-**MCP replaced shell scripts (December 2025):**
-- Old: `task-helper.sh` with JSONL file storage
-- New: MCP server with PostgreSQL database
-- Migration: Automatic via database schema
-
-All new development uses MCP. Shell-based task management has been removed.
+**Agent doesn't see tools** — Check `dist/index.js` exists, PostgreSQL is running, and `DATABASE_URL` is correct. Restart the session.
