@@ -6,16 +6,14 @@
 
 **For agent-browser usage, commands, and patterns: use the `agent-browser` skill** (available in `.claude/skills/agent-browser/`). It covers the full command reference, eval patterns, shell quoting, session management, and troubleshooting.
 
-## 📋 Core Rules (MEMORIZE)
+## 📋 Core Rules
 
-1. **File Operations**: Use `Read`/`Write`/`Edit` tools (relative paths from project root)
-2. **Commands**: Use `Bash` tool (runs directly on host in project directory)
-3. **🚫 NEVER use `sudo`**: All commands must run as the current user. Do NOT use `sudo` for any reason.
-4. **Heredocs work**: You can use `cat > file << EOF` syntax 
-5. **File extensions matter**: `.cjs` for CommonJS, `.js`/`.mjs` for ES modules
-6. **Browser verification = WORKFLOW testing**: Use agent-browser, test interactions not just screenshots
-7. **🚨 ALWAYS Read Before Write/Edit**: NEVER use `Write` or `Edit` without reading the file first (even if you "know" the content). Files must exist in context before modification.
-8. **curl timeouts**: ALWAYS use `--max-time 5` (or appropriate timeout) with curl commands
+**Your working directory is the project root** (provided as `PROJECT_DIR:` at the top of this prompt). All relative paths resolve from there. If context is compacted mid-session, verify with `pwd` — you should still be in the project directory.
+
+1. **File Operations**: Use `Read`/`Write`/`Edit` tools (relative paths from project root). **Read before modify** — see File Operations Rules below.
+2. **Commands**: Use `Bash` tool (runs directly on host in project directory). No `sudo`.
+3. **File extensions**: `.cjs` for CommonJS, `.js`/`.mjs` for ES modules
+4. **curl timeouts**: ALWAYS use `--max-time 5` (or appropriate timeout) with curl commands
 
 ## 📂 File Operations Rules
 
@@ -44,13 +42,11 @@ Read({ file_path: "package.json" })
 Write({ file_path: "package.json", content: "{...}" })
 ```
 
-**Why this matters:** This prevents accidental overwrites and ensures you're working with current file content. The error "File has not been read yet. Read it first before writing to it" means you forgot to read the file first.
-
 ## 🎯 Session Goals
 
 Complete 2-5 tasks from current epic. Continue until:
 - ✅ Epic complete
-- ✅ Context approaching 80% (check with "context" slash command)
+- ✅ You have completed 5 tasks in this session (hard limit — see Context Management)
 - ✅ Work type changes significantly
 - ✅ Blocker encountered
 
@@ -58,23 +54,20 @@ Quality over quantity - maintain all standards.
 
 ## 🧠 Context Management (MANDATORY)
 
-**🚨 You MUST proactively monitor context usage. Do NOT rely on automatic compaction.**
+**🚨 You MUST proactively manage context usage. Long sessions degrade quality.**
 
-**Check context after every 2 tasks** by using the `/context` slash command (NOT a Bash command):
-```
-# This is a Claude Code slash command, NOT a shell command.
-# Type it directly — do NOT wrap it in Bash({ command: "context" })
-/context
-```
+**You cannot check context usage directly** — there is no command or tool to query remaining context. Instead, use a strict task-count limit to prevent context exhaustion:
 
-**Action thresholds:**
-- **< 60% used**: Continue normally
-- **60-75% used**: Finish current task, then wrap up the session
-- **> 75% used**: STOP immediately. Commit work, write session summary, end session.
+**Hard limit: Complete at most 5 tasks per session, then end the session.**
 
-**🚨 NEVER allow automatic compaction to trigger.** If compaction fires, you have already gone too far. Context compaction destroys your memory of earlier work, which leads to repeated mistakes, lost verification state, and degraded quality.
+This is a strict ceiling, not a target. End the session earlier if:
+- You notice tool output being truncated
+- You are re-reading files you already read earlier in the session
+- Tasks are complex (significant code changes, multiple files, browser testing)
 
-**At session start**, run `/context` to establish baseline. If you are already above 40% at session start, plan for a shorter session (1-2 tasks max).
+**Why this matters:** Context compaction destroys your memory of earlier work, leading to repeated mistakes, lost verification state, and degraded quality. By capping tasks per session, you ensure each session ends cleanly before compaction can trigger.
+
+**Task counting:** After completing each task, mentally note how many you've finished this session. After task 5, wrap up immediately — commit, write the progress file, and end.
 
 ## 🚦 Workflow
 
@@ -163,28 +156,23 @@ mcp__task-manager__get_task_tests({ task_id: "task_id_here" })
 When recording verification notes, ALWAYS include all three elements:
 WHAT was tested: [endpoint/feature/behavior]
 HOW it was verified: [curl command / browser screenshot / SQL query]
-OUTCOME: [exact response / observed behavior — did it match expected?]
+OUTCOME: [exact response / observed behavior — what you ACTUALLY SAW, not what the spec says should happen]
+ERRORS: [console/build errors found, or "none"]
 
-Example: "GET /api/health tested via curl --max-time 5. Response: 200 {"message":"Todo API is running","version":"1.0.0"}. Matches expected output."
+**🚨 Describe OBSERVED outcomes, not EXPECTED outcomes.** Notes that restate the spec ("Expected tokens.css to contain variables") are worthless — they prove you read the spec, not that you verified the code. Notes must describe what you actually saw ("DevTools confirmed 47 CSS vars in tokens.css; zero console errors").
 
-# After verifying EACH test requirement, mark it as passing/failing with notes:
+Good: "WHAT: Health endpoint. HOW: curl --max-time 5. OUTCOME: 200 {"message":"Todo API is running","version":"1.0.0"}. ERRORS: none."
+Bad: "Health endpoint returns expected response." (restates spec, no actual evidence)
+
+# After verifying EACH test requirement, mark it as passing/failing:
 mcp__task-manager__update_task_test_result({
   test_id: "test_id_here",
-  passes: true,  # or false if test failed
-  verification_notes: "Use Expected/Observed/Result format:\nExpected: Login form submits and redirects to /dashboard\nObserved: Form submitted, HTTP 302 redirect to /dashboard confirmed\nResult: PASS",
-  # OPTIONAL - Include when test fails or for performance tracking:
-  error_message: "Brief error for UI (e.g., 'Expected 200, got 401')",  # Include when passes=false
-  execution_time_ms: 1250  # Include to track test performance
+  passes: true,
+  verification_notes: "Observed: Form submitted, HTTP 302 redirect to /dashboard confirmed",
+  execution_time_ms: 1250  # optional - track performance
 })
-
-# Example with failure:
-mcp__task-manager__update_task_test_result({
-  test_id: "test_id_here",
-  passes: false,
-  verification_notes: "Expected: Password validation rejects <8 chars\nObserved: Form submitted with 'abc' without error\nResult: FAIL - no client-side validation",
-  error_message: "Expected redirect to /dashboard, got 401 Unauthorized",
-  execution_time_ms: 850
-})
+# When passes=false, MUST include error_message explaining WHY:
+# error_message: "Expected redirect to /dashboard, got 401 Unauthorized"
 
 # If ANY requirement is NOT met:
 # 1. Fix the issue in your implementation
@@ -201,17 +189,7 @@ mcp__task-manager__list_tasks({ epic_id: "current_epic_id" })
 #   Then verify the epic-level integration requirements
 ```
 
-**CRITICAL RULES**:
-1. **NEVER mark task complete without verifying requirements first**
-2. **Test requirements describe WHAT to verify, you decide HOW to verify**
-3. **Use appropriate verification methods for each requirement type**
-4. **Document what you tested to confirm requirements are met**
-5. **If no test requirements exist, the task cannot be marked complete**
-6. **ALL requirements must be verified before marking task complete**
-7. **CHECK FOR EPIC COMPLETION after every task completion**
-8. **VERIFY EPIC REQUIREMENTS immediately when all tasks in epic are complete**
-9. **🚨 ONE TASK AT A TIME**: Implement, verify, and complete each task individually. NEVER batch-complete multiple tasks. Each `update_task_status(done=true)` must be preceded by its own `update_task_test_result` calls with real verification evidence.
-10. **🚨 NO SKIPPING VERIFICATION**: If you find yourself marking tasks complete without running agent-browser, curl, build, or test commands between them, STOP — you are skipping verification.
+**🚨 ONE TASK AT A TIME**: Implement, verify, and complete each task individually. NEVER batch-complete multiple tasks. Each `update_task_status(done=true)` must be preceded by its own `update_task_test_result` calls with real verification evidence.
 
 ## 📸 Screenshot Guidelines
 
@@ -249,61 +227,26 @@ Bash({ command: "agent-browser screenshot --full 2>&1 | grep -o '/[^ ]*\\.png' |
 
 **🚨 BROWSER TESTING MINIMUM FOR UI PROJECTS:**
 - Every UI/component task MUST include at least 1 screenshot saved to `yokeflow/screenshots/`
-- Every epic with UI components MUST include at least 1 interaction test (click, fill, hover)
+- Every UI task with interactive elements (buttons, forms, toggles, modals, hover effects) MUST include at least 1 interaction test (click, fill, hover) — screenshots alone are NOT sufficient for interactive components
+- After every navigation, check for console errors: `agent-browser eval 'JSON.stringify(window.__consoleLogs || [])'` or use `agent-browser snapshot` to see error indicators
 - Take a screenshot BEFORE making changes and AFTER to verify visual correctness
 - **Self-check**: After every 3 completed tasks, run `ls yokeflow/screenshots/ | wc -l` — if you have fewer screenshots than tasks completed, STOP and go back to properly verify
+- For responsive/breakpoint tasks: test at least one non-default viewport width (e.g., 375px mobile) and verify computed styles or layout changes — static desktop screenshots cannot validate responsive behavior
 - If a screenshot save fails, verify `yokeflow/screenshots/` exists and retry. Remember: `agent-browser screenshot` saves to a temp path — you must parse the output and `cp` it to `yokeflow/screenshots/`.
 
 ### UI Tasks (components, pages, forms)
-**Use the `agent-browser` skill for all browser automation** (open, snapshot, click, fill, wait, screenshot, etc.)
-
-**YokeFlow-specific rules for UI verification:**
-- Save screenshots to `yokeflow/screenshots/` using the capture-and-copy pattern (see Screenshot Guidelines above)
-- Verify screenshots were saved: `ls yokeflow/screenshots/task_10_verification.png`
-- Test interactions (click, fill, etc.) — not just screenshots
-- Check console errors after each test
+**Use the `agent-browser` skill** for all browser automation. Follow the browser testing minimum above.
 
 ### Python/Backend Tasks (modules, classes, functions)
-**Use python3 for import verification and pytest for testing**
+**Use `python3` (not `python`) for import verification and `pytest` for testing**
 
 ```bash
-# Test specific function execution
-Bash({
-  command: "python3 -c 'from app.utils import process_data; result = process_data(\"test\"); assert result, \"Function failed\"; print(\"✅ Function works:\", result)'"
-})
+# Inline verification
+Bash({ command: "python3 -c 'from app.utils import process_data; print(\"✅\", process_data(\"test\"))'" })
 
-# Run pytest if test files exist
+# Run pytest
 Bash({ command: "pytest tests/test_module.py -v" })
-
-# Or create simple inline verification
-Bash({
-  command: "python3 -c \"
-import sys
-try:
-    from app.core.errors import CustomError
-    err = CustomError('test')
-    assert err.message == 'test'
-    print('✅ Error class works correctly')
-except Exception as e:
-    print(f'❌ Test failed: {e}')
-    sys.exit(1)
-\""
-})
-
-# For complex testing, write a test file first
-Write({
-  file_path: "test_verification.py",
-  content: "#!/usr/bin/env python3\n# Test content here..."
-})
-Bash({ command: "python3 test_verification.py" })
 ```
-
-**Verification checklist for Python tasks:**
-- ✓ Used python3 (not python) for all commands
-- ✓ Successfully imported the module/class/function
-- ✓ Executed at least one function/method to verify behavior
-- ✓ Checked return values or exceptions as appropriate
-- ✓ Got explicit "✅" success output from tests
 
 ### API Tasks (endpoints, middleware)
 **Use curl or fetch - No browser needed**
@@ -346,99 +289,20 @@ Bash({ command: "head -20 path/to/doc.md" })
 
 Save screenshots to `yokeflow/screenshots/` (e.g., `task_15_mobile_view.png`, `task_15_desktop_view.png`).
 
-## ⚠️ Common Pitfalls to Avoid
+## ⚠️ Common Pitfalls
 
-### ❌ NEVER Do This:
-```bash
-# Marking tests without verification
-mcp__task-manager__update_task_test_result({ passes: true })  # WRONG - No verification!
+- **Wrong extension**: Use `.cjs` for CommonJS, `.js`/`.mjs` for ES modules
+- **Directory changes**: Use subshells `(cd server && npm test)` — never bare `cd`
+- **Browser delegation**: Never use puppeteer/headless Chrome or delegate browser testing to subagents — only use agent-browser directly
+- **Failed tests**: Always include `error_message` when `passes: false` to explain WHY
 
-# Failing tests without error message
-mcp__task-manager__update_task_test_result({
-  test_id: 123,
-  passes: false,
-  verification_notes: "Test failed"
-  # MISSING: error_message - should explain WHY it failed!
-})
+## ✅ Quality Gate
 
-# Wrong verification for task type
-# Documentation task -> Browser test  # WRONG TYPE
-# UI task -> Just checking file exists  # INSUFFICIENT
-
-# Wrong extension
-Write({ file_path: "verify.js", content: "const fs = require('fs')" })  # Use .cjs
-
-# Screenshot-only verification
-Bash({ command: "agent-browser screenshot task_20_test.png" })  # Insufficient - test interactions too!
-
-# Using puppeteer, headless Chrome, or other browser tools instead of agent-browser
-Bash({ command: "npm install puppeteer" })  # WRONG - Only use agent-browser!
-Task({ description: "Take screenshot", ... })  # WRONG - Never delegate browser testing to subagents!
-
-# Permanent directory changes
-Bash({ command: "cd server" })  # WRONG - Loses root access
-```
-
-### ✅ ALWAYS Do This:
-```bash
-# File creation (relative paths)
-Write({ file_path: "server/index.js", content: "..." })
-
-# Commands on host
-Bash({ command: "npm install express" })
-
-# Subshells for directory changes
-Bash({ command: "(cd server && npm test)" })
-
-# CommonJS files for verification
-Write({ file_path: "verify.cjs", content: "require('fs')" })
-
-# Full verification with agent-browser (use agent-browser skill for command details)
-# Open → snapshot → interact with refs → check errors → screenshot to yokeflow/screenshots/
-Bash({ command: "agent-browser open http://localhost:3000" })
-Bash({ command: "agent-browser snapshot -i" })  # Get element refs
-Bash({ command: "agent-browser click @e2" })  # Use refs from snapshot
-Bash({ command: "agent-browser screenshot 2>&1 | grep -o '/[^ ]*\\.png' | head -1 | xargs -I{} mv {} yokeflow/screenshots/task_25_verify.png" })
-Bash({ command: "ls yokeflow/screenshots/task_25_verify.png" })  # Verify saved
-
-# Provide error details when tests fail
-mcp__task-manager__update_task_test_result({
-  test_id: 123,
-  passes: false,
-  verification_notes: "✅ Tested user login\n❌ Password validation failed",
-  error_message: "Expected redirect to /dashboard, got 401",  # ✅ Helpful!
-  execution_time_ms: 850
-})
-
-# Include performance tracking for slow tests
-mcp__task-manager__update_epic_test_result({
-  test_id: "abc-123",
-  result: "passed",
-  verification_notes: "✅ Complete checkout workflow tested",
-  execution_time_ms: 5400  # ✅ Track epic test performance
-})
-```
-
-## ✅ Verification Checklist
-
-**Before marking ANY test as passing, confirm:**
-
-1. ✓ Did I run verification appropriate to the task type?
-2. ✓ Did verification complete successfully (not timeout/error)?
-3. ✓ Did I see explicit success output (e.g., "✅ Test passed")?
-4. ✓ Can I quote the specific success message?
-5. ✓ For UI tasks: Did I test interactions using agent-browser, not just screenshots?
-6. ✓ For UI tasks: Did I save a screenshot to `yokeflow/screenshots/` and verify it exists?
-7. ✓ For API tasks: Did I get valid response with correct status?
-8. ✓ For documentation: Did I verify content exists and is substantial?
-9. ✓ Did I call `update_task_test_result` for EVERY test requirement for this task?
-
-**If ANY answer is NO → DO NOT mark test as passing**
-
-**🚨 QUALITY GATE**: Before calling `update_task_status(done=true)`, verify:
-- You called `update_task_test_result` at least once for this task
-- Each test result has `verification_notes` with actual evidence (not generic text)
-- For UI tasks: at least one screenshot exists in `yokeflow/screenshots/` for this task
+**🚨 Before calling `update_task_status(done=true)`**, confirm:
+- You called `get_task_tests` for THIS task's ID
+- You called `update_task_test_result` for EVERY test with real evidence
+- Verification notes describe what you OBSERVED, not what the spec says
+- For UI tasks: at least one screenshot in `yokeflow/screenshots/` + interaction tested
 
 ## 🔧 Troubleshooting
 
@@ -458,6 +322,10 @@ mcp__task-manager__update_epic_test_result({
    ```
 
 3. **Retry verification** (up to 3 attempts)
+
+### SlashCommand Tool
+
+**Do NOT use the `SlashCommand` tool for built-in commands** (`/context`, `/cost`, `/compact`, etc.). These are not prompt-based commands and will fail with "Slash command context is not a prompt-based command". The `SlashCommand` tool only works for custom prompt-based commands (skills from `.claude/commands/` or `.claude/skills/`).
 
 ### Agent-Browser Issues
 
@@ -479,6 +347,8 @@ Bash({ command: "sleep 2" })
 2. Apply that fix **immediately** — do NOT retry the same broken approach
 3. For file/path errors: verify the path you're writing to before retrying the read
 
+**File path errors:** When file paths are uncertain, use Glob or `ls` to confirm directory structure BEFORE reading individual files. Do NOT speculatively read multiple unverified paths in parallel. On a "File does not exist" error, STOP and run `ls` on the parent directory before retrying.
+
 **Do NOT burn 5+ attempts on the same error.** If a fix doesn't work after 2 attempts, try a completely different approach (e.g., use `agent-browser snapshot` instead of `agent-browser eval`).
 
 ## 💡 Performance Tips
@@ -491,11 +361,11 @@ Bash({ command: "sleep 2" })
 
 ## 📝 Session End
 
-**🚨 End the session BEFORE context reaches 75%.** Check with `/context` slash command regularly.
+**🚨 End the session after completing at most 5 tasks.** Do not start a 6th task — wrap up and end.
 
 When ending a session:
 
-1. Complete current task (do not leave tasks half-done)
+1. Complete current task (do not leave tasks half-done). If blocked, commit partial work and document in `verification_notes`: what was done, what remains, and why you're blocked.
 2. Update status: `mcp__task-manager__task_status`
 3. Update `yokeflow/agent-progress.md` with session summary (see format below)
 4. If you haven't been committing per-task, commit all remaining work now
@@ -527,12 +397,4 @@ Current Epic: #N - Name
 - Update Current Status every session (overwrite, don't append)
 - Remove resolved blockers — only list issues that affect the NEXT session
 
-**Git Commits**: Commit after EACH completed task (step 8 in the Task Loop), not just at session end. One task = one commit. This preserves work incrementally and provides an audit trail.
-
-**Required:**
-- ✅ Workflow testing, not just screenshots
-- ✅ All tests must pass before task completion
-
----
-
-**Remember**: Use the right tool for the right job - File ops with Read/Write/Edit, commands with Bash, browser testing with agent-browser.
+**Git Commits**: Commit after EACH completed task (step 8 in the Task Loop), not just at session end. One task = one commit.

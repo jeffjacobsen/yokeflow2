@@ -997,72 +997,6 @@ class TaskDatabase:
 
                 return task
 
-    async def claim_next_task(
-        self,
-        project_id: UUID,
-        worker_id: str
-    ) -> Optional[Dict[str, Any]]:
-        """
-        Atomically claim the next available task for a parallel worker.
-
-        Uses FOR UPDATE SKIP LOCKED to prevent duplicate claims when
-        multiple workers are running concurrently.
-
-        Args:
-            project_id: Project UUID
-            worker_id: Unique identifier for the claiming worker
-
-        Returns:
-            Claimed task with epic info and tests, or None if no tasks available
-        """
-        with PerformanceLogger("claim_next_task", {"project_id": str(project_id), "worker_id": worker_id}):
-            async with self.acquire() as conn:
-                # Atomic CTE: SELECT + UPDATE in one round-trip
-                # FOR UPDATE SKIP LOCKED prevents duplicate claims
-                task_row = await conn.fetchrow(
-                    """
-                    WITH next AS (
-                        SELECT t.id
-                        FROM tasks t
-                        JOIN epics e ON t.epic_id = e.id
-                        WHERE t.project_id = $1
-                            AND t.done = false
-                            AND t.session_notes IS NULL
-                            AND e.status != 'completed'
-                        ORDER BY e.priority, t.priority, t.id
-                        LIMIT 1
-                        FOR UPDATE OF t SKIP LOCKED
-                    )
-                    UPDATE tasks
-                    SET session_notes = $2 || ' claimed at ' || NOW()::text
-                    FROM next
-                    WHERE tasks.id = next.id
-                    RETURNING tasks.*,
-                        (SELECT name FROM epics WHERE id = tasks.epic_id) as epic_name,
-                        (SELECT description FROM epics WHERE id = tasks.epic_id) as epic_description
-                    """,
-                    project_id, worker_id
-                )
-
-                if not task_row:
-                    return None
-
-                task = dict(task_row)
-
-                # Get tests for this task
-                test_rows = await conn.fetch(
-                    """
-                    SELECT * FROM task_tests
-                    WHERE task_id = $1
-                    ORDER BY id
-                    """,
-                    task['id']
-                )
-
-                task['tests'] = [dict(row) for row in test_rows]
-
-                return task
-
     async def update_task_status(
         self,
         task_id: int,
@@ -1172,37 +1106,6 @@ class TaskDatabase:
                 json.dumps(steps) if steps else '[]'
             )
             return dict(row)
-
-    async def update_test_result(
-        self,
-        test_id: int,
-        passes: bool,
-        session_id: Optional[UUID] = None,
-        result: Optional[Dict[str, Any]] = None
-    ) -> None:
-        """
-        Update test result.
-
-        Args:
-            test_id: Test ID
-            passes: Whether test passed
-            session_id: Session that ran the test
-            result: Test result details
-        """
-        async with self.acquire() as conn:
-            await conn.execute(
-                """
-                UPDATE task_tests
-                SET passes = $1,
-                    verified_at = CASE WHEN $1 THEN NOW() ELSE NULL END,
-                    session_id = COALESCE($2, session_id),
-                    result = COALESCE($3::jsonb, result)
-                WHERE id = $4
-                """,
-                passes, session_id,
-                json.dumps(result) if result else None,
-                test_id
-            )
 
     # =========================================================================
     # Progress and Statistics
@@ -1332,8 +1235,7 @@ class TaskDatabase:
                 """
                 SELECT id, task_id, category, description, steps, passes,
                        test_type, requirements, success_criteria, verification_notes,
-                       created_at, verified_at,
-                       last_execution, last_result, execution_log
+                       created_at, verified_at, last_execution
                 FROM task_tests
                 WHERE task_id = $1
                 ORDER BY category, id
@@ -1397,8 +1299,8 @@ class TaskDatabase:
                 """
                 SELECT id, epic_id, name, description, test_type,
                        requirements, success_criteria, key_verification_points,
-                       depends_on_tasks, last_execution, last_result, execution_log,
-                       created_at, updated_at
+                       passes, last_execution, execution_time_ms,
+                       verification_notes, created_at, updated_at
                 FROM epic_tests
                 WHERE epic_id = $1
                 ORDER BY created_at
@@ -1427,8 +1329,8 @@ class TaskDatabase:
                 """
                 SELECT id, epic_id, name, description, test_type,
                        requirements, success_criteria, key_verification_points,
-                       depends_on_tasks, last_execution, last_result, execution_log,
-                       created_at, updated_at
+                       passes, last_execution, execution_time_ms,
+                       verification_notes, created_at, updated_at
                 FROM epic_tests
                 WHERE epic_id = $1
                 ORDER BY created_at
@@ -1455,9 +1357,8 @@ class TaskDatabase:
                 """
                 SELECT
                     COUNT(*) as total_epic_tests,
-                    COUNT(CASE WHEN last_result = 'passed' THEN 1 END) as passed,
-                    COUNT(CASE WHEN last_result = 'failed' THEN 1 END) as failed,
-                    COUNT(CASE WHEN last_result = 'skipped' THEN 1 END) as skipped,
+                    COUNT(CASE WHEN passes = true THEN 1 END) as passed,
+                    COUNT(CASE WHEN passes = false AND last_execution IS NOT NULL THEN 1 END) as failed,
                     COUNT(CASE WHEN last_execution IS NOT NULL THEN 1 END) as executed
                 FROM epic_tests
                 WHERE epic_id IN (
@@ -1470,7 +1371,6 @@ class TaskDatabase:
                 'total_epic_tests': 0,
                 'passed': 0,
                 'failed': 0,
-                'skipped': 0,
                 'executed': 0
             }
 
@@ -2109,311 +2009,6 @@ class TaskDatabase:
             return result
 
     # =========================================================================
-    # Paused Sessions and Intervention Operations
-    # =========================================================================
-
-    @with_retry(RetryConfig(max_retries=3, base_delay=1.0))
-    async def pause_session(
-        self,
-        session_id: UUID,
-        project_id: UUID,
-        reason: str,
-        pause_type: str,
-        blocker_info: Optional[Dict[str, Any]] = None,
-        retry_stats: Optional[Dict[str, Any]] = None,
-        current_task_id: Optional[int] = None,
-        current_task_description: Optional[str] = None,
-        message_count: Optional[int] = None,
-        error_messages: Optional[List[str]] = None
-    ) -> UUID:
-        """
-        Pause a session and save its state to database.
-
-        Uses the pause_session() SQL function for atomic operation.
-
-        Args:
-            session_id: Session UUID to pause
-            project_id: Project UUID
-            reason: Reason for pausing
-            pause_type: Type of pause (retry_limit, critical_error, manual, timeout)
-            blocker_info: Information about the blocker
-            retry_stats: Retry statistics
-            current_task_id: Current task ID
-            current_task_description: Current task description
-            message_count: Number of messages in session
-            error_messages: List of error messages
-
-        Returns:
-            UUID of the paused session record
-        """
-        async with self.acquire() as conn:
-            paused_session_id = await conn.fetchval(
-                """
-                SELECT pause_session(
-                    $1::UUID, $2::UUID, $3, $4,
-                    $5::jsonb, $6::jsonb, $7, $8
-                )
-                """,
-                session_id,
-                project_id,
-                reason,
-                pause_type,
-                json.dumps(blocker_info or {}),
-                json.dumps(retry_stats or {}),
-                current_task_id,
-                current_task_description
-            )
-
-            # Update additional fields not in the SQL function
-            if message_count is not None or error_messages is not None:
-                update_parts = []
-                params = []
-                param_idx = 2
-
-                if message_count is not None:
-                    update_parts.append(f"message_count = ${param_idx}")
-                    params.append(message_count)
-                    param_idx += 1
-
-                if error_messages is not None:
-                    update_parts.append(f"error_messages = ${param_idx}")
-                    params.append(error_messages)
-                    param_idx += 1
-
-                if update_parts:
-                    query = f"""
-                        UPDATE paused_sessions
-                        SET {', '.join(update_parts)}
-                        WHERE id = $1
-                    """
-                    await conn.execute(query, paused_session_id, *params)
-
-            return paused_session_id
-
-    @with_retry(RetryConfig(max_retries=3, base_delay=1.0))
-    async def resume_session(
-        self,
-        paused_session_id: UUID,
-        resolved_by: str = "system",
-        resolution_notes: Optional[str] = None
-    ) -> bool:
-        """
-        Resume a paused session.
-
-        Uses the resume_session() SQL function for atomic operation.
-
-        Args:
-            paused_session_id: Paused session UUID
-            resolved_by: Who resolved the issue
-            resolution_notes: Notes about the resolution
-
-        Returns:
-            True if session was successfully resumed
-        """
-        async with self.acquire() as conn:
-            success = await conn.fetchval(
-                "SELECT resume_session($1::UUID, $2, $3)",
-                paused_session_id,
-                resolved_by,
-                resolution_notes
-            )
-            return success
-
-    async def get_paused_session(self, paused_session_id: UUID) -> Optional[Dict[str, Any]]:
-        """
-        Get a paused session by ID.
-
-        Args:
-            paused_session_id: Paused session UUID
-
-        Returns:
-            Paused session record or None
-        """
-        async with self.acquire() as conn:
-            row = await conn.fetchrow(
-                "SELECT * FROM paused_sessions WHERE id = $1",
-                paused_session_id
-            )
-            return dict(row) if row else None
-
-    async def get_active_pauses(
-        self,
-        project_id: Optional[UUID] = None
-    ) -> List[Dict[str, Any]]:
-        """
-        Get all active (unresolved) paused sessions.
-
-        Args:
-            project_id: Optional project UUID to filter by
-
-        Returns:
-            List of active paused sessions with project info
-        """
-        async with self.acquire() as conn:
-            if project_id:
-                rows = await conn.fetch(
-                    "SELECT * FROM v_active_interventions WHERE project_id = $1",
-                    project_id
-                )
-            else:
-                rows = await conn.fetch("SELECT * FROM v_active_interventions")
-
-            return [dict(row) for row in rows]
-
-    async def get_intervention_history(
-        self,
-        project_id: Optional[UUID] = None,
-        limit: int = 50
-    ) -> List[Dict[str, Any]]:
-        """
-        Get history of resolved interventions.
-
-        Args:
-            project_id: Optional project UUID to filter by
-            limit: Maximum number of records to return
-
-        Returns:
-            List of resolved interventions
-        """
-        async with self.acquire() as conn:
-            if project_id:
-                rows = await conn.fetch(
-                    """
-                    SELECT * FROM v_intervention_history
-                    WHERE project_id = $1
-                    ORDER BY resolved_at DESC
-                    LIMIT $2
-                    """,
-                    project_id, limit
-                )
-            else:
-                rows = await conn.fetch(
-                    """
-                    SELECT * FROM v_intervention_history
-                    ORDER BY resolved_at DESC
-                    LIMIT $1
-                    """,
-                    limit
-                )
-
-            return [dict(row) for row in rows]
-
-    async def log_intervention_action(
-        self,
-        paused_session_id: UUID,
-        action_type: str,
-        action_status: str,
-        action_details: Optional[Dict[str, Any]] = None,
-        result_message: Optional[str] = None,
-        error_message: Optional[str] = None
-    ) -> UUID:
-        """
-        Log an intervention action.
-
-        Args:
-            paused_session_id: Paused session UUID
-            action_type: Type of action (notification_sent, auto_recovery, manual_fix, resumed)
-            action_status: Status (pending, success, failed)
-            action_details: Additional details about the action
-            result_message: Result message
-            error_message: Error message if failed
-
-        Returns:
-            UUID of the action record
-        """
-        async with self.acquire() as conn:
-            action_id = await conn.fetchval(
-                """
-                INSERT INTO intervention_actions (
-                    paused_session_id,
-                    action_type,
-                    action_status,
-                    action_details,
-                    result_message,
-                    error_message,
-                    completed_at
-                )
-                VALUES ($1, $2, $3, $4, $5, $6,
-                    CASE WHEN $3 IN ('success', 'failed') THEN NOW() ELSE NULL END)
-                RETURNING id
-                """,
-                paused_session_id,
-                action_type,
-                action_status,
-                json.dumps(action_details or {}),
-                result_message,
-                error_message
-            )
-            return action_id
-
-    async def update_intervention_action(
-        self,
-        action_id: UUID,
-        action_status: str,
-        result_message: Optional[str] = None,
-        error_message: Optional[str] = None
-    ):
-        """
-        Update an intervention action's status.
-
-        Args:
-            action_id: Action UUID
-            action_status: New status
-            result_message: Optional result message
-            error_message: Optional error message
-        """
-        async with self.acquire() as conn:
-            await conn.execute(
-                """
-                UPDATE intervention_actions
-                SET action_status = $2,
-                    result_message = COALESCE($3, result_message),
-                    error_message = COALESCE($4, error_message),
-                    completed_at = CASE
-                        WHEN $2 IN ('success', 'failed') THEN NOW()
-                        ELSE completed_at
-                    END
-                WHERE id = $1
-                """,
-                action_id,
-                action_status,
-                result_message,
-                error_message
-            )
-
-    async def set_pause_resume_prompt(
-        self,
-        paused_session_id: UUID,
-        resume_prompt: str,
-        can_auto_resume: bool = False,
-        resume_context: Optional[Dict[str, Any]] = None
-    ):
-        """
-        Set resume information for a paused session.
-
-        Args:
-            paused_session_id: Paused session UUID
-            resume_prompt: Custom prompt for resuming
-            can_auto_resume: Whether the session can auto-resume
-            resume_context: Additional context for resume
-        """
-        async with self.acquire() as conn:
-            await conn.execute(
-                """
-                UPDATE paused_sessions
-                SET resume_prompt = $2,
-                    can_auto_resume = $3,
-                    resume_context = $4,
-                    updated_at = NOW()
-                WHERE id = $1
-                """,
-                paused_session_id,
-                resume_prompt,
-                can_auto_resume,
-                json.dumps(resume_context or {})
-            )
-
-    # =========================================================================
     # Session Checkpoint Operations
     # =========================================================================
 
@@ -2726,178 +2321,6 @@ class TaskDatabase:
             )
             return count or 0
 
-    async def get_epic_retest_runs(
-        self,
-        project_id: UUID,
-        epic_id: Optional[int] = None,
-        limit: int = 50
-    ) -> List[Dict[str, Any]]:
-        """
-        Get epic re-test history.
-
-        Args:
-            project_id: Project UUID
-            epic_id: Filter by specific epic (None = all)
-            limit: Maximum records to return
-
-        Returns:
-            List of re-test run dicts
-        """
-        async with self.acquire() as conn:
-            if epic_id:
-                rows = await conn.fetch(
-                    """
-                    SELECT err.*
-                    FROM v_epic_retest_history err
-                    JOIN epics e ON err.epic_id = e.id
-                    WHERE e.project_id = $1 AND err.epic_id = $2
-                    ORDER BY err.created_at DESC
-                    LIMIT $3
-                    """,
-                    project_id, epic_id, limit
-                )
-            else:
-                rows = await conn.fetch(
-                    """
-                    SELECT err.*
-                    FROM v_epic_retest_history err
-                    JOIN epics e ON err.epic_id = e.id
-                    WHERE e.project_id = $1
-                    ORDER BY err.created_at DESC
-                    LIMIT $2
-                    """,
-                    project_id, limit
-                )
-
-            return [dict(row) for row in rows]
-
-    async def get_epic_stability_metrics(
-        self,
-        project_id: UUID,
-        epic_id: Optional[int] = None
-    ) -> List[Dict[str, Any]]:
-        """
-        Get epic stability metrics.
-
-        Args:
-            project_id: Project UUID
-            epic_id: Filter by specific epic (None = all)
-
-        Returns:
-            List of stability metric dicts
-        """
-        async with self.acquire() as conn:
-            if epic_id:
-                rows = await conn.fetch(
-                    """
-                    SELECT esm.*
-                    FROM v_epic_stability_summary esm
-                    WHERE epic_id IN (
-                        SELECT id FROM epics WHERE project_id = $1
-                    ) AND esm.epic_id = $2
-                    """,
-                    project_id, epic_id
-                )
-            else:
-                rows = await conn.fetch(
-                    """
-                    SELECT esm.*
-                    FROM v_epic_stability_summary esm
-                    WHERE epic_id IN (
-                        SELECT id FROM epics WHERE project_id = $1
-                    )
-                    ORDER BY priority DESC, stability_score ASC
-                    """,
-                    project_id
-                )
-
-            return [dict(row) for row in rows]
-
-    async def get_regressions_by_epic(self, project_id: UUID) -> List[Dict[str, Any]]:
-        """
-        Get list of epics that have caused regressions.
-
-        Args:
-            project_id: Project UUID
-
-        Returns:
-            List of epics with regression counts
-        """
-        async with self.acquire() as conn:
-            rows = await conn.fetch(
-                """
-                SELECT rbe.*
-                FROM v_regressions_by_epic rbe
-                WHERE epic_id IN (
-                    SELECT id FROM epics WHERE project_id = $1
-                )
-                ORDER BY regressions_caused DESC
-                """,
-                project_id
-            )
-
-            return [dict(row) for row in rows]
-
-    async def record_epic_retest(
-        self,
-        epic_id: int,
-        triggered_by_epic_id: Optional[int],
-        session_id: Optional[UUID],
-        test_result: str,
-        is_regression: bool = False,
-        execution_time_ms: Optional[int] = None,
-        error_details: Optional[str] = None,
-        tests_run: int = 0,
-        tests_passed: int = 0,
-        tests_failed: int = 0,
-        selection_reason: Optional[str] = None
-    ) -> UUID:
-        """
-        Record an epic re-test result.
-
-        Uses the record_epic_retest() database function which:
-        - Auto-detects regressions
-        - Updates stability metrics
-        - Calculates stability scores
-
-        Args:
-            epic_id: Epic that was re-tested
-            triggered_by_epic_id: Epic that triggered the re-test
-            session_id: Session that ran the re-test
-            test_result: 'passed', 'failed', 'skipped', 'error'
-            is_regression: Was passing, now failing
-            execution_time_ms: Test execution time
-            error_details: Error message if failed
-            tests_run: Number of tests executed
-            tests_passed: Number of tests passed
-            tests_failed: Number of tests failed
-            selection_reason: Why this epic was selected
-
-        Returns:
-            UUID of created retest run record
-        """
-        async with self.acquire() as conn:
-            retest_id = await conn.fetchval(
-                """
-                SELECT record_epic_retest(
-                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
-                )
-                """,
-                epic_id,
-                triggered_by_epic_id,
-                session_id,
-                test_result,
-                is_regression,
-                execution_time_ms,
-                error_details,
-                tests_run,
-                tests_passed,
-                tests_failed,
-                selection_reason
-            )
-
-            return retest_id
-
     # =========================================================================
     # Project Completion Review Methods (Phase 7)
     # =========================================================================
@@ -3145,6 +2568,213 @@ class TaskDatabase:
             )
 
             return [dict(s) for s in sections]
+
+    async def get_test_health(
+        self,
+        project_id: UUID,
+        limit: int = 20
+    ) -> Dict[str, Any]:
+        """
+        Get test health aggregates for a project: slow and failing tests.
+
+        Slow threshold: execution_time_ms > 5000 (5 seconds).
+
+        Args:
+            project_id: Project UUID
+            limit: Max results per category
+
+        Returns:
+            Dict with slow/failed tests and summary counts
+        """
+        async with self.acquire() as conn:
+            # Slow task tests (> 5 seconds)
+            slow_task_tests = await conn.fetch(
+                """
+                SELECT tt.*, t.name as task_name, e.name as epic_name
+                FROM task_tests tt
+                JOIN tasks t ON tt.task_id = t.id
+                JOIN epics e ON t.epic_id = e.id
+                WHERE tt.project_id = $1
+                  AND tt.execution_time_ms > 5000
+                ORDER BY tt.execution_time_ms DESC
+                LIMIT $2
+                """,
+                project_id, limit
+            )
+
+            # Failed task tests
+            failed_task_tests = await conn.fetch(
+                """
+                SELECT tt.*, t.name as task_name, e.name as epic_name
+                FROM task_tests tt
+                JOIN tasks t ON tt.task_id = t.id
+                JOIN epics e ON t.epic_id = e.id
+                WHERE tt.project_id = $1
+                  AND tt.passes = false
+                  AND tt.last_execution IS NOT NULL
+                ORDER BY tt.last_execution DESC NULLS LAST
+                LIMIT $2
+                """,
+                project_id, limit
+            )
+
+            # Slow epic tests (> 5 seconds)
+            slow_epic_tests = await conn.fetch(
+                """
+                SELECT et.*, e.name as epic_name
+                FROM epic_tests et
+                JOIN epics e ON et.epic_id = e.id
+                WHERE et.project_id = $1
+                  AND et.execution_time_ms > 5000
+                ORDER BY et.execution_time_ms DESC
+                LIMIT $2
+                """,
+                project_id, limit
+            )
+
+            # Failed epic tests
+            failed_epic_tests = await conn.fetch(
+                """
+                SELECT et.*, e.name as epic_name
+                FROM epic_tests et
+                JOIN epics e ON et.epic_id = e.id
+                WHERE et.project_id = $1
+                  AND et.passes = false
+                  AND et.last_execution IS NOT NULL
+                ORDER BY et.last_execution DESC NULLS LAST
+                LIMIT $2
+                """,
+                project_id, limit
+            )
+
+            # Summary counts
+            summary = await conn.fetchrow(
+                """
+                SELECT
+                    (SELECT COUNT(*) FROM task_tests WHERE project_id = $1) +
+                    (SELECT COUNT(*) FROM epic_tests WHERE project_id = $1) as total_tests,
+                    (SELECT COUNT(*) FROM task_tests WHERE project_id = $1 AND execution_time_ms > 5000) +
+                    (SELECT COUNT(*) FROM epic_tests WHERE project_id = $1 AND execution_time_ms > 5000) as slow_count,
+                    (SELECT COUNT(*) FROM task_tests WHERE project_id = $1 AND passes = false AND last_execution IS NOT NULL) +
+                    (SELECT COUNT(*) FROM epic_tests WHERE project_id = $1 AND passes = false AND last_execution IS NOT NULL) as failed_count
+                """,
+                project_id
+            )
+
+            summary_dict = dict(summary) if summary else {
+                "total_tests": 0, "slow_count": 0, "failed_count": 0
+            }
+            total = summary_dict["total_tests"]
+            summary_dict["healthy_count"] = total - summary_dict["slow_count"] - summary_dict["failed_count"]
+            if summary_dict["healthy_count"] < 0:
+                summary_dict["healthy_count"] = 0
+
+            return {
+                "slow_task_tests": [dict(r) for r in slow_task_tests],
+                "failed_task_tests": [dict(r) for r in failed_task_tests],
+                "slow_epic_tests": [dict(r) for r in slow_epic_tests],
+                "failed_epic_tests": [dict(r) for r in failed_epic_tests],
+                "summary": summary_dict,
+            }
+
+    async def get_all_project_tests(
+        self,
+        project_id: UUID
+    ) -> Dict[str, Any]:
+        """
+        Get all tests for a project grouped by epic and task.
+
+        Returns a hierarchy: epics → tasks → tests, plus epic-level tests.
+        Used by the Test Coverage UI to display all tests in a Roadmap-style layout.
+
+        Args:
+            project_id: Project UUID
+
+        Returns:
+            Dict with 'epics' list, each containing tasks with their tests
+        """
+        async with self.acquire() as conn:
+            # Fetch all epics
+            epics = await conn.fetch(
+                """
+                SELECT id, name, description, status
+                FROM epics
+                WHERE project_id = $1
+                ORDER BY priority, id
+                """,
+                project_id
+            )
+
+            # Fetch all tasks
+            tasks = await conn.fetch(
+                """
+                SELECT id, name, description, done, epic_id
+                FROM tasks
+                WHERE project_id = $1
+                ORDER BY epic_id, id
+                """,
+                project_id
+            )
+
+            # Fetch all task tests
+            task_tests = await conn.fetch(
+                """
+                SELECT id, task_id, description, category, test_type,
+                       passes, execution_time_ms
+                FROM task_tests
+                WHERE project_id = $1
+                ORDER BY task_id, id
+                """,
+                project_id
+            )
+
+            # Fetch all epic tests
+            epic_tests = await conn.fetch(
+                """
+                SELECT id, epic_id, name, description, test_type,
+                       passes, execution_time_ms
+                FROM epic_tests
+                WHERE project_id = $1
+                ORDER BY epic_id, id
+                """,
+                project_id
+            )
+
+            # Group task tests by task_id
+            tests_by_task: Dict[int, list] = {}
+            for t in task_tests:
+                tid = t["task_id"]
+                if tid not in tests_by_task:
+                    tests_by_task[tid] = []
+                tests_by_task[tid].append(dict(t))
+
+            # Group tasks by epic_id
+            tasks_by_epic: Dict[int, list] = {}
+            for task in tasks:
+                eid = task["epic_id"]
+                if eid not in tasks_by_epic:
+                    tasks_by_epic[eid] = []
+                task_dict = dict(task)
+                task_dict["tests"] = tests_by_task.get(task["id"], [])
+                tasks_by_epic[eid].append(task_dict)
+
+            # Group epic tests by epic_id
+            epic_tests_by_epic: Dict[int, list] = {}
+            for et in epic_tests:
+                eid = et["epic_id"]
+                if eid not in epic_tests_by_epic:
+                    epic_tests_by_epic[eid] = []
+                epic_tests_by_epic[eid].append(dict(et))
+
+            # Build result
+            result_epics = []
+            for epic in epics:
+                epic_dict = dict(epic)
+                epic_dict["epic_tests"] = epic_tests_by_epic.get(epic["id"], [])
+                epic_dict["tasks"] = tasks_by_epic.get(epic["id"], [])
+                result_epics.append(epic_dict)
+
+            return {"epics": result_epics}
 
 
 # =============================================================================

@@ -233,6 +233,26 @@ success_criteria: "All tables exist with proper columns, indexes, and foreign ke
 
 For EACH epic, create 1-2 integration tests using `create_epic_test`. These can be created in the same response as task tests.
 
+```
+mcp__task-manager__create_epic_test
+epic_id: "epic-uuid-1"
+name: "Database layer integration test"
+description: "Verify all database components work together end-to-end"
+test_type: "integration"
+requirements: "Database connection pool, schema migrations, and CRUD operations must work together. Pool must handle concurrent requests without deadlocks."
+success_criteria: "Full CRUD cycle completes successfully through connection pool with proper transaction handling."
+key_verification_points: ["Connection pool serves concurrent queries", "Migrations apply cleanly", "Transactions rollback on error"]
+
+mcp__task-manager__create_epic_test
+epic_id: "epic-uuid-2"
+name: "API endpoint integration test"
+description: "Verify all API endpoints respond correctly with proper auth"
+test_type: "e2e"
+requirements: "All API endpoints must handle authentication, return correct status codes, and validate request/response schemas."
+success_criteria: "Authenticated requests return expected data; unauthenticated requests return 401; invalid inputs return 400 with error details."
+key_verification_points: ["Auth middleware validates tokens", "Endpoints return correct schemas", "Error responses include details"]
+```
+
 ### MANDATORY: Verify 100% Test Coverage
 
 After creating tests, you MUST verify that EVERY task has at least one test. Do NOT skip this step.

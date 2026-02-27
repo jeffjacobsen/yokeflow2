@@ -27,12 +27,12 @@ First, analyze what types of tasks were worked on:
 
 **IMPORTANT: Consider the project spec and task descriptions when evaluating verification adequacy.** A simple spec with one button and two endpoints needs fewer interactions than a complex multi-page app. Do not penalize proportionate verification — 1 interaction for 1 interactive element is 100% coverage. Evaluate whether the agent tested what was actually built, not whether raw operation counts hit arbitrary thresholds.
 
-Then evaluate verification appropriateness:
+Then evaluate verification appropriateness **per UI task**, not by raw operation counts:
 - **UI/Integration Tasks (Browser operations use agent-browser):**
-  - 50+ browser operations = Excellent (9-10)
-  - 10-49 operations = Good (7-8)
-  - 1-9 operations = Poor (4-6)
-  - 0 operations = Critical (1-3)
+  - Every UI task has: screenshot + interaction + console check = Excellent (9-10)
+  - Every UI task has: screenshot + interaction = Good (7-8)
+  - Some UI tasks missing interaction or screenshot = Poor (4-6)
+  - No browser testing for UI tasks = Critical (1-3)
 
 - **API/Config/Database Tasks:**
   - Appropriate non-browser testing = Excellent (9-10)
@@ -66,12 +66,11 @@ First, identify task types completed in this session:
 - Note which verification method was used for each
 
 **For UI/Integration Tasks - Browser Verification Required:**
-- How many browser operations total? (Count agent-browser commands)
-  - Agent-browser: Bash commands containing "agent-browser"
-- Screenshots before/after changes?
-- User interactions tested (clicks, forms, navigation)?
-- Console error checking implemented?
-- Pattern: Navigate → Screenshot → Interact → Verify
+- Did each UI task include at least 1 screenshot saved to `yokeflow/screenshots/`?
+- Did each UI task with interactive elements include at least 1 interaction (click, fill, hover)?
+- Were console errors checked after navigation?
+- For responsive tasks: was at least one non-default viewport tested?
+- Pattern per task: Navigate → Screenshot → Interact → Verify
 
 **For API Tasks - curl/fetch Testing:**
 - Endpoints tested with appropriate HTTP methods?
@@ -85,10 +84,10 @@ First, identify task types completed in this session:
 - Query execution tested?
 
 **Quality Patterns:**
-- **Excellent (9-10):** Appropriate testing method with thorough coverage
-- **Good (7-8):** Correct testing approach with basic coverage
-- **Poor (4-6):** Wrong testing method OR minimal coverage
-- **Critical (1-3):** No testing OR completely inappropriate method
+- **Excellent (9-10):** Every task verified with appropriate method; UI tasks have screenshot + interaction + console check
+- **Good (7-8):** Every task verified; UI tasks have screenshot + interaction
+- **Poor (4-6):** Some tasks missing verification OR UI tasks lack interactions
+- **Critical (1-3):** Tasks marked complete without any verification
 
 **Red Flags:**
 - UI tasks without browser testing
@@ -173,19 +172,19 @@ For each issue, provide:
 - Integration Tasks: [List task IDs] - Required E2E browser testing
 
 **Verification Method Used:**
-- Browser/agent-browser: X calls - [Appropriate for UI tasks: Yes/No]
-- curl/fetch: Y calls - [Appropriate for API tasks: Yes/No]
-- Build verification: Z occurrences - [Appropriate for config tasks: Yes/No]
+- Browser/agent-browser: [Appropriate for UI tasks: Yes/No]
+- curl/fetch: [Appropriate for API tasks: Yes/No]
+- Build verification: [Appropriate for config tasks: Yes/No]
 
 **Quality Assessment: [EXCELLENT/GOOD/POOR/CRITICAL]**
 
-[Detailed analysis of whether right testing approach was used for each task type]
+[Analysis of whether each task used the right verification method with adequate coverage]
 
 **For UI/Integration Tasks (if any):**
-- Navigate → Screenshot → Interact workflow: [Yes/No/N/A]
-- Screenshots per UI task: X average
+- Screenshot per UI task: [Yes/No/N/A]
+- Interaction per interactive UI task: [Yes/No/N/A]
 - Console error checking: [Yes/No/N/A]
-- User interaction testing: [Yes/No/N/A]
+- Responsive viewport testing (if applicable): [Yes/No/N/A]
 
 **For Non-UI Tasks (if any):**
 - Appropriate verification method chosen: [Yes/No]

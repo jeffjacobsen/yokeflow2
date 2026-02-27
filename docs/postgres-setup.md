@@ -184,11 +184,7 @@ The PostgreSQL schema includes:
 - **project_preferences**: Per-project settings
 
 ### Production Hardening Tables (v1.4.0+)
-- **paused_sessions**: Intervention system (schema 011)
-- **intervention_actions**: Action tracking (schema 011)
-- **notification_preferences**: User notifications (schema 011)
 - **session_checkpoints**: Recovery system (schema 012)
-- **checkpoint_recoveries**: Recovery history (schema 012)
 
 ### Verification System Tables (v2.0+)
 - **task_verifications**: Task testing results (schema 016)
@@ -200,7 +196,6 @@ The PostgreSQL schema includes:
 - `project_status`: active, paused, completed, archived
 - `session_type`: initializer, coding, review
 - `session_status`: pending, running, completed, error, interrupted
-- `deployment_status`: local, sandbox, production
 - `task_status`: pending, in_progress, completed, blocked
 
 ### Key Features
@@ -219,7 +214,6 @@ The schema directory contains the base schema and migration files:
 - `schema/postgresql/schema.sql` - Complete base schema for fresh installations
 
 **Migration Files** (apply in order if upgrading from v1.0-v1.4):
-- `011_paused_sessions.sql` - Intervention system (v1.4.0)
 - `012_session_checkpoints.sql` - Checkpoint recovery (v1.4.0)
 - `013_task_verification.sql` - Task verification (v2.0)
 - `014_epic_validation.sql` - Epic validation (v2.0)

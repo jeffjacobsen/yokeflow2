@@ -183,3 +183,55 @@ class QualityIntegration:
         except Exception as e:
             # Don't let coverage analysis failures break the session
             logger.error(f"Test coverage analysis failed: {e}", exc_info=True)
+
+    async def run_completion_review(
+        self,
+        project_id: UUID,
+        db: "TaskDatabase"
+    ) -> Optional[str]:
+        """
+        Run implementation-vs-spec verification after project completion.
+
+        Scans the actual generated code, collects test results, and verifies
+        that the code implements what was requested in the specification.
+
+        Non-blocking — exceptions are logged but don't break the flow.
+
+        Args:
+            project_id: UUID of the completed project
+            db: TaskDatabase instance (already connected)
+
+        Returns:
+            Review ID if successful, None if failed
+        """
+        try:
+            from server.quality.implementation_reviewer import ImplementationReviewer
+
+            logger.info(f"Running completion review for project {project_id}...")
+
+            reviewer = ImplementationReviewer(
+                review_model=self.config.models.coding
+            )
+            review_data = await reviewer.review_implementation(project_id, db)
+
+            review_id = await db.store_completion_review(project_id, review_data)
+
+            logger.info(
+                f"Completion review stored (id={review_id}): "
+                f"score={review_data['overall_score']}, "
+                f"recommendation={review_data['recommendation']}, "
+                f"coverage={review_data['coverage_percentage']:.0f}%"
+            )
+
+            if self.event_callback:
+                await self.event_callback(project_id, "completion_review_done", {
+                    "review_id": str(review_id),
+                    "score": review_data['overall_score'],
+                    "recommendation": review_data['recommendation'],
+                })
+
+            return str(review_id)
+
+        except Exception as e:
+            logger.error(f"Completion review failed for project {project_id}: {e}", exc_info=True)
+            return None

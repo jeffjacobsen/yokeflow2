@@ -228,34 +228,6 @@ class TestErrorRecoveryWorkflow:
                 checkpoint = await checkpoint_manager.get_latest_checkpoint(session_id)
                 assert checkpoint['id'] == checkpoint_id
 
-    @pytest.mark.asyncio
-    async def test_intervention_and_pause(self):
-        """Test intervention detection and session pausing."""
-        from server.agent.intervention import InterventionManager
-        from server.agent.session_manager import PausedSessionManager
-
-        intervention_config = {
-            'enabled': True,
-            'max_retries': 3,
-            'retry_window': 60
-        }
-
-        intervention_manager = InterventionManager(intervention_config)
-        paused_manager = PausedSessionManager()
-
-        # Simulate retry loop detection
-        tool_name = "Bash"
-        tool_input = {"command": "npm install"}
-
-        # First few attempts should pass
-        for _ in range(3):
-            is_blocked, reason = await intervention_manager.check_tool_use(tool_name, tool_input)
-            assert not is_blocked
-
-        # Next attempt should trigger intervention
-        # Note: Actual implementation may differ
-
-
 class TestQualityCheckWorkflow:
     """Test quality check and review workflows."""
 

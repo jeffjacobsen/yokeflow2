@@ -90,9 +90,10 @@ async def run_schema(connection_url: str, schema_file: Path) -> None:
         # Read schema content
         schema_sql = schema_file.read_text()
 
-        # Try docker exec approach
+        # Try docker exec approach (ON_ERROR_STOP makes psql exit on first error)
         result = subprocess.run(
-            ['docker', 'exec', '-i', 'yokeflow_postgres', 'psql', '-U', 'agent', '-d', 'yokeflow'],
+            ['docker', 'exec', '-i', 'yokeflow_postgres', 'psql',
+             '-U', 'agent', '-d', 'yokeflow', '-v', 'ON_ERROR_STOP=1'],
             input=schema_sql,
             capture_output=True,
             text=True,
@@ -146,16 +147,14 @@ async def verify_schema(connection_url: str) -> None:
         """)
 
         expected_tables = [
-            # Core tables (14)
+            # Core tables (10)
             'projects', 'sessions', 'epics', 'tasks', 'task_tests',
             'session_deep_reviews', 'prompt_improvement_analyses', 'prompt_proposals',
-            'paused_sessions', 'intervention_actions', 'notification_preferences',
-            'session_checkpoints', 'epic_tests', 'epic_test_interventions',
-            # Quality system tables (5) - migrations 017-020
-            'epic_test_failures', 'epic_retest_runs', 'epic_stability_metrics',
+            'session_checkpoints', 'epic_tests',
+            # Quality system tables (2)
             'project_completion_reviews', 'completion_requirements'
         ]
-        # Note: YokeFlow v2.1.0 schema - 19 tables total (Feb 2026)
+        # Note: YokeFlow v2.5.1 schema - 12 tables total (Feb 2026)
 
         actual_tables = [row['tablename'] for row in tables]
 

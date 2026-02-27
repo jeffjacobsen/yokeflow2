@@ -40,8 +40,6 @@ export interface Test {
   success_criteria?: string;  // Clear criteria for determining test success
   verification_notes?: string;  // Notes from coding agent about verification
   last_execution?: string | null;
-  last_result?: 'passed' | 'failed' | 'skipped' | 'error' | null;
-  execution_log?: string | null;
   created_at: string;
   verified_at: string | null;
 }
@@ -137,10 +135,8 @@ export interface EpicTest {
   success_criteria?: string;  // Clear criteria for epic test success
   key_verification_points?: any;  // Array of key points to verify
   verification_notes?: string;  // Notes about how epic was verified
-  depends_on_tasks?: EntityId[];
   last_execution?: string | null;
-  last_result?: 'passed' | 'failed' | 'skipped' | 'error' | null;
-  execution_log?: string | null;
+  passes: boolean | null;
   created_at: string;
   updated_at: string;
 }
@@ -153,7 +149,6 @@ export interface NewEpicTest {
   requirements?: string;  // Test requirements instead of test_code
   success_criteria?: string;  // Clear success criteria
   key_verification_points?: any;  // Key verification points
-  depends_on_tasks?: EntityId[];
 }
 
 export type TaskStatus = 'pending' | 'in_progress' | 'completed';

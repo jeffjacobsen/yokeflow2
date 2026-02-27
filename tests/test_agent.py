@@ -331,51 +331,6 @@ class TestRunAgentSession:
         # In this test, we're mainly verifying it doesn't break
 
     @pytest.mark.asyncio
-    async def test_run_agent_session_with_intervention(self, mock_client, mock_logger, project_dir):
-        """Test agent session with intervention manager."""
-        intervention_config = {
-            "enabled": True,
-            "max_retries": 3,
-            "retry_window": 60
-        }
-
-        # Setup mock tool use that should trigger intervention
-        tool_block = Mock()
-        tool_block.name = "Bash"
-        tool_block.id = "tool-123"
-        tool_block.input = {"command": "rm -rf /"}  # Dangerous command
-        type(tool_block).__name__ = "ToolUseBlock"
-
-        assistant_msg = Mock()
-        assistant_msg.content = [tool_block]
-        type(assistant_msg).__name__ = "AssistantMessage"
-
-        # Create an async generator function
-        async def async_response_generator():
-            yield assistant_msg
-
-        # Mock receive_response to return the async generator
-        mock_client.receive_response.return_value = async_response_generator()
-
-        with patch('server.agent.agent.InterventionManager') as mock_intervention_class:
-            mock_intervention = Mock()
-            mock_intervention.check_tool_use = AsyncMock(return_value=(False, None))
-            mock_intervention.set_session_info = Mock()
-            mock_intervention_class.return_value = mock_intervention
-
-            status, response, session_summary = await run_agent_session(
-                client=mock_client,
-                message="Test prompt",
-                project_dir=project_dir,
-                logger=mock_logger,
-                verbose=False,
-                intervention_config=intervention_config
-            )
-
-            mock_intervention.set_session_info.assert_called_once()
-            mock_intervention.check_tool_use.assert_called_once_with("Bash", {"command": "rm -rf /"})
-
-    @pytest.mark.asyncio
     async def test_run_agent_session_verbose_mode(self, mock_client, mock_logger, project_dir, capsys):
         """Test agent session in verbose mode."""
         text_block = Mock()

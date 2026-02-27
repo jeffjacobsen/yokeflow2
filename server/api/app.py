@@ -88,7 +88,6 @@ from server.utils.errors import YokeFlowError, DatabaseError, ValidationError
 from server.api.validation import (
     ProjectCreateRequest,
     SessionStartRequest as SessionStartValidated,
-    ParallelCodingRequest,
     ProjectRenameRequest,
     EnvConfigRequest,
     LoginRequest as LoginRequestValidated,
@@ -1184,6 +1183,46 @@ async def get_test_coverage(project_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/projects/{project_id}/test-health")
+async def get_test_health(project_id: str):
+    """
+    Get test health aggregates for a project.
+
+    Returns slow tests and currently failing tests
+    for both task-level and epic-level tests, plus summary counts.
+    """
+    try:
+        project_uuid = UUID(project_id)
+        async with DatabaseManager() as db:
+            health = await db.get_test_health(project_uuid)
+            return health
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid project ID format")
+    except Exception as e:
+        logger.error(f"Failed to get test health for project {project_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/projects/{project_id}/all-tests")
+async def get_all_project_tests(project_id: str):
+    """
+    Get all tests for a project grouped by epic and task.
+
+    Returns a hierarchy of epics, each containing tasks with their individual tests,
+    plus epic-level integration tests. Used by the Test Coverage UI.
+    """
+    try:
+        project_uuid = UUID(project_id)
+        async with DatabaseManager() as db:
+            result = await db.get_all_project_tests(project_uuid)
+            return result
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid project ID format")
+    except Exception as e:
+        logger.error(f"Failed to get all tests for project {project_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/projects/{project_id}/epics")
 async def get_project_epics(project_id: str):
     """Get all epics for a project."""
@@ -2126,84 +2165,6 @@ async def start_coding_sessions(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/projects/{project_id}/coding/parallel")
-async def start_parallel_coding(
-    project_id: str,
-    request: ParallelCodingRequest = Body(default=ParallelCodingRequest()),
-):
-    """
-    Start parallel coding with multiple concurrent agent workers.
-
-    Each worker independently claims and implements tasks using atomic
-    database locking to prevent duplicate work.
-
-    Args:
-        project_id: UUID of the project
-        request: ParallelCodingRequest with num_workers, coding_model, max_tasks_per_worker
-
-    Returns:
-        Status response with worker count and task info
-    """
-    try:
-        project_uuid = UUID(project_id)
-
-        from server.agent.parallel_orchestrator import ParallelOrchestrator
-
-        parallel_orchestrator = ParallelOrchestrator(
-            config=config,
-            event_callback=orchestrator.event_callback,
-        )
-
-        async def run_parallel():
-            try:
-                async def progress_update(event: Dict[str, Any]):
-                    await notify_project_update(str(project_uuid), {
-                        "type": "progress",
-                        "event": event
-                    })
-
-                result = await parallel_orchestrator.run_parallel_coding(
-                    project_id=project_uuid,
-                    num_workers=request.num_workers,
-                    coding_model=request.coding_model,
-                    max_tasks_per_worker=request.max_tasks_per_worker,
-                    progress_callback=progress_update,
-                )
-
-                await notify_project_update(str(project_uuid), {
-                    "type": "parallel_coding_complete",
-                    "result": result.to_dict()
-                })
-
-            except Exception as e:
-                logger.error(f"Parallel coding failed: {e}", exc_info=True)
-                await notify_project_update(str(project_uuid), {
-                    "type": "parallel_coding_error",
-                    "error": str(e)
-                })
-
-        # Store reference for potential stop
-        task = asyncio.create_task(run_parallel())
-        running_sessions[f"{project_id}_parallel"] = task
-
-        return {
-            "status": "started",
-            "project_id": project_id,
-            "num_workers": request.num_workers,
-            "coding_model": request.coding_model or config.models.coding,
-            "max_tasks_per_worker": request.max_tasks_per_worker,
-            "message": f"Parallel coding started with {request.num_workers} workers"
-        }
-
-    except ValueError as e:
-        if "not found" in str(e):
-            raise HTTPException(status_code=404, detail=str(e))
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        logger.error(f"Failed to start parallel coding: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 @app.post("/api/projects/{project_id}/sessions/start", response_model=SessionResponse)
 async def start_session(project_id: str, session_config: SessionStart, background_tasks: BackgroundTasks):
     """
@@ -2524,120 +2485,6 @@ async def get_session_logs(
         raise HTTPException(status_code=400, detail="Invalid session ID format")
     except Exception as e:
         logger.error(f"Failed to get logs for session {session_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/api/sessions/{session_id}/pause")
-async def pause_session(session_id: str):
-    """
-    Pause an active session.
-
-    The session will be paused at a safe point and can be resumed later.
-    Requires the intervention system to be enabled.
-
-    Args:
-        session_id: UUID of the session to pause
-
-    Returns:
-        204 No Content on success
-    """
-    try:
-        session_uuid = UUID(session_id)
-
-        # Use orchestrator if it has pause_session method
-        if hasattr(orchestrator, 'pause_session'):
-            result = await orchestrator.pause_session(session_uuid)
-            return JSONResponse(status_code=204, content=None)
-
-        # Fallback: Check if session exists and is running
-        async with DatabaseManager() as db:
-            session = await db.get_session(session_uuid)
-            if not session:
-                raise HTTPException(status_code=404, detail="Session not found")
-
-            if session.get('status') != 'running':
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Session is not running (current status: {session.get('status')})"
-                )
-
-            # Pause the session using the intervention system
-            from server.agent.session_manager import SessionManager
-            session_manager = SessionManager(session_uuid, session.get('project_id'))
-
-            await session_manager.pause_session(
-                reason="User requested pause via API",
-                context={"api_request": True}
-            )
-
-            return JSONResponse(status_code=204, content=None)
-
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid session ID format")
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to pause session {session_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/api/sessions/{session_id}/resume")
-async def resume_session(session_id: str):
-    """
-    Resume a paused session.
-
-    The session will continue from where it was paused using checkpoint recovery.
-
-    Args:
-        session_id: UUID of the session to resume
-
-    Returns:
-        200 OK with session status on success
-    """
-    try:
-        session_uuid = UUID(session_id)
-
-        # Use orchestrator if it has resume_session method
-        if hasattr(orchestrator, 'resume_session'):
-            result = await orchestrator.resume_session(session_uuid)
-            return {
-                "status": "resumed",
-                "session_id": str(session_uuid),
-                "message": "Session resumed successfully"
-            }
-
-        # Fallback: Check if session exists and is paused
-        async with DatabaseManager() as db:
-            session = await db.get_session(session_uuid)
-            if not session:
-                raise HTTPException(status_code=404, detail="Session not found")
-
-            if session.get('status') != 'paused':
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Session is not paused (current status: {session.get('status')})"
-                )
-
-            # Resume the session using the intervention system
-            from server.agent.session_manager import SessionManager
-            session_manager = SessionManager(session_uuid, session.get('project_id'))
-
-            result = await session_manager.resume_session(
-                resumed_by="api_user"
-            )
-
-            return {
-                "status": "resumed",
-                "session_id": str(session_uuid),
-                "message": "Session resumed successfully"
-            }
-
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid session ID format")
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to resume session {session_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -3468,201 +3315,6 @@ async def trigger_bulk_reviews(
 
 
 # =============================================================================
-# Intervention Management Endpoints
-# =============================================================================
-
-class InterventionResponse(BaseModel):
-    """Response model for intervention information."""
-    id: str  # UUID as string
-    session_id: str
-    project_id: str
-    project_name: str
-    pause_reason: str
-    pause_type: str
-    paused_at: str
-    resolved: bool
-    resolved_at: Optional[str] = None
-    resolved_by: Optional[str] = None
-    resolution_notes: Optional[str] = None
-    blocker_info: Dict = {}
-    retry_stats: Dict = {}
-    current_task_id: Optional[str] = None
-    current_task_description: Optional[str] = None
-    can_auto_resume: bool = False
-
-
-class ResumeSessionRequest(BaseModel):
-    """Request model for resuming a paused session."""
-    resolved_by: str = "user"
-    resolution_notes: Optional[str] = None
-
-
-@app.get("/api/interventions/active", response_model=List[InterventionResponse])
-async def get_active_interventions(
-    project_id: Optional[str] = None,
-    db=Depends(get_db)
-) -> List[InterventionResponse]:
-    """Get all active (unresolved) interventions requiring human attention."""
-    try:
-        from server.agent.session_manager import PausedSessionManager
-
-        manager = PausedSessionManager()
-        interventions = await manager.get_active_pauses(project_id)
-
-        return [
-            InterventionResponse(
-                id=str(i["id"]),
-                session_id=str(i["session_id"]),
-                project_id=str(i["project_id"]),
-                project_name=i["project_name"],
-                pause_reason=i["pause_reason"],
-                pause_type=i["pause_type"],
-                paused_at=i["paused_at"].isoformat() if hasattr(i["paused_at"], "isoformat") else str(i["paused_at"]),
-                resolved=i["resolved"],
-                resolved_at=i["resolved_at"].isoformat() if i.get("resolved_at") and hasattr(i["resolved_at"], "isoformat") else None,
-                resolved_by=i.get("resolved_by"),
-                resolution_notes=i.get("resolution_notes"),
-                blocker_info=i.get("blocker_info", {}),
-                retry_stats=i.get("retry_stats", {}),
-                current_task_id=str(i["current_task_id"]) if i.get("current_task_id") else None,
-                current_task_description=i.get("current_task_description"),
-                can_auto_resume=i.get("can_auto_resume", False)
-            )
-            for i in interventions
-        ]
-    except Exception as e:
-        logger.error(f"Error getting active interventions: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/api/interventions/{intervention_id}/resume", response_model=Dict)
-async def resume_paused_session(
-    intervention_id: str,
-    request: ResumeSessionRequest,
-    background_tasks: BackgroundTasks,
-    db=Depends(get_db)
-) -> Dict:
-    """Resume a paused session after resolving the issue."""
-    try:
-        from server.agent.session_manager import PausedSessionManager
-
-        manager = PausedSessionManager()
-        resume_context = await manager.resume_session(
-            intervention_id,
-            request.resolved_by,
-            request.resolution_notes
-        )
-
-        # Schedule the session to be resumed in the background
-        async def resume_in_background():
-            try:
-                orchestrator = AgentOrchestrator()
-                # Start a new coding session with the resume context
-                session_info = await orchestrator.start_session(
-                    project_id=resume_context["project_id"],
-                    session_type=SessionType.CODING,
-                    resume_context=resume_context
-                )
-                logger.info(f"Resumed session {session_info.session_id} for project {resume_context['project_id']}")
-            except Exception as e:
-                logger.error(f"Failed to resume session: {e}")
-
-        background_tasks.add_task(resume_in_background)
-
-        return {
-            "status": "resuming",
-            "message": f"Session resuming for project {resume_context['project_name']}",
-            "session_id": resume_context["session_id"],
-            "project_id": resume_context["project_id"]
-        }
-
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        logger.error(f"Error resuming session: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/api/interventions/history", response_model=List[InterventionResponse])
-async def get_intervention_history(
-    project_id: Optional[str] = None,
-    limit: int = 50,
-    db=Depends(get_db)
-) -> List[InterventionResponse]:
-    """Get history of resolved interventions."""
-    try:
-        from server.agent.session_manager import PausedSessionManager
-
-        manager = PausedSessionManager()
-        interventions = await manager.get_intervention_history(project_id, limit)
-
-        return [
-            InterventionResponse(
-                id=str(i["id"]),
-                session_id=str(i["session_id"]),
-                project_id=str(i["project_id"]),
-                project_name=i["project_name"],
-                pause_reason=i["pause_reason"],
-                pause_type=i["pause_type"],
-                paused_at=i["paused_at"].isoformat() if hasattr(i["paused_at"], "isoformat") else str(i["paused_at"]),
-                resolved=i["resolved"],
-                resolved_at=i["resolved_at"].isoformat() if i.get("resolved_at") and hasattr(i["resolved_at"], "isoformat") else None,
-                resolved_by=i.get("resolved_by"),
-                resolution_notes=i.get("resolution_notes"),
-                blocker_info=i.get("blocker_info", {}),
-                retry_stats=i.get("retry_stats", {}),
-                current_task_id=str(i["current_task_id"]) if i.get("current_task_id") else None,
-                current_task_description=i.get("current_task_description"),
-                can_auto_resume=i.get("can_auto_resume", False)
-            )
-            for i in interventions
-        ]
-    except Exception as e:
-        logger.error(f"Error getting intervention history: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/api/projects/{project_id}/notifications/preferences")
-async def get_notification_preferences(
-    project_id: str,
-    db=Depends(get_db)
-) -> Dict:
-    """Get notification preferences for a project."""
-    try:
-        from server.utils.notifications import NotificationPreferencesManager
-
-        project_uuid = UUID(project_id)
-        prefs = await NotificationPreferencesManager.get_preferences(project_id)
-        return prefs
-    except Exception as e:
-        logger.error(f"Error getting notification preferences: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/api/projects/{project_id}/notifications/preferences")
-async def update_notification_preferences(
-    project_id: str,
-    preferences: Dict = Body(...),
-    db=Depends(get_db)
-) -> Dict:
-    """Update notification preferences for a project."""
-    try:
-        from server.utils.notifications import NotificationPreferencesManager
-
-        project_uuid = UUID(project_id)
-        success = await NotificationPreferencesManager.update_preferences(project_id, preferences)
-
-        if success:
-            return {"status": "success", "message": "Preferences updated"}
-        else:
-            raise HTTPException(status_code=500, detail="Failed to update preferences")
-
-    except Exception as e:
-        logger.error(f"Error updating notification preferences: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# =============================================================================
 # Completion Review Endpoints (Phase 7)
 # =============================================================================
 
@@ -3708,13 +3360,45 @@ async def trigger_completion_review(
 
     This verifies that the actual generated code implements what was
     requested in the specification. Only available for completed projects.
-
-    TODO: Implement ImplementationReviewer (see COMPLETION_REVIEW.md)
     """
-    raise HTTPException(
-        status_code=501,
-        detail="Completion review not yet implemented. See COMPLETION_REVIEW.md for the implementation plan."
-    )
+    try:
+        pid = UUID(project_id)
+
+        # Verify project exists and is completed
+        project = await db.get_project(pid)
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+
+        if not project.get('completed_at'):
+            raise HTTPException(
+                status_code=400,
+                detail="Completion review requires a finished project. Project is not yet complete."
+            )
+
+        from server.quality.implementation_reviewer import ImplementationReviewer
+
+        reviewer = ImplementationReviewer()
+        review_data = await reviewer.review_implementation(pid, db)
+
+        review_id = await db.store_completion_review(pid, review_data)
+
+        return {
+            "review_id": str(review_id),
+            "overall_score": review_data['overall_score'],
+            "recommendation": review_data['recommendation'],
+            "coverage_percentage": review_data['coverage_percentage'],
+            "requirements_total": review_data['requirements_total'],
+            "requirements_met": review_data['requirements_met'],
+            "requirements_missing": review_data['requirements_missing'],
+        }
+
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid project ID")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error running completion review: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/completion-reviews")

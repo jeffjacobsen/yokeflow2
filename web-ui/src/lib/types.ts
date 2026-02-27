@@ -48,8 +48,7 @@ export interface Test {
   success_criteria?: string;
   verification_notes?: string;
   last_execution?: string | null;
-  last_result?: string | null; // passed, failed, skipped, error
-  execution_log?: string | null;
+  execution_time_ms?: number | null;
 }
 
 export interface EpicTest {
@@ -62,10 +61,9 @@ export interface EpicTest {
   requirements?: string;
   success_criteria?: string;
   key_verification_points?: any; // JSONB
-  depends_on_tasks?: string[]; // Array of task UUIDs
+  passes: boolean | null;
   last_execution?: string | null;
-  last_result?: string | null; // passed, failed, skipped, error
-  execution_log?: string | null;
+  execution_time_ms?: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -556,5 +554,57 @@ export interface Screenshot {
   task_id: number | null;
   epic_id: number | null;
   url: string;
+}
+
+/**
+ * Test health response - aggregated slow/flaky/failed test data
+ */
+export interface TestHealthSummary {
+  total_tests: number;
+  slow_count: number;
+  flaky_count: number;
+  failed_count: number;
+  healthy_count: number;
+}
+
+export interface TestWithContext extends Test {
+  task_name?: string;
+  epic_name?: string;
+}
+
+export interface EpicTestWithContext extends EpicTest {
+  epic_name?: string;
+}
+
+export interface TestHealthResponse {
+  slow_task_tests: TestWithContext[];
+  flaky_task_tests: TestWithContext[];
+  failed_task_tests: TestWithContext[];
+  slow_epic_tests: EpicTestWithContext[];
+  flaky_epic_tests: EpicTestWithContext[];
+  failed_epic_tests: EpicTestWithContext[];
+  summary: TestHealthSummary;
+}
+
+// All tests grouped by epic → task hierarchy
+export interface AllTestsResponse {
+  epics: AllTestsEpic[];
+}
+
+export interface AllTestsEpic {
+  id: number;
+  name: string;
+  description?: string;
+  status: string;
+  epic_tests: EpicTest[];
+  tasks: AllTestsTask[];
+}
+
+export interface AllTestsTask {
+  id: number;
+  name: string;
+  description?: string;
+  done: boolean;
+  tests: Test[];
 }
 

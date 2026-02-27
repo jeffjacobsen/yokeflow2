@@ -175,11 +175,6 @@ async function getEpicTestRequirements(epicId: string): Promise<{hasRequirements
         requirements.push('');
       }
 
-      if (test.depends_on_tasks && test.depends_on_tasks.length > 0) {
-        requirements.push(`**Depends on tasks:** ${test.depends_on_tasks.join(', ')}`);
-        requirements.push('');
-      }
-
       requirements.push('---');
       requirements.push('');
     }
@@ -413,20 +408,6 @@ const tools: Tool[] = [
     }
   },
   {
-    name: 'claim_next_task',
-    description: 'Atomically claim the next available task for a worker. Uses row-level locking to prevent duplicate claims in parallel execution. Returns the claimed task or null if no tasks available.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        worker_id: {
-          type: 'string',
-          description: 'Unique identifier for the worker claiming the task (e.g. "worker-1")'
-        }
-      },
-      required: ['worker_id']
-    }
-  },
-  {
     name: 'update_task_test_result',
     description: 'Mark a task test as passing or failing',
     inputSchema: {
@@ -443,10 +424,6 @@ const tools: Tool[] = [
         verification_notes: {
           type: 'string',
           description: 'Optional notes about how the test was verified (what was checked and results)'
-        },
-        error_message: {
-          type: 'string',
-          description: 'Optional brief error message if test failed (for UI display)'
         },
         execution_time_ms: {
           type: 'number',
@@ -466,29 +443,20 @@ const tools: Tool[] = [
           ...idFieldSchema,
           description: 'The ID of the epic test'
         },
-        result: {
-          type: 'string',
-          enum: ['passed', 'failed'],
-          description: 'The test result (passed or failed)'
-        },
-        execution_log: {
-          type: 'string',
-          description: 'Optional execution log for the test'
+        passes: {
+          type: 'boolean',
+          description: 'Whether the epic test passes'
         },
         verification_notes: {
           type: 'string',
           description: 'Optional notes about how the epic was verified (what was checked and results)'
-        },
-        error_message: {
-          type: 'string',
-          description: 'Optional brief error message if test failed (for UI display)'
         },
         execution_time_ms: {
           type: 'number',
           description: 'Optional execution time in milliseconds for performance tracking'
         }
       },
-      required: ['test_id', 'result']
+      required: ['test_id', 'passes']
     }
   },
   {
@@ -513,11 +481,6 @@ const tools: Tool[] = [
           type: 'string',
           enum: ['integration', 'e2e', 'workflow'],
           description: 'Type of epic test (default: integration)'
-        },
-        depends_on_tasks: {
-          type: 'array',
-          items: { ...idFieldSchema },
-          description: 'Task IDs that must complete before this test'
         },
         requirements: {
           type: 'string',
@@ -574,84 +537,6 @@ const tools: Tool[] = [
         }
       },
       required: ['epic_id']
-    }
-  },
-  {
-    name: 'trigger_epic_retest',
-    description: 'Trigger epic re-testing after epic completion. Re-tests prior epics to catch regressions. Called automatically after every 2nd epic completion (configurable).',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        triggered_by_epic_id: {
-          ...idFieldSchema,
-          description: 'The epic that just completed (triggers re-testing)'
-        },
-        session_id: {
-          type: 'string',
-          description: 'Current session ID'
-        }
-      },
-      required: ['triggered_by_epic_id']
-    }
-  },
-  {
-    name: 'record_epic_retest_result',
-    description: 'Record the result of an epic re-test. Call this after re-running epic tests to track stability and detect regressions.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        epic_id: {
-          ...idFieldSchema,
-          description: 'The epic that was re-tested'
-        },
-        triggered_by_epic_id: {
-          ...idFieldSchema,
-          description: 'The epic that triggered this re-test'
-        },
-        session_id: {
-          type: 'string',
-          description: 'Current session ID'
-        },
-        test_result: {
-          type: 'string',
-          enum: ['passed', 'failed', 'skipped', 'error'],
-          description: 'Overall result of the re-test'
-        },
-        execution_time_ms: {
-          type: 'number',
-          description: 'Total execution time in milliseconds'
-        },
-        error_details: {
-          type: 'string',
-          description: 'Error message if test failed'
-        },
-        tests_run: {
-          type: 'number',
-          description: 'Number of tests executed'
-        },
-        tests_passed: {
-          type: 'number',
-          description: 'Number of tests that passed'
-        },
-        tests_failed: {
-          type: 'number',
-          description: 'Number of tests that failed'
-        }
-      },
-      required: ['epic_id', 'test_result']
-    }
-  },
-  {
-    name: 'get_epic_stability_metrics',
-    description: 'Get stability metrics and re-test history for epics. Shows stability scores, regression counts, and re-test patterns.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        epic_id: {
-          ...idFieldSchema,
-          description: 'Specific epic ID (optional - omit for all epics)'
-        }
-      }
     }
   },
   {
@@ -929,33 +814,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           ]
         };
 
-      case 'claim_next_task':
-        const claimedTask = await db.claimNextTask(args?.worker_id as string);
-        if (!claimedTask) {
-          return {
-            content: [
-              {
-                type: 'text',
-                text: 'No tasks available to claim'
-              }
-            ]
-          };
-        }
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(claimedTask, null, 2)
-            }
-          ]
-        };
-
       case 'update_task_test_result':
-        const updatedTest = await db.updateTestResult(
+        const updatedTest = await db.updateTaskTestResult(
           args?.test_id as any,
           args?.passes as boolean,
           args?.verification_notes as string | undefined,
-          args?.error_message as string | undefined,
           args?.execution_time_ms as number | undefined
         );
         if (!updatedTest) {
@@ -973,17 +836,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'update_epic_test_result':
         await db.updateEpicTestResult(
           args?.test_id as any,
-          args?.result as 'passed' | 'failed',
-          args?.execution_log as string | undefined,
+          args?.passes as boolean,
           args?.verification_notes as string | undefined,
-          args?.error_message as string | undefined,
           args?.execution_time_ms as number | undefined
         );
         return {
           content: [
             {
               type: 'text',
-              text: `Epic test ${args?.test_id} marked as ${args?.result}${args?.execution_time_ms ? ` (${args.execution_time_ms}ms)` : ''}`
+              text: `Epic test ${args?.test_id} marked as ${args?.passes ? 'passing' : 'failing'}${args?.execution_time_ms ? ` (${args.execution_time_ms}ms)` : ''}`
             }
           ]
         };
@@ -996,8 +857,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           test_type: args?.test_type as any || 'integration',
           requirements: args?.requirements as string | undefined,
           success_criteria: args?.success_criteria as string | undefined,
-          key_verification_points: args?.key_verification_points as any | undefined,
-          depends_on_tasks: args?.depends_on_tasks as any[] | undefined
+          key_verification_points: args?.key_verification_points as any | undefined
         };
         const createdEpicTest = await db.createEpicTest(newEpicTest);
         return {
@@ -1037,174 +897,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           ],
           isError: !epicTestRequirements.hasRequirements
         };
-
-      case 'trigger_epic_retest':
-        const triggeredByEpicId = args?.triggered_by_epic_id as any;
-        const sessionIdForRetest = args?.session_id as string | undefined;
-
-        try {
-          const retestResult = await db.triggerEpicRetest(triggeredByEpicId, sessionIdForRetest);
-
-          return {
-            content: [
-              {
-                type: 'text',
-                text: retestResult.message
-              }
-            ]
-          };
-        } catch (error: any) {
-          console.error(`[trigger_epic_retest] Error: ${error.message}`);
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `Failed to trigger epic re-testing: ${error.message}`
-              }
-            ],
-            isError: true
-          };
-        }
-
-      case 'record_epic_retest_result':
-        const epicIdForRetest = args?.epic_id as any;
-        const triggeredByForResult = args?.triggered_by_epic_id as any;
-        const sessionIdForResult = args?.session_id as string | undefined;
-        const testResult = args?.test_result as string;
-        const executionTimeMs = args?.execution_time_ms as number | undefined;
-        const errorDetails = args?.error_details as string | undefined;
-        const testsRun = args?.tests_run as number | undefined;
-        const testsPassed = args?.tests_passed as number | undefined;
-        const testsFailed = args?.tests_failed as number | undefined;
-
-        try {
-          const retestId = await db.recordEpicRetestResult({
-            epicId: epicIdForRetest,
-            triggeredByEpicId: triggeredByForResult,
-            sessionId: sessionIdForResult,
-            testResult,
-            executionTimeMs,
-            errorDetails,
-            testsRun,
-            testsPassed,
-            testsFailed
-          });
-
-          // Check if this was a regression
-          const metrics = await db.getEpicStabilityMetrics(epicIdForRetest);
-          const isRegression = metrics && metrics.length > 0 &&
-            metrics[0].last_retest_result === 'failed' &&
-            testResult === 'failed';
-
-          let message = `✅ Epic re-test result recorded (ID: ${retestId})\n\n`;
-          message += `Epic: ${epicIdForRetest}\n`;
-          message += `Result: ${testResult}\n`;
-
-          if (testsRun !== undefined) {
-            message += `Tests: ${testsPassed || 0}/${testsRun} passed`;
-            if (testsFailed) message += `, ${testsFailed} failed`;
-            message += `\n`;
-          }
-
-          if (executionTimeMs) {
-            message += `Execution time: ${(executionTimeMs / 1000).toFixed(2)}s\n`;
-          }
-
-          if (isRegression) {
-            message += `\n⚠️  REGRESSION DETECTED: This epic was passing before and is now failing!\n`;
-          }
-
-          if (errorDetails) {
-            message += `\nError: ${errorDetails}\n`;
-          }
-
-          return {
-            content: [
-              {
-                type: 'text',
-                text: message
-              }
-            ],
-            isError: testResult === 'failed' || testResult === 'error'
-          };
-        } catch (error: any) {
-          console.error(`[record_epic_retest_result] Error: ${error.message}`);
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `Failed to record epic re-test result: ${error.message}`
-              }
-            ],
-            isError: true
-          };
-        }
-
-      case 'get_epic_stability_metrics':
-        const epicIdForMetrics = args?.epic_id as any | undefined;
-
-        try {
-          const metrics = await db.getEpicStabilityMetrics(epicIdForMetrics);
-
-          if (!metrics || metrics.length === 0) {
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: epicIdForMetrics
-                    ? `No stability metrics found for epic ${epicIdForMetrics}`
-                    : 'No stability metrics found for any epics yet'
-                }
-              ]
-            };
-          }
-
-          let message = '📊 Epic Stability Metrics\n\n';
-
-          for (const metric of metrics) {
-            message += `**Epic ${metric.epic_id}: ${metric.epic_name}**\n`;
-            message += `Status: ${metric.epic_status} | Priority: ${metric.priority}\n`;
-            message += `Stability Score: ${metric.stability_score?.toFixed(2) || 'N/A'} (${metric.stability_rating || 'unrated'})\n`;
-            message += `Re-tests: ${metric.total_retests} total, ${metric.passed_retests} passed, ${metric.failed_retests} failed\n`;
-
-            if (metric.regression_count > 0) {
-              message += `⚠️  Regressions: ${metric.regression_count}\n`;
-            }
-
-            if (metric.last_retest_at) {
-              const daysAgo = metric.days_since_retest;
-              message += `Last re-tested: ${daysAgo} day(s) ago - ${metric.last_retest_result}\n`;
-            } else {
-              message += `Last re-tested: Never\n`;
-            }
-
-            if (metric.avg_execution_time_ms) {
-              message += `Avg execution time: ${(metric.avg_execution_time_ms / 1000).toFixed(2)}s\n`;
-            }
-
-            message += '\n';
-          }
-
-          return {
-            content: [
-              {
-                type: 'text',
-                text: message
-              }
-            ]
-          };
-        } catch (error: any) {
-          console.error(`[get_epic_stability_metrics] Error: ${error.message}`);
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `Failed to get epic stability metrics: ${error.message}`
-              }
-            ],
-            isError: true
-          };
-        }
 
       case 'expand_epic':
         const expandedTasks = await db.expandEpic(

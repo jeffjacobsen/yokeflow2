@@ -81,30 +81,7 @@ These tests run in < 30 seconds and form the primary development test suite:
 | `test_quality_integration.py` | 10 | quality/* | ~60% | Quality system integration |
 | `test_sandbox_manager.py` | 17 | sandbox/manager | ~65% | Docker sandbox (mocked) |
 | `test_security.py` | 2 | utils/security | ~37% | Security validation (64 assertions) |
-| `test_quality_detector.py` | 27 | agent/quality_detector | ~85% | Quality pattern detection (NEW) |
-
-**Subtotal:** 99 tests, 100% passing
-
-### Quality Detector Tests (NEW - Phase 2 Implementation)
-
-The `test_quality_detector.py` file contains 27 comprehensive tests covering the new quality pattern detection system:
-
-**Test Categories:**
-- **Task Type Inference** (6 tests): Tests accurate detection of UI, API, Database, Config, and Integration task types from descriptions
-- **Tool Misuse Detection** (4 tests): Tests detection of bash misuse for file operations, incorrect Docker mode usage, and systematic tool misuse
-- **Verification Tracking** (2 tests): Tests tracking of verification attempts and detection of verification mismatches
-- **Task Completion Quality** (4 tests): Tests blocking of UI tasks without browser verification, verification abandonment detection
-- **Quality Scoring** (4 tests): Tests quality score calculation, high/medium issue impact, and score floor
-- **Intervention Triggers** (3 tests): Tests when quality interventions should trigger based on issues and scores
-- **Error Recovery Tracking** (2 tests): Tests tracking of error recovery patterns and detection of poor recovery rates
-- **Integration Tests** (2 tests): Tests integration with intervention manager
-
-**Key Features Tested:**
-- UI tasks MUST have browser verification before completion
-- Tool misuse detected after configurable threshold (default 10 uses)
-- Task type inference with 100% accuracy in test scenarios
-- Quality score system (0-10 scale) with intervention at <3
-- Verification abandonment blocked after 5 failed attempts
+**Subtotal:** 72 tests, 100% passing
 
 ### Component Test Files (Additional Coverage)
 
@@ -113,18 +90,14 @@ The `test_quality_detector.py` file contains 27 comprehensive tests covering the
 | `test_checkpoint.py` | 19 | agent/checkpoint | 45% | Session checkpointing and recovery |
 | `test_database_retry.py` | 30 | database/retry | 82% | Database retry logic with exponential backoff |
 | `test_errors.py` | 36 | utils/errors | 99% | Error hierarchy and categorization |
-| `test_intervention.py` | ~10 | agent/intervention | 22% | Blocker detection and retry tracking |
-| `test_intervention_system.py` | ~10 | agent/intervention | - | Intervention system integration |
-| `test_session_manager.py` | 15 | agent/session_manager | 56% | Session pause/resume functionality |
 | `test_structured_logging.py` | 19 | utils/logging | 93% | Structured logging with JSON/dev formatters |
 
-**Subtotal:** ~140 tests, all passing
+**Subtotal:** ~105 tests, all passing
 
 ### Integration Test Files (Slow - Run Separately)
 
 | Test File | Tests | Focus | Runtime | Prerequisites |
 |-----------|-------|-------|---------|---------------|
-| `test_sandbox_integration.py` | 6 | Real Docker containers | 5-10 min | Docker required |
 | `test_integration_*.py` | Various | Database, workflows | 1-5 min | PostgreSQL |
 | `test_api_rest.py` | 29 skipped | REST API endpoints | N/A | Implementation pending |
 
@@ -149,11 +122,9 @@ These tests are written and ready - they just need the corresponding API endpoin
 | `database/retry.py` | 82% | ✅ Good |
 | `sandbox/manager.py` | ~65% | ✅ Good |
 | `quality/*` | ~60% | ✅ Acceptable |
-| `agent/session_manager.py` | 56% | ⚠️ Needs improvement |
 | `agent/checkpoint.py` | 45% | ⚠️ Needs improvement |
 | `agent/orchestrator.py` | ~40% | ⚠️ Needs improvement |
 | `utils/security.py` | ~37% | ⚠️ Needs improvement |
-| `agent/intervention.py` | ~30% | ⚠️ Improved with quality integration |
 
 **Overall Coverage:** ~70% (target achieved ✅)
 
@@ -245,13 +216,9 @@ pytest --cov=server.database --cov=server.agent
 - `utils/logging.py`: 93% - Structured logging
 - `database/retry.py`: 82% - Retry logic
 - `utils/config.py`: 58% - Configuration management
-- `agent/session_manager.py`: 56% - Session management
-
 #### Moderately Tested (20-50%)
 - `agent/checkpoint.py`: 45% - Checkpointing system
 - `utils/security.py`: 37% - Security validation
-- `utils/notifications.py`: 35% - Notification system
-- `agent/intervention.py`: 22% - Intervention logic
 
 #### Needs Testing (<20%)
 - `database/operations.py`: 18% - Core database operations
@@ -360,16 +327,9 @@ psql $DATABASE_URL -c "SELECT * FROM v_next_task;"
 4. Resume from checkpoint
 5. Verify state restored correctly
 
-#### Intervention System
-1. Start a session with a blocker
-2. Verify session pauses: `SELECT * FROM paused_sessions;`
-3. Resolve the blocker
-4. Resume session
-5. Check intervention history: `SELECT * FROM v_intervention_history;`
-
 #### Quality Gates
 1. Complete a task
-2. Check quality metrics: `SELECT * FROM session_quality_checks;`
+2. Check quality metrics in `sessions.metrics` JSONB column
 3. Verify gate enforcement
 
 ## Contributing

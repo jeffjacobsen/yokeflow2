@@ -1,54 +1,67 @@
+/**
+ * ScreenshotsGallery - Screenshots grouped by Epic → Task in Roadmap-style layout
+ *
+ * Shows:
+ * - Total screenshot count with refresh
+ * - Screenshots organized by epic → task hierarchy (matching Roadmap/TestCoverage layout)
+ * - Epic-level screenshots shown first in each epic section
+ * - Task screenshots shown under numbered task headings
+ * - Lightbox modal for full-size viewing
+ */
+
 'use client';
 
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
-import type { Screenshot } from '@/lib/types';
-import { Download, X, Image as ImageIcon, ChevronDown, ChevronRight } from 'lucide-react';
+import type { Screenshot, AllTestsResponse } from '@/lib/types';
+import { Download, X, Image as ImageIcon, Camera } from 'lucide-react';
 
 interface ScreenshotsGalleryProps {
   projectId: string;
 }
 
+// Organized epic with its screenshots
+interface EpicScreenshots {
+  epic: { id: number; name: string; description?: string };
+  epicScreenshots: Screenshot[]; // epic-level screenshots
+  tasks: {
+    task: { id: number; name: string };
+    screenshots: Screenshot[];
+  }[];
+}
+
 export function ScreenshotsGallery({ projectId }: ScreenshotsGalleryProps) {
   const [screenshots, setScreenshots] = useState<Screenshot[]>([]);
+  const [hierarchy, setHierarchy] = useState<AllTestsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedImage, setSelectedImage] = useState<Screenshot | null>(null);
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    loadScreenshots();
+    loadData();
   }, [projectId]);
 
-  async function loadScreenshots() {
+  async function loadData() {
     try {
       setLoading(true);
-      const data = await api.listScreenshots(projectId);
+
+      const [screenshotData, hierarchyData] = await Promise.all([
+        api.listScreenshots(projectId),
+        api.getAllTests(projectId).catch(() => null),
+      ]);
 
       // Convert relative URLs to absolute URLs
-      const screenshotsWithFullUrls = data.map(s => ({
+      const screenshotsWithFullUrls = screenshotData.map(s => ({
         ...s,
-        url: api.getScreenshotUrl(projectId, s.filename)
+        url: api.getScreenshotUrl(projectId, s.filename),
       }));
 
       setScreenshots(screenshotsWithFullUrls);
-
-      // Start with all groups collapsed
-      setExpandedGroups(new Set());
+      setHierarchy(hierarchyData);
     } catch (error) {
       console.error('Failed to load screenshots:', error);
     } finally {
       setLoading(false);
     }
-  }
-
-  function toggleGroup(group: string) {
-    const newExpanded = new Set(expandedGroups);
-    if (newExpanded.has(group)) {
-      newExpanded.delete(group);
-    } else {
-      newExpanded.add(group);
-    }
-    setExpandedGroups(newExpanded);
   }
 
   function formatFileSize(bytes: number): string {
@@ -57,24 +70,13 @@ export function ScreenshotsGallery({ projectId }: ScreenshotsGalleryProps) {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
 
-  // Parse description from filename
-  // Format: task_10_default_user_seed.png → "Default User Seed"
-  // Format: epic_5_checkout_workflow.png → "Checkout Workflow"
   function parseScreenshotDescription(filename: string): string | null {
-    // Match: task_[number]_[description].png or epic_[number]_[description].png
     const match = filename.match(/^(?:task|epic)_\d+_(.+)\.png$/);
-
-    if (!match) {
-      return null;
-    }
-
-    // Extract description and convert underscores to spaces, capitalize words
-    const description = match[1]
+    if (!match) return null;
+    return match[1]
       .split('_')
       .map(word => word.charAt(0).toUpperCase() + word.slice(1))
       .join(' ');
-
-    return description;
   }
 
   function downloadScreenshot(screenshot: Screenshot) {
@@ -84,166 +86,154 @@ export function ScreenshotsGallery({ projectId }: ScreenshotsGalleryProps) {
     link.click();
   }
 
-  // Group screenshots by task ID or epic ID
-  const groupedScreenshots = screenshots.reduce((acc, screenshot) => {
-    let key: string;
-    if (screenshot.task_id) {
-      key = `task_${screenshot.task_id}`;
-    } else if (screenshot.epic_id) {
-      key = `epic_${screenshot.epic_id}`;
-    } else {
-      key = 'other';
+  // Build the epic → task → screenshots hierarchy
+  function buildHierarchy(): { epics: EpicScreenshots[]; other: Screenshot[] } {
+    if (!hierarchy) {
+      // No hierarchy data — put everything in "other"
+      return { epics: [], other: screenshots };
     }
-    if (!acc[key]) acc[key] = [];
-    acc[key].push(screenshot);
-    return acc;
-  }, {} as Record<string, Screenshot[]>);
 
-  // Sort groups: tasks descending, then epics descending, then 'other'
-  const sortedGroups = Object.keys(groupedScreenshots).sort((a, b) => {
-    if (a === 'other') return 1;
-    if (b === 'other') return -1;
-    const aIsTask = a.startsWith('task_');
-    const bIsTask = b.startsWith('task_');
-    // Tasks before epics
-    if (aIsTask && !bIsTask) return -1;
-    if (!aIsTask && bIsTask) return 1;
-    // Within same type, sort by ID descending (newest first)
-    const aId = parseInt(a.split('_')[1]);
-    const bId = parseInt(b.split('_')[1]);
-    return bId - aId;
-  });
+    // Build lookup: task_id → epic_id
+    const taskToEpic = new Map<number, number>();
+    for (const epic of hierarchy.epics) {
+      for (const task of epic.tasks) {
+        taskToEpic.set(task.id, epic.id);
+      }
+    }
 
-  // Sort screenshots within each group by modified_at (newest first)
-  Object.keys(groupedScreenshots).forEach(key => {
-    groupedScreenshots[key].sort((a, b) =>
-      new Date(b.modified_at).getTime() - new Date(a.modified_at).getTime()
-    );
-  });
+    // Group screenshots by epic and task
+    const epicScreenshotMap = new Map<number, Screenshot[]>();
+    const taskScreenshotMap = new Map<number, Screenshot[]>();
+    const other: Screenshot[] = [];
+
+    for (const s of screenshots) {
+      if (s.task_id) {
+        const epicId = taskToEpic.get(s.task_id);
+        if (epicId !== undefined) {
+          if (!taskScreenshotMap.has(s.task_id)) taskScreenshotMap.set(s.task_id, []);
+          taskScreenshotMap.get(s.task_id)!.push(s);
+        } else {
+          other.push(s);
+        }
+      } else if (s.epic_id) {
+        if (!epicScreenshotMap.has(s.epic_id)) epicScreenshotMap.set(s.epic_id, []);
+        epicScreenshotMap.get(s.epic_id)!.push(s);
+      } else {
+        other.push(s);
+      }
+    }
+
+    // Build ordered epic sections, skipping epics with no screenshots at all
+    const epics: EpicScreenshots[] = [];
+    for (const epic of hierarchy.epics) {
+      const epicShots = epicScreenshotMap.get(epic.id) || [];
+      const tasks: EpicScreenshots['tasks'] = [];
+
+      for (const task of epic.tasks) {
+        const taskShots = taskScreenshotMap.get(task.id) || [];
+        if (taskShots.length > 0) {
+          tasks.push({
+            task: { id: task.id, name: task.name },
+            screenshots: taskShots,
+          });
+        }
+      }
+
+      if (epicShots.length > 0 || tasks.length > 0) {
+        epics.push({
+          epic: { id: epic.id, name: epic.name, description: epic.description },
+          epicScreenshots: epicShots,
+          tasks,
+        });
+      }
+    }
+
+    return { epics, other };
+  }
 
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-        <span className="ml-3 text-gray-600">Loading screenshots...</span>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-3"></div>
+          <p className="text-gray-400 text-sm">Loading screenshots...</p>
+        </div>
       </div>
     );
   }
 
   if (screenshots.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-gray-700 dark:text-gray-500">
-        <ImageIcon className="h-16 w-16 mb-4 opacity-50" />
-        <p className="text-lg font-medium">No screenshots yet</p>
-        <p className="text-sm mt-2">Screenshots will appear here as sessions run</p>
+      <div className="text-center py-12">
+        <ImageIcon className="h-16 w-16 mx-auto mb-4 text-gray-600 opacity-50" />
+        <p className="text-gray-400 text-lg font-medium">No screenshots yet</p>
+        <p className="text-sm text-gray-500 mt-2">Screenshots will appear here as sessions run</p>
       </div>
     );
   }
 
+  const { epics, other } = buildHierarchy();
+
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold">
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-semibold text-gray-100 flex items-center gap-2">
+          <Camera className="w-5 h-5 text-blue-400" />
           Screenshots ({screenshots.length})
-        </h2>
+        </h3>
         <button
-          onClick={loadScreenshots}
-          className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+          onClick={loadData}
+          className="text-sm text-blue-400 hover:text-blue-300 font-medium"
         >
           Refresh
         </button>
       </div>
 
-      {sortedGroups.map((group) => {
-        const groupScreenshots = groupedScreenshots[group];
-        const isExpanded = expandedGroups.has(group);
+      {/* Roadmap-style epic → task → screenshots listing */}
+      <div className="space-y-10">
+        {epics.map((epicSection, epicIndex) => (
+          <ScreenshotEpicSection
+            key={epicSection.epic.id}
+            epicSection={epicSection}
+            epicNumber={epicIndex + 1}
+            isLast={epicIndex === epics.length - 1 && other.length === 0}
+            parseDescription={parseScreenshotDescription}
+            formatSize={formatFileSize}
+            onImageClick={setSelectedImage}
+            onDownload={downloadScreenshot}
+          />
+        ))}
 
-        // Get description from first screenshot in group
-        const screenshotDescription = group !== 'other' && groupScreenshots[0]
-          ? parseScreenshotDescription(groupScreenshots[0].filename)
-          : null;
-
-        const groupTitle = group === 'other'
-          ? 'Other Screenshots'
-          : group.startsWith('task_')
-            ? `Task #${group.split('_')[1]}`
-            : `Epic #${group.split('_')[1]}`;
-
-        return (
-          <div key={group} className="border rounded-lg overflow-hidden">
-            <button
-              onClick={() => toggleGroup(group)}
-              className="w-full flex items-center p-4 bg-gray-50 hover:bg-gray-100 transition-colors"
-            >
-              <div className="flex items-center gap-2">
-                {isExpanded ? (
-                  <ChevronDown className="h-5 w-5 text-gray-500 flex-shrink-0" />
-                ) : (
-                  <ChevronRight className="h-5 w-5 text-gray-500 flex-shrink-0" />
-                )}
-                <h3 className="text-base font-medium">{groupTitle}</h3>
-                {screenshotDescription && (
-                  <>
-                    <span className="text-gray-600 dark:text-gray-400">•</span>
-                    <p className="text-sm text-gray-600" title={screenshotDescription}>
-                      {screenshotDescription}
-                    </p>
-                  </>
-                )}
-                <span className="text-sm text-gray-700 dark:text-gray-500">
-                  ({groupScreenshots.length})
-                </span>
-              </div>
-            </button>
-
-            {isExpanded && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
-                {groupScreenshots.map((screenshot) => (
-                  <div
-                    key={screenshot.filename}
-                    className="border rounded-lg overflow-hidden hover:shadow-lg transition-shadow bg-white"
-                  >
-                    <div
-                      className="cursor-pointer"
-                      onClick={() => setSelectedImage(screenshot)}
-                    >
-                      <img
-                        src={screenshot.url}
-                        alt={screenshot.filename}
-                        className="w-full h-48 object-contain bg-gray-100"
-                        loading="lazy"
-                      />
-                    </div>
-                    <div className="p-3 space-y-2">
-                      <p className="text-sm font-medium truncate" title={screenshot.filename}>
-                        {screenshot.filename}
-                      </p>
-                      <div className="flex items-center justify-between text-xs text-gray-700 dark:text-gray-500">
-                        <span>{formatFileSize(screenshot.size)}</span>
-                        <span>
-                          {new Date(screenshot.modified_at).toLocaleDateString()} {new Date(screenshot.modified_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      </div>
-                      <button
-                        onClick={() => downloadScreenshot(screenshot)}
-                        className="w-full flex items-center justify-center gap-2 px-3 py-1.5 text-sm bg-blue-50 text-blue-700 rounded hover:bg-blue-100 transition-colors"
-                      >
-                        <Download className="h-4 w-4" />
-                        Download
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        );
-      })}
+        {/* Other screenshots (no epic/task association) */}
+        {other.length > 0 && (
+          <section>
+            <div className="mb-4">
+              <h2 className="text-xl font-semibold text-gray-100">Other Screenshots</h2>
+              <p className="mt-2 text-gray-400 leading-relaxed">
+                Screenshots not associated with a specific epic or task
+              </p>
+            </div>
+            <div className="ml-2 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              {other.map((s) => (
+                <ScreenshotThumbnail
+                  key={s.filename}
+                  screenshot={s}
+                  description={parseScreenshotDescription(s.filename)}
+                  formatSize={formatFileSize}
+                  onClick={() => setSelectedImage(s)}
+                  onDownload={() => downloadScreenshot(s)}
+                />
+              ))}
+            </div>
+          </section>
+        )}
+      </div>
 
       {/* Lightbox Modal */}
       {selectedImage && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4"
+          className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4"
           onClick={() => setSelectedImage(null)}
         >
           <button
@@ -261,9 +251,9 @@ export function ScreenshotsGallery({ projectId }: ScreenshotsGalleryProps) {
               className="max-w-full max-h-[80vh] object-contain"
               onClick={(e) => e.stopPropagation()}
             />
-            <div className="bg-white rounded-lg p-4 flex items-center gap-4">
+            <div className="bg-gray-800 border border-gray-700 rounded-lg p-4 flex items-center gap-4">
               <div className="flex-1">
-                <p className="font-medium text-sm">{selectedImage.filename}</p>
+                <p className="font-medium text-sm text-gray-100">{selectedImage.filename}</p>
                 <p className="text-xs text-gray-500 mt-1">
                   {formatFileSize(selectedImage.size)} • {new Date(selectedImage.modified_at).toLocaleString()}
                 </p>
@@ -282,6 +272,146 @@ export function ScreenshotsGallery({ projectId }: ScreenshotsGalleryProps) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+
+// Epic section — mirrors TestCoverageEpicSection layout
+function ScreenshotEpicSection({
+  epicSection,
+  epicNumber,
+  isLast,
+  parseDescription,
+  formatSize,
+  onImageClick,
+  onDownload,
+}: {
+  epicSection: EpicScreenshots;
+  epicNumber: number;
+  isLast?: boolean;
+  parseDescription: (filename: string) => string | null;
+  formatSize: (bytes: number) => string;
+  onImageClick: (s: Screenshot) => void;
+  onDownload: (s: Screenshot) => void;
+}) {
+  const { epic, epicScreenshots, tasks } = epicSection;
+
+  return (
+    <section className="scroll-mt-20">
+      {/* Epic heading */}
+      <div className="mb-4">
+        <h2 className="text-xl font-semibold text-gray-100">
+          <span className="text-gray-500 font-mono mr-2">{epicNumber}.</span>
+          {epic.name}
+        </h2>
+        {epic.description && (
+          <p className="mt-2 text-gray-400 leading-relaxed">{epic.description}</p>
+        )}
+      </div>
+
+      {/* Epic-level screenshots */}
+      {epicScreenshots.length > 0 && (
+        <div className="ml-2 mb-5">
+          <p className="text-xs font-medium text-purple-400 uppercase tracking-wider mb-2">
+            Epic Screenshots
+          </p>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            {epicScreenshots.map((s) => (
+              <ScreenshotThumbnail
+                key={s.filename}
+                screenshot={s}
+                description={parseDescription(s.filename)}
+                formatSize={formatSize}
+                onClick={() => onImageClick(s)}
+                onDownload={() => onDownload(s)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Tasks with their screenshots */}
+      {tasks.length > 0 && (
+        <div className="ml-2 space-y-5">
+          {tasks.map((taskSection, taskIndex) => (
+            <div key={taskSection.task.id}>
+              {/* Task heading */}
+              <div className="flex items-start gap-3 mb-2">
+                <span className="text-gray-500 font-mono text-sm mt-0.5 w-10 text-right flex-shrink-0">
+                  {epicNumber}.{taskIndex + 1}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-gray-200 font-medium">{taskSection.task.name}</p>
+                </div>
+              </div>
+
+              {/* Task screenshots */}
+              <div className="ml-14 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                {taskSection.screenshots.map((s) => (
+                  <ScreenshotThumbnail
+                    key={s.filename}
+                    screenshot={s}
+                    description={parseDescription(s.filename)}
+                    formatSize={formatSize}
+                    onClick={() => onImageClick(s)}
+                    onDownload={() => onDownload(s)}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Divider */}
+      {!isLast && (
+        <div className="mt-8 border-b border-gray-800/50"></div>
+      )}
+    </section>
+  );
+}
+
+
+// Individual screenshot thumbnail card
+function ScreenshotThumbnail({
+  screenshot,
+  description,
+  formatSize,
+  onClick,
+  onDownload,
+}: {
+  screenshot: Screenshot;
+  description: string | null;
+  formatSize: (bytes: number) => string;
+  onClick: () => void;
+  onDownload: () => void;
+}) {
+  return (
+    <div className="bg-gray-800/50 rounded-lg border border-gray-700/50 overflow-hidden hover:border-gray-600 transition-colors">
+      <div className="cursor-pointer" onClick={onClick}>
+        <img
+          src={screenshot.url}
+          alt={screenshot.filename}
+          className="w-full h-32 object-contain bg-gray-900"
+          loading="lazy"
+        />
+      </div>
+      <div className="p-2.5 space-y-1">
+        <p className="text-xs text-gray-300 font-medium truncate" title={description || screenshot.filename}>
+          {description || screenshot.filename}
+        </p>
+        <div className="flex items-center justify-between text-[10px] text-gray-500">
+          <span>{formatSize(screenshot.size)}</span>
+          <button
+            onClick={(e) => { e.stopPropagation(); onDownload(); }}
+            className="flex items-center gap-1 text-blue-400 hover:text-blue-300"
+            title="Download"
+          >
+            <Download className="h-3 w-3" />
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

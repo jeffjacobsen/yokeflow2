@@ -1,96 +1,71 @@
-# Project Completion Review Prompt
+# Completion Review Prompt
 
-You are reviewing whether an AI-built project meets its original specification.
+You are reviewing whether a YokeFlow-generated project actually implements what was requested in the original specification.
 
-Your task is to provide a comprehensive completion review that assesses:
-1. How well the implementation matches the original requirements
-2. What was implemented successfully
-3. What is missing or incomplete
-4. Quality of the implementation
-5. Overall recommendation for deployment
+Unlike the initialization quality review (which checks the plan), you are reviewing **actual code**. The project has been built across multiple coding sessions. Your job is to assess whether the generated code fulfills the specification requirements.
 
 ## Original Specification
 
 {spec_text}
 
-## Implementation Summary
+## Code Inventory
 
-**Project Metadata:**
-- Project Name: {project_name}
-- Total Epics: {epic_count}
-- Total Tasks: {task_count}
-- Completed Tasks: {completed_task_count}
-- All Epic Tests Passing: {all_tests_passing}
+{code_inventory}
 
-**Requirements Coverage:**
-- Total Requirements: {requirements_total}
-- Requirements Met: {requirements_met} ({coverage_percentage}%)
-- Requirements Missing: {requirements_missing}
-- Requirements Partial: {requirements_partial}
-- Extra Features: {requirements_extra}
+## Test Results
 
-## Detailed Requirements Analysis
+{test_results}
+
+## Requirement-to-Code Matching
+
+The following table shows each specification requirement and the code artifacts that appear to implement it. A match does NOT guarantee correctness — use your judgment.
 
 {requirements_table}
 
 ## Your Task
 
-Provide a comprehensive completion review with the following sections:
+Provide a completion review with the following sections:
 
 ### 1. Executive Summary (2-3 sentences)
 
-Provide a brief, high-level assessment including:
-- Overall verdict: Is the project complete, needs work, or has failed to meet requirements?
-- Key achievements: What was implemented well?
-- Critical gaps: What critical functionality is missing (if any)?
+Brief assessment:
+- Does the generated code implement the specification?
+- Are there critical features missing from the code?
+- Do the test results support that the implementation works?
 
-### 2. Requirements Assessment
+### 2. Implementation Coverage
 
-Analyze the requirements coverage:
-- **Strengths**: Which requirement categories were fully implemented?
-- **Weaknesses**: Which areas are incomplete or missing?
-- **Critical Missing Features**: List any high-priority requirements that are missing
-- **Quality of Implementation**: Based on test pass rates, are implemented features working correctly?
+- **Implemented**: Which requirements have clear code evidence (matching files, functions, routes, components)?
+- **Missing**: Which requirements have no matching code artifacts?
+- **Uncertain**: Which requirements have partial matches that need manual verification?
 
-### 3. Extra Features Analysis
+### 3. Test Verification
 
-Review features implemented beyond the original spec:
-- Are they valuable additions or scope creep?
-- Do they enhance or detract from the core functionality?
+- Are tests passing for the core features?
+- Are there implemented features with failing tests?
+- Are there requirements with no test coverage at all?
 
-### 4. Overall Quality Assessment
+### 4. Code Quality Observations
 
-Based on the metrics and requirement coverage:
-- Code organization (inferred from epic/task structure)
-- Test coverage and pass rates
-- Completeness vs specification
-- Overall score (1-100)
+- Does the project structure look reasonable for the spec?
+- Are there obvious gaps (e.g., spec asks for auth but no auth-related code exists)?
+- Any structural concerns (missing error handling, no database when spec requires one)?
 
-### 5. Recommendations
+### 5. Missing Features
 
-Provide clear, actionable recommendations:
-- **Ready for Deployment?** Yes / No / With Caveats
-  - If yes: Any final checks needed?
-  - If no: What must be completed first?
-  - If with caveats: What limitations should users be aware of?
+List specific requirements from the spec that appear to be unimplemented:
+1. [Requirement] — [Why it appears missing]
+2. etc.
 
-- **Priority Rework List** (if applicable):
-  1. [Highest priority missing feature or fix]
-  2. [Second priority]
-  3. [Third priority]
-  etc.
-
-- **Next Steps**: What should happen next with this project?
+If all requirements appear implemented, say so.
 
 ### 6. Final Verdict
 
-Provide your final recommendation (choose one):
-- **COMPLETE**: Project meets all requirements and is ready for use
-- **NEEDS_WORK**: Project is mostly complete but has gaps that should be addressed
-- **FAILED**: Project does not meet core requirements and needs significant rework
+Choose one:
+- **COMPLETE**: The code implements the specification. Tests are passing. Ready for review/deployment.
+- **NEEDS_WORK**: Most of the spec is implemented but there are notable gaps or failing tests.
+- **FAILED**: Significant portions of the specification are not implemented.
 
 ## Response Format
 
-Please structure your response in clear markdown with the sections above. Use bullet points and numbered lists for readability.
-
-Be honest and objective in your assessment. The goal is to provide the user with an accurate understanding of whether their AI-generated project meets their needs.
+Structure your response in clear markdown with the sections above. Be concise and evidence-based — cite specific files, routes, or test results when possible.

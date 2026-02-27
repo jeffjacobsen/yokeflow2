@@ -267,7 +267,7 @@ export function CompletionReviewDashboard({ projectId }: CompletionReviewDashboa
             <div className="text-sm opacity-80">Overall Score</div>
           </div>
           <div className="text-center">
-            <div className="text-4xl font-bold mb-1">{review.coverage_percentage.toFixed(1)}%</div>
+            <div className="text-4xl font-bold mb-1">{parseFloat(String(review.coverage_percentage)).toFixed(1)}%</div>
             <div className="text-sm opacity-80">Coverage</div>
           </div>
           <div className="text-center">
@@ -278,20 +278,22 @@ export function CompletionReviewDashboard({ projectId }: CompletionReviewDashboa
 
         <div className="grid grid-cols-4 gap-4 pt-4 border-t border-current/30">
           <div className="text-center">
-            <div className="text-2xl font-bold">{review.requirements_met}</div>
-            <div className="text-sm opacity-80">Met</div>
-          </div>
-          <div className="text-center">
-            <div className="text-2xl font-bold">{review.requirements_missing}</div>
-            <div className="text-sm opacity-80">Missing</div>
-          </div>
-          <div className="text-center">
             <div className="text-2xl font-bold">{review.requirements_total}</div>
             <div className="text-sm opacity-80">Total</div>
           </div>
           <div className="text-center">
-            <div className="text-2xl font-bold">{review.requirements_extra}</div>
-            <div className="text-sm opacity-80">Extra</div>
+            <div className="text-2xl font-bold text-green-400">{review.requirements_met}</div>
+            <div className="text-sm opacity-80">Met</div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-yellow-400">
+              {review.requirements_total - review.requirements_met - review.requirements_missing}
+            </div>
+            <div className="text-sm opacity-80">Partial</div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-red-400">{review.requirements_missing}</div>
+            <div className="text-sm opacity-80">Missing</div>
           </div>
         </div>
       </div>
@@ -352,18 +354,72 @@ export function CompletionReviewDashboard({ projectId }: CompletionReviewDashboa
                           {getStatusIcon(req.status)}
                           <div className="flex-1">
                             <div className="text-sm text-gray-200">{req.requirement_text}</div>
-                            {req.implementation_notes && (
-                              <div className="text-xs text-gray-400 mt-1">
-                                {req.implementation_notes}
+
+                            {/* Code evidence breakdown */}
+                            {req.implementation_notes && req.implementation_notes !== 'No matching code found' && (
+                              <div className="mt-2 space-y-1">
+                                {req.implementation_notes.split('; ').map((part, i) => {
+                                  if (part.startsWith('Files:')) {
+                                    return (
+                                      <div key={i} className="text-xs text-blue-400">
+                                        <span className="font-medium">Files:</span>{' '}
+                                        {part.replace('Files: ', '').split(', ').map((f, j) => (
+                                          <span key={j} className="inline-block bg-blue-900/30 px-1.5 py-0.5 rounded mr-1 mb-0.5">
+                                            {f}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    );
+                                  }
+                                  if (part.startsWith('Artifacts:')) {
+                                    return (
+                                      <div key={i} className="text-xs text-purple-400">
+                                        <span className="font-medium">Code:</span>{' '}
+                                        {part.replace('Artifacts: ', '')}
+                                      </div>
+                                    );
+                                  }
+                                  if (part.startsWith("Task '")) {
+                                    const passed = part.includes('passed');
+                                    const failed = part.includes('failed');
+                                    return (
+                                      <div key={i} className={`text-xs ${failed ? 'text-red-400' : passed ? 'text-green-400' : 'text-gray-400'}`}>
+                                        {failed ? <XCircle className="w-3 h-3 inline mr-1" /> : passed ? <CheckCircle className="w-3 h-3 inline mr-1" /> : null}
+                                        {part}
+                                      </div>
+                                    );
+                                  }
+                                  return <div key={i} className="text-xs text-gray-400">{part}</div>;
+                                })}
                               </div>
                             )}
-                            <div className="flex items-center gap-2 mt-1">
-                              <span className="text-xs px-2 py-0.5 rounded bg-gray-700 text-gray-300">
+                            {req.implementation_notes === 'No matching code found' && (
+                              <div className="text-xs text-red-400 mt-1">No matching code found</div>
+                            )}
+
+                            <div className="flex items-center gap-2 mt-2">
+                              <span className={`text-xs px-2 py-0.5 rounded ${
+                                req.priority === 'high' ? 'bg-red-900/40 text-red-300' :
+                                req.priority === 'medium' ? 'bg-yellow-900/40 text-yellow-300' :
+                                'bg-gray-700 text-gray-300'
+                              }`}>
                                 {req.priority}
                               </span>
-                              <span className="text-xs text-gray-500">
-                                {(req.match_confidence * 100).toFixed(0)}% confidence
-                              </span>
+                              <div className="flex items-center gap-1.5">
+                                <div className="w-16 bg-gray-700 rounded-full h-1.5">
+                                  <div
+                                    className={`h-1.5 rounded-full ${
+                                      req.match_confidence >= 0.5 ? 'bg-green-500' :
+                                      req.match_confidence >= 0.25 ? 'bg-yellow-500' :
+                                      'bg-red-500'
+                                    }`}
+                                    style={{ width: `${req.match_confidence * 100}%` }}
+                                  />
+                                </div>
+                                <span className="text-xs text-gray-500">
+                                  {(req.match_confidence * 100).toFixed(0)}%
+                                </span>
+                              </div>
                             </div>
                           </div>
                         </div>

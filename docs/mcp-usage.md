@@ -9,8 +9,6 @@ YokeFlow uses MCP (Model Context Protocol) for all task management operations. T
 YokeFlow 2.1 adds quality system MCP tools:
 
 - **Test Execution Tracking** (Phase 1-2): `update_task_test_result`, `update_epic_test_result` - Track error messages, execution time, retry counts
-- **Epic Re-testing** (Phase 5): `trigger_epic_retest`, `record_epic_retest_result`, `get_epic_stability_metrics` - Automated regression detection
-- **Total Tool Count**: 15 tools (v2.0) → 20+ tools (v2.1)
 
 See [QUALITY_SYSTEM_SUMMARY.md](../QUALITY_SYSTEM_SUMMARY.md) for implementation details.
 
@@ -56,7 +54,6 @@ All tools are prefixed with `mcp__task-manager__`:
 - `get_task` - Task details including tests
 - `list_tests` - Tests for a task
 - `get_session_history` - Recent sessions
-- `get_epic_stability_metrics` - Stability scores and analytics ⭐ NEW v2.1
 
 ### Update Tools (Write)
 - `update_task_status` - Mark task complete/incomplete
@@ -64,17 +61,12 @@ All tools are prefixed with `mcp__task-manager__`:
 - `update_test_result` - Mark test pass/fail (legacy)
 - `update_task_test_result` - Mark task test pass/fail with error details ⭐ NEW v2.1
 - `update_epic_test_result` - Mark epic test pass/fail with error details ⭐ NEW v2.1
-- `record_epic_retest_result` - Record re-test result with regression detection ⭐ NEW v2.1
 
 ### Create Tools
 - `create_epic` - Create new epic
 - `create_task` - Create task in epic
 - `create_test` - Add test to task
 - `expand_epic` - Break epic into tasks
-- `log_session` - Log session completion
-- `trigger_epic_retest` - Trigger smart epic re-testing ⭐ NEW v2.1
-
-**Total: 20+ MCP tools**
 
 **See [mcp-task-manager/README.md](../mcp-task-manager/README.md#features) for detailed tool documentation**
 
@@ -121,127 +113,6 @@ mcp__task-manager__update_epic_test_result({
   execution_time_ms: 3500
 })
 ```
-
-### Epic Re-testing (Phase 5)
-
-Automated regression detection by periodically re-testing completed epics.
-
-#### `trigger_epic_retest`
-
-Intelligently select and trigger epic re-tests based on priority:
-
-```typescript
-mcp__task-manager__trigger_epic_retest()
-```
-
-**Returns:**
-```json
-{
-  "selected_epics": [
-    {
-      "epic_id": 5,
-      "epic_name": "User Authentication",
-      "priority_tier": "foundation",
-      "days_since_last_test": 8,
-      "test_count": 5
-    },
-    {
-      "epic_id": 12,
-      "epic_name": "Payment Processing",
-      "priority_tier": "high_dependency",
-      "days_since_last_test": 5,
-      "test_count": 8
-    }
-  ],
-  "trigger_reason": "epic_interval",
-  "completed_epics_count": 15
-}
-```
-
-**Selection Algorithm:**
-- **Foundation epics** (auth, database, core API) - Highest priority
-- **High-dependency epics** (many epics depend on them) - Medium priority
-- **Standard epics** - Lower priority, tested less frequently
-
-**Configuration** (in `.yokeflow.yaml`):
-```yaml
-epic_retesting:
-  enabled: true
-  trigger_frequency: 2  # Re-test every 2 completed epics
-  foundation_retest_days: 7  # Foundation epics tested weekly
-  max_retests_per_trigger: 2  # Limit overhead
-```
-
-#### `record_epic_retest_result`
-
-Record re-test results with automatic regression detection:
-
-```typescript
-mcp__task-manager__record_epic_retest_result({
-  epic_id: 5,
-  passed: false,
-  failed_test_count: 2,
-  total_test_count: 5
-})
-```
-
-**Automatic Regression Detection:**
-- Compares current result to previous re-test
-- If previously passed but now failed → **regression detected**
-- Stores regression flag for analysis
-
-**Returns:**
-```json
-{
-  "retest_id": "rt-123",
-  "regression_detected": true,
-  "previous_result": "passed",
-  "current_result": "failed",
-  "stability_score": 0.67
-}
-```
-
-#### `get_epic_stability_metrics`
-
-Query stability analytics for all epics or a specific epic:
-
-```typescript
-// All epics
-mcp__task-manager__get_epic_stability_metrics()
-
-// Specific epic
-mcp__task-manager__get_epic_stability_metrics({ epic_id: 5 })
-```
-
-**Returns:**
-```json
-{
-  "epics": [
-    {
-      "epic_id": 5,
-      "epic_name": "User Authentication",
-      "stability_score": 0.85,
-      "total_retests": 12,
-      "passed_retests": 10,
-      "failed_retests": 2,
-      "regressions_detected": 1,
-      "avg_pass_rate": 0.88,
-      "days_since_last_regression": 14
-    }
-  ]
-}
-```
-
-**Stability Score Calculation:**
-- `0.00-0.50`: Unstable (frequent failures)
-- `0.51-0.80`: Moderate (occasional failures)
-- `0.81-1.00`: Stable (rare failures)
-
-**Use Cases:**
-- Identify unstable epics that need attention
-- Track quality trends over time
-- Prioritize stabilization efforts
-- Verify fixes are holding
 
 ---
 

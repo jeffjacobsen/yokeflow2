@@ -182,10 +182,8 @@ server/
 ├── quality/            # Quality & review system ⭐ v2.1
 │   ├── metrics.py      # Quality metrics (Phase 1)
 │   ├── reviews.py      # Deep reviews (Phase 2)
-│   ├── gates.py        # Quality gates
 │   ├── integration.py  # Quality integration (Phase 6)
 │   ├── spec_parser.py  # Specification parser (Phase 7)
-│   ├── epic_retest_manager.py # Epic re-testing (Phase 5)
 │   ├── test_compliance_analyzer.py # Test compliance
 │   └── prompt_analyzer.py # Prompt improvements (Phase 4/8)
 ├── verification/       # Testing & validation
@@ -432,7 +430,6 @@ server/quality/          # 10+ Python files (~4,000+ lines)
 ├── reviews.py           # Deep AI reviews (Phase 2)
 ├── integration.py       # Triggers & coordination (Phase 6)
 ├── spec_parser.py       # Parse app_spec.txt (Phase 7)
-├── epic_retest_manager.py # Regression testing (Phase 5)
 └── prompt_analyzer.py   # Improvement suggestions (Phase 4/8)
 
 web-ui/src/components/   # React components
@@ -452,16 +449,9 @@ mcp-task-manager/src/    # MCP tools
 - Migration: `schema/postgresql/schema.sql`
 
 **Phase 1: Test Execution Tracking**
-- Added: `last_error_message`, `execution_time_ms`, `retry_count`
+- Added: `execution_time_ms` for performance tracking
 - MCP tools enhanced: `update_task_test_result`, `update_epic_test_result`
-- Performance indexes for slow/flaky test detection
-- Migration: `017_add_test_error_tracking.sql`
-
-**Phase 2: Epic Test Failure Tracking**
-- `epic_test_failures` table (22 fields, 9 indexes)
-- 5 analysis views for pattern detection
-- Flaky test detection (passed before, now failing)
-- Migration: `018_epic_test_failure_tracking.sql`
+- Both tables use `passes` (boolean) for consistent pass/fail tracking
 
 **Phase 3: Epic Test Blocking**
 - Configuration: `epic_testing.mode` (strict/autonomous)
@@ -473,14 +463,6 @@ mcp-task-manager/src/    # MCP tools
 - Epic/task tests visible in Web UI
 - Requirements-based testing display
 - Component: `EpicAccordion.tsx` (lines 149-181)
-
-**Phase 5: Epic Re-testing**
-- Smart selection algorithm (foundation, high-dependency, standard tiers)
-- Automatic regression detection
-- Stability scoring (0.00-1.00 scale)
-- 3 MCP tools: `trigger_epic_retest`, `record_epic_retest_result`, `get_epic_stability_metrics`
-- Migration: `019_add_epic_retesting.sql`
-- Implementation: `server/quality/epic_retest_manager.py` (450+ lines)
 
 **Phase 6: Enhanced Review Triggers**
 - Removed periodic 5-session trigger
@@ -520,10 +502,6 @@ mcp-task-manager/src/    # MCP tools
 - `server/quality/spec_parser.py` - Parse markdown specs (25 tests)
 - Completion review not yet implemented (see `COMPLETION_REVIEW.md`)
 
-**Epic Re-testing:**
-- `server/quality/epic_retest_manager.py` - Smart selection algorithm
-- Configuration: `.yokeflow.yaml` → `epic_retesting` section
-
 **Test Compliance:**
 - `server/quality/test_compliance_analyzer.py` - Verify test coverage
 
@@ -533,18 +511,6 @@ mcp-task-manager/src/    # MCP tools
 ```yaml
 review:
   min_reviews_for_analysis: 5
-
-epic_testing:
-  mode: autonomous  # or "strict"
-  critical_epics:
-    - Authentication
-    - Payment
-  auto_failure_tolerance: 3
-
-epic_retesting:
-  enabled: true
-  trigger_frequency: 2  # Every 2 epics
-  foundation_retest_days: 7
 ```
 
 **Trigger Completion Review** (API):
@@ -597,17 +563,14 @@ See [mcp-usage.md](mcp-usage.md) for complete tool reference.
 
 **Query Tools:**
 - task_status, get_next_task, list_epics, get_epic, list_tasks, list_tests, get_session_history
-- `get_epic_stability_metrics` - Stability analytics ⭐ v2.1
 
 **Update Tools:**
 - update_task_status, start_task, update_test_result (legacy)
 - `update_task_test_result` - With error details ⭐ v2.1
 - `update_epic_test_result` - With error details ⭐ v2.1
-- `record_epic_retest_result` - With regression detection ⭐ v2.1
 
 **Create Tools:**
-- create_epic, create_task, create_test, expand_epic, log_session
-- `trigger_epic_retest` - Smart epic re-testing ⭐ v2.1
+- create_epic, create_task, create_test, expand_epic
 
 ### Tool Implementation Pattern
 
@@ -724,17 +687,14 @@ CREATE TABLE tasks (
 );
 ```
 
-**tests** - Test cases (1-3 per task)
+**task_tests** - Test cases (1-3 per task)
 ```sql
-CREATE TABLE tests (
+CREATE TABLE task_tests (
     id SERIAL PRIMARY KEY,
     task_id INTEGER NOT NULL REFERENCES tasks(id),
     description TEXT NOT NULL,
-    test_code TEXT,  -- Executable test code
-    passed BOOLEAN,
-    last_error_message TEXT,  -- ⭐ v2.1 Phase 1
-    execution_time_ms INTEGER,  -- ⭐ v2.1 Phase 1
-    retry_count INTEGER DEFAULT 0,  -- ⭐ v2.1 Phase 1
+    passes BOOLEAN DEFAULT false,
+    execution_time_ms INTEGER,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 ```
@@ -755,42 +715,6 @@ CREATE TABLE sessions (
 
 ### Quality System Tables ⭐ v2.1
 
-**epic_test_failures** - Test failure tracking (Phase 2)
-```sql
-CREATE TABLE epic_test_failures (
-    id SERIAL PRIMARY KEY,
-    project_id UUID NOT NULL REFERENCES projects(id),
-    epic_id INTEGER NOT NULL REFERENCES epics(id),
-    epic_test_id INTEGER NOT NULL REFERENCES epic_tests(id),
-    session_id UUID REFERENCES sessions(id),
-    failed_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    error_message TEXT,
-    error_type TEXT,  -- test_quality, implementation_gap, flaky_test
-    was_passing_before BOOLEAN DEFAULT FALSE,
-    is_flaky BOOLEAN DEFAULT FALSE,
-    agent_retry_count INTEGER DEFAULT 0,
-    -- 22 fields total, 9 indexes
-);
-```
-
-**epic_retests** - Regression testing (Phase 5)
-```sql
-CREATE TABLE epic_retests (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    project_id UUID NOT NULL REFERENCES projects(id),
-    epic_id INTEGER NOT NULL REFERENCES epics(id),
-    trigger_reason TEXT NOT NULL,  -- epic_interval, foundation_stale, manual
-    priority_tier TEXT NOT NULL,  -- foundation, high_dependency, standard
-    selected_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    tested_at TIMESTAMPTZ,
-    passed BOOLEAN,
-    failed_test_count INTEGER DEFAULT 0,
-    total_test_count INTEGER NOT NULL,
-    regression_detected BOOLEAN DEFAULT FALSE,
-    stability_score DECIMAL(3,2)  -- 0.00-1.00
-);
-```
-
 **project_completion_reviews** - Final verification (Phase 7)
 ```sql
 CREATE TABLE project_completion_reviews (
@@ -805,21 +729,7 @@ CREATE TABLE project_completion_reviews (
 );
 ```
 
-**session_quality_checks** - Quality metrics (Phase 1)
-```sql
-CREATE TABLE session_quality_checks (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    session_id UUID NOT NULL REFERENCES sessions(id),
-    quality_score DECIMAL(3,1),  -- 0.0-10.0
-    error_count INTEGER DEFAULT 0,
-    adherence_violations INTEGER DEFAULT 0,
-    verification_rate DECIMAL(3,2),  -- 0.00-1.00
-    issues_found TEXT[],
-    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-);
-```
-
-### Views (19 total)
+### Views
 
 **v_progress** - Overall project statistics
 ```sql
@@ -839,41 +749,8 @@ LEFT JOIN tests test ON test.task_id = t.id
 GROUP BY p.id;
 ```
 
-**v_epic_stability_metrics** - Epic stability analytics ⭐ v2.1 (Phase 5)
-```sql
-CREATE VIEW v_epic_stability_metrics AS
-SELECT
-    epic_id,
-    COUNT(*) as total_retests,
-    SUM(CASE WHEN passed THEN 1 ELSE 0 END) as passed_retests,
-    SUM(CASE WHEN NOT passed THEN 1 ELSE 0 END) as failed_retests,
-    SUM(CASE WHEN regression_detected THEN 1 ELSE 0 END) as regressions_detected,
-    AVG(CASE WHEN passed THEN 1.0 ELSE 0.0 END) as avg_pass_rate,
-    AVG(stability_score) as avg_stability_score
-FROM epic_retests
-GROUP BY epic_id;
-```
-
-**v_flaky_tests** - Identify unreliable tests ⭐ v2.1 (Phase 2)
-```sql
-CREATE VIEW v_flaky_tests AS
-SELECT
-    epic_id,
-    epic_test_id,
-    COUNT(*) as failure_count,
-    COUNT(DISTINCT session_id) as failed_in_sessions,
-    MAX(was_passing_before) as was_passing_before,
-    AVG(agent_retry_count) as avg_retry_count
-FROM epic_test_failures
-WHERE is_flaky = TRUE
-GROUP BY epic_id, epic_test_id;
-```
-
 ### Migrations ⭐ v2.1
 
-- **017**: Test execution tracking (error messages, timing, retries)
-- **018**: Epic test failure tracking (22 fields, 5 views)
-- **019**: Epic re-testing system (2 tables, 4 views)
 - **020**: Project completion reviews (2 tables, 4 views)
 
 See [schema/postgresql/migrations/](../schema/postgresql/migrations/) for complete migration history.

@@ -221,40 +221,6 @@ class SessionStartRequest(BaseModel):
         return v
 
 
-class ParallelCodingRequest(BaseModel):
-    """Request model for starting parallel coding sessions."""
-    num_workers: int = Field(
-        2,
-        ge=1,
-        le=4,
-        description="Number of concurrent agent workers (1-4)"
-    )
-    coding_model: Optional[str] = Field(
-        None,
-        description="Model for coding sessions (must be Claude model)"
-    )
-    max_tasks_per_worker: Optional[int] = Field(
-        None,
-        ge=1,
-        le=100,
-        description="Maximum tasks per worker (None = unlimited)"
-    )
-
-    @field_validator('coding_model')
-    @classmethod
-    def validate_model_name(cls, v: Optional[str]) -> Optional[str]:
-        """Validate Claude model name format."""
-        if v is None:
-            return v
-        if not VALID_MODEL_PATTERN.match(v):
-            raise ValueError(
-                f"Invalid Claude model name: {v}. "
-                f"Expected format: claude-(opus|sonnet|haiku)-X-X-YYYYMMDD "
-                f"or claude-(opus|sonnet|haiku)-X-X"
-            )
-        return v
-
-
 class ProjectRenameRequest(BaseModel):
     """Request model for renaming a project."""
     name: str = Field(
@@ -420,20 +386,6 @@ class ProjectConfigValidator(BaseModel):
     )
 
 
-class InterventionConfigValidator(BaseModel):
-    """Validation model for intervention configuration."""
-    enabled: bool = Field(
-        default=False,
-        description="Enable/disable intervention system"
-    )
-    max_retries: PositiveInt = Field(
-        default=3,
-        ge=1,
-        le=10,
-        description="Maximum retry attempts before blocking (1-10)"
-    )
-
-
 class VerificationConfigValidator(BaseModel):
     """Validation model for verification configuration."""
     enabled: bool = Field(
@@ -515,7 +467,6 @@ class ConfigValidator(BaseModel):
     security: SecurityConfigValidator = Field(default_factory=SecurityConfigValidator)
     database: DatabaseConfigValidator = Field(default_factory=DatabaseConfigValidator)
     project: ProjectConfigValidator = Field(default_factory=ProjectConfigValidator)
-    intervention: InterventionConfigValidator = Field(default_factory=InterventionConfigValidator)
     verification: VerificationConfigValidator = Field(default_factory=VerificationConfigValidator)
 
 

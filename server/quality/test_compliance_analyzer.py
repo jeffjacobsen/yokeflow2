@@ -443,35 +443,46 @@ class TestComplianceAnalyzer:
         """
         Score verification notes quality (0-100).
 
-        Higher scores for:
-        - Detailed descriptions
-        - Multiple verification points
-        - Specific test outcomes
-        - Use of checkmarks/status indicators
+        Rewards structured notes matching the WHAT/HOW/OUTCOME/ERRORS template
+        from the coding prompt, plus specific evidence of observed results.
         """
+        import re
         score = 0
+        notes_lower = notes.lower()
 
-        # Length bonus (up to 30 points)
-        length_score = min(30, len(notes) / 10)
-        score += length_score
+        # Structure: WHAT/HOW/OUTCOME/ERRORS labels (up to 40 points, 10 each)
+        structure_checks = {
+            'what': [r'\bwhat\s*:'],
+            'how': [r'\bhow\s*:'],
+            'outcome': [r'\boutcome\s*:', r'\bresult\s*:', r'\bobserved\s*:'],
+            'errors': [r'\berrors?\s*:', r'\bconsole\s*:'],
+        }
+        for category, patterns in structure_checks.items():
+            if any(re.search(p, notes_lower) for p in patterns):
+                score += 10
 
-        # Checkmark usage (20 points)
-        checkmarks = notes.count('✅') + notes.count('✓')
-        if checkmarks > 0:
-            score += min(20, checkmarks * 5)
-
-        # Multiple lines/points (20 points)
-        lines = notes.count('\n') + 1
-        if lines > 1:
-            score += min(20, lines * 5)
-
-        # Specific keywords (30 points)
-        quality_keywords = [
-            'verified', 'tested', 'confirmed', 'working', 'passed',
-            'successful', 'rendered', 'displayed', 'validated', 'executed'
+        # Specific evidence: numbers, measurements, codes (up to 30 points)
+        evidence_patterns = [
+            r'\b[1-5]\d{2}\b',          # HTTP status codes (100-599)
+            r'\d+\s*(?:px|em|rem|%|ms)', # CSS/timing values
+            r'\d+\s+\S*(?:element|item|card|file|test|row|node|component)', # Counts
+            r'https?://\S+',            # URLs
+            r'\bnone\b|\bno\s+(?:console\s+)?errors?\b|\b0\s+(?:error|warning|violation)', # No-errors
+            r'\b\d+/\d+\b',             # Ratios like "5/5"
         ]
-        keyword_count = sum(1 for kw in quality_keywords if kw in notes.lower())
-        score += min(30, keyword_count * 6)
+        evidence_count = sum(1 for p in evidence_patterns if re.search(p, notes_lower))
+        score += min(30, evidence_count * 10)
+
+        # Reasonable length (up to 20 points) — min 50 chars for meaningful content
+        if len(notes) >= 50:
+            score += min(20, len(notes) // 20)
+
+        # Penalty: generic notes with no structure AND no evidence (cap at 40)
+        generic_only = ['verified', 'tested', 'confirmed', 'working', 'passed', 'checked']
+        has_specific = evidence_count > 0
+        has_structure = score >= 20  # At least 2 structure labels matched
+        if not has_specific and not has_structure and any(g in notes_lower for g in generic_only):
+            score = min(score, 40)
 
         return min(100, score)
 

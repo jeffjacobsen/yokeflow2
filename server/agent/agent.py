@@ -12,9 +12,7 @@ from datetime import datetime
 
 from claude_agent_sdk import ClaudeSDKClient
 
-from server.database.connection import DatabaseManager
 from server.utils.observability import SessionLogger, QuietOutputFilter
-from server.agent.intervention import InterventionManager
 from server.utils.logging import (
     get_logger,
     set_session_id,
@@ -119,6 +117,7 @@ async def run_agent_session(
         session_manager: Optional session manager for interrupt checking
         progress_callback: Optional async callback for real-time progress updates.
                           Called with event dict containing type, tool_name, timestamp, etc.
+        intervention_config: Unused, kept for backward compatibility.
 
     Returns:
         (status, response_text) where status is:
@@ -131,24 +130,7 @@ async def run_agent_session(
     if hasattr(logger, "project_id"):
         set_project_id(str(logger.project_id))
 
-    # module_logger.info("Starting agent session", extra={
-    #    "project_dir": str(project_dir),
-    #    "verbose": verbose,
-    #    "intervention_enabled": intervention_config.get("enabled", False) if intervention_config else False
-    # })
-
     output_filter = QuietOutputFilter(verbose=verbose)
-
-    # Initialize intervention manager if config provided
-    intervention_manager = None
-    if intervention_config and intervention_config.get("enabled", False):
-        # Determine environment from intervention config or default to local
-        environment = intervention_config.get("environment", "local")
-        intervention_manager = InterventionManager(intervention_config, environment=environment)
-        # Set session info for notifications
-        session_id = logger.session_id if hasattr(logger, "session_id") else "unknown"
-        project_name = project_dir.name
-        intervention_manager.set_session_info(session_id, project_name)
 
     if verbose:
         print("Sending prompt to Claude Agent SDK...\n")
@@ -234,107 +216,6 @@ async def run_agent_session(
                         # Log tool use
                         logger.log_tool_use(tool_name, tool_id, tool_input)
 
-                        # Track task starts for quality monitoring
-                        if intervention_manager and tool_name == "mcp__task-manager__start_task":
-                            task_id = str(tool_input.get("task_id", ""))
-                            # We'd need to get task description from database or context
-                            # For now, just track the task ID
-                            intervention_manager.set_current_task(task_id, f"Task {task_id}")
-
-                        # Track when agent gets next task for quality monitoring
-                        if intervention_manager and tool_name == "mcp__task-manager__get_next_task":
-                            # The response will contain task info, but we handle this after execution
-                            pass
-
-                        # Check for task verification if this is update_task_status
-                        if tool_name == "mcp__task-manager__update_task_status":
-                            # Check if task is being marked as done
-                            if tool_input.get("done", False):
-                                task_id = str(tool_input.get("task_id", ""))
-
-                                # First check quality standards with intervention manager
-                                if intervention_manager:
-                                    quality_blocked, quality_reason = await intervention_manager.check_task_completion(
-                                        task_id, marking_complete=True
-                                    )
-                                    if quality_blocked:
-                                        # Quality check failed - block completion
-                                        error_msg = f"❌ Quality Check Failed: {quality_reason}"
-                                        print(f"\n{error_msg}\n")
-                                        logger.log_error(error_msg)
-
-                                        # Skip normal tool execution
-                                        continue
-
-                                # Verification system removed - tests are now run via MCP tools
-
-                        # Check for retry loops with intervention manager
-                        if intervention_manager:
-                            is_blocked, reason = await intervention_manager.check_tool_use(
-                                tool_name, tool_input
-                            )
-                            if is_blocked:
-                                # Document blocker and halt session
-                                error_msg = f"🚨 INTERVENTION: {reason}"
-                                print(f"\n{error_msg}\n")
-                                logger.log_error(error_msg)
-
-                                # Document in yokeflow/agent-progress.md
-                                task_info = {"id": "unknown", "name": "Current task"}
-                                intervention_manager.document_blocker(
-                                    project_dir, task_info, reason
-                                )
-
-                                # Pause the session and save state
-                                from server.agent.session_manager import PausedSessionManager
-                                from server.utils.notifications import MultiChannelNotificationService
-
-                                paused_manager = PausedSessionManager()
-
-                                # Get project and session IDs from logger or config
-                                session_id = getattr(logger, 'session_id', 'unknown')
-                                project_id = getattr(logger, 'project_id', 'unknown')
-
-                                # Determine pause type based on reason
-                                pause_type = "retry_limit"
-                                if "critical error" in reason.lower():
-                                    pause_type = "critical_error"
-                                elif "timeout" in reason.lower():
-                                    pause_type = "timeout"
-
-                                # Save paused session state
-                                paused_session_id = await paused_manager.pause_session(
-                                    session_id=session_id,
-                                    project_id=project_id,
-                                    reason=reason,
-                                    pause_type=pause_type,
-                                    intervention_manager=intervention_manager,
-                                    current_task=task_info,
-                                    message_count=message_count
-                                )
-
-                                # Send notifications if configured
-                                if intervention_config.get("notifications", {}).get("enabled"):
-                                    notifier = MultiChannelNotificationService(intervention_config.get("notifications", {}))
-                                    await notifier.send_notification(
-                                        title="Session Paused - Intervention Required",
-                                        message=f"Session for {project_dir.name} has been paused due to: {reason}",
-                                        details={
-                                            "project_name": project_dir.name,
-                                            "session_id": session_id,
-                                            "pause_type": pause_type,
-                                            "current_task": task_info.get("name", "Unknown"),
-                                            "intervention_id": paused_session_id
-                                        }
-                                    )
-
-                                print(f"\n📋 Session paused (ID: {paused_session_id})")
-                                print(f"   To resume: Use the Web UI or API to resolve and resume")
-                                print(f"   API endpoint: POST /api/interventions/{paused_session_id}/resume\n")
-
-                                # Return error status to halt session
-                                return "error", f"Session paused for intervention: {reason}"
-
                         # Defensive check: Warn about risky background bash usage
                         if tool_name == "Bash" and tool_input.get("run_in_background"):
                             timeout_ms = tool_input.get("timeout", 120000)
@@ -408,25 +289,6 @@ async def run_agent_session(
 
                         # Log tool result
                         logger.log_tool_result(tool_id, result_content, is_error)
-
-                        # Check for errors with intervention manager
-                        if is_error and intervention_manager:
-                            error_msg = str(result_content)
-                            is_blocked, reason = await intervention_manager.check_tool_error(error_msg)
-                            if is_blocked:
-                                # Document blocker and halt session
-                                error_msg = f"🚨 INTERVENTION: {reason}"
-                                print(f"\n{error_msg}\n")
-                                logger.log_error(error_msg)
-
-                                # Document in yokeflow/agent-progress.md
-                                task_info = {"id": "unknown", "name": "Current task"}
-                                intervention_manager.document_blocker(
-                                    project_dir, task_info, reason
-                                )
-
-                                # Return error status to halt session
-                                return "error", f"Session blocked due to critical error: {reason}"
 
                         # Send progress update via callback
                         if progress_callback:
@@ -515,36 +377,14 @@ async def run_agent_session(
         if verbose:
             print("\n" + "-" * 70 + "\n")
 
-        # Check if the response indicates a BLOCKED epic test intervention
-        # The agent's response should contain the BLOCKED message if it properly stopped
         session_status = "continue"
-        if "BLOCKED:" in response_text or "BLOCKED on" in response_text:
-            session_status = "blocked"
-            module_logger.info("Epic test intervention detected - session blocked")
-
-            # Also check database for epic_test_interventions if needed
-            try:
-                async with DatabaseManager() as db:
-                    async with db.acquire() as conn:
-                        # Check for recent epic test interventions
-                        result = await conn.fetchval(
-                            """SELECT COUNT(*) FROM epic_test_interventions
-                               WHERE session_id = $1 AND blocked = true""",
-                            session_id
-                        )
-                        if result > 0:
-                            session_status = "blocked"
-            except Exception as e:
-                module_logger.warning(f"Could not check epic test interventions: {e}")
 
         # Finalize logging and get session summary
-        session_summary = logger.finalize(session_status, response_text, usage_data=usage_data)
-
-        # module_logger.info("Agent session completed successfully", extra={
-        #    "status": session_status,
-        #    "message_count": message_count,
-        #    "usage": usage_data
-        # })
+        try:
+            session_summary = logger.finalize(session_status, response_text, usage_data=usage_data)
+        except Exception as finalize_err:
+            module_logger.error(f"logger.finalize() failed (non-fatal): {finalize_err}", exc_info=True)
+            session_summary = {"status": session_status, "error": f"finalize failed: {finalize_err}"}
 
         # Clear context before returning
         clear_context()
@@ -562,8 +402,11 @@ async def run_agent_session(
         })
 
         # Log error to session logger
-        logger.log_error(e)
-        logger.finalize("error", "", usage_data=usage_data)
+        try:
+            logger.log_error(e)
+            logger.finalize("error", "", usage_data=usage_data)
+        except Exception as finalize_err:
+            module_logger.error(f"logger.finalize() failed in error handler: {finalize_err}")
 
         # Clear context before re-raising
         clear_context()
@@ -581,8 +424,12 @@ async def run_agent_session(
         })
 
         # Log error to session logger
-        logger.log_error(e)
-        session_summary = logger.finalize("error", "", usage_data=usage_data)
+        try:
+            logger.log_error(e)
+            session_summary = logger.finalize("error", "", usage_data=usage_data)
+        except Exception as finalize_err:
+            module_logger.error(f"logger.finalize() failed in error handler: {finalize_err}")
+            session_summary = {"status": "error", "error": str(e)}
 
         # Clear context before returning
         clear_context()

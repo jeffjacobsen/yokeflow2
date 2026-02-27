@@ -135,6 +135,17 @@ export function calculateDuration(start: string | Date, end: string | Date | nul
 }
 
 /**
+ * Format execution time from milliseconds to human-readable format
+ */
+export function formatExecutionTime(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+  const minutes = Math.floor(ms / 60000);
+  const seconds = Math.round((ms % 60000) / 1000);
+  return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
+}
+
+/**
  * Format bytes to human-readable format
  */
 export function formatBytes(bytes: number, decimals = 2): string {

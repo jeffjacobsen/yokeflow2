@@ -379,15 +379,13 @@ class MetricsCollector:
                 'hour': len(self.session_progression['hourly_metrics']) + 1,
                 'tasks_completed': self.test_metrics['tasks_completed'],
                 'errors_count': self.tool_errors,
-                'verification_rate': self._calculate_verification_rate(),
+                'verification_rate': sum(1 for t in self.task_verification.values() if t['verification_methods']) / max(1, len(self.task_verification)),
                 'browser_operations': self.browser_verifications,
                 'timestamp': current_time
             }
 
             self.session_progression['hourly_metrics'].append(hourly_snapshot)
             self.session_progression['last_hour_check'] = current_time
-
-    # Removed _calculate_verification_rate - now calculated inline in get_summary()
 
     def get_summary(self) -> Dict[str, Any]:
         """

@@ -26,7 +26,6 @@ import os
 
 import asyncpg
 
-from server.agent.session_manager import PausedSessionManager
 from server.client.claude import create_client
 from server.database.connection import get_db, DatabaseManager, is_postgresql_configured
 from server.agent.models import SessionStatus, SessionType, SessionInfo
@@ -747,7 +746,7 @@ class AgentOrchestrator:
                 progress_callback=progress_callback
             )
 
-            # Detect degenerate sessions (no useful work — e.g., rate limit, auth failure)
+            # Detect degenerate sessions (no useful work -- e.g., rate limit, auth failure)
             tool_count = (last_session.metrics or {}).get("tool_use_count", 0)
             is_degenerate = (
                 last_session.status == SessionStatus.COMPLETED
@@ -766,18 +765,6 @@ class AgentOrchestrator:
                         f"The agent may be rate-limited or unable to make progress."
                     )
                     logger.error(f"Circuit breaker triggered: {reason}")
-
-                    # Record as intervention (DB-persisted, visible in dashboard)
-                    try:
-                        paused_mgr = PausedSessionManager()
-                        await paused_mgr.pause_session(
-                            session_id=last_session.session_id,
-                            project_id=str(project_id),
-                            reason=reason,
-                            pause_type="degenerate_loop",
-                        )
-                    except Exception as e:
-                        logger.warning(f"Failed to record degenerate intervention: {e}")
 
                     # Notify UI via WebSocket
                     if self.event_callback:
@@ -809,10 +796,11 @@ class AgentOrchestrator:
                     await db.mark_project_complete(project_id)
                     # logger.info("✅ Project marked as complete in database")
 
-                    # TODO: True implementation-vs-spec verification (see YOKEFLOW_FUTURE_PLAN.md)
-                    # The current completion review checks plan-vs-spec (initialization quality)
-                    # and runs after Session 0, not here. A future implementation review would
-                    # verify that actual code meets the spec requirements.
+                    # Run completion review (code-vs-spec verification)
+                    try:
+                        await self.quality.run_completion_review(project_id, db)
+                    except Exception as e:
+                        logger.error(f"Completion review failed (non-blocking): {e}", exc_info=True)
 
                     # Notify via callback
                     if self.event_callback:
@@ -1035,11 +1023,15 @@ class AgentOrchestrator:
                     prompt = f"{base_prompt}\n\n{resume_prompt}"
                 else:
                     base_prompt = get_coding_prompt()
+                    project_context = (
+                        f"PROJECT_ID: {project_id}\n"
+                        f"PROJECT_DIR: {project_path.resolve()}\n\n"
+                    )
                     if project_type == 'brownfield':
                         preamble = get_brownfield_coding_preamble()
-                        prompt = f"{preamble}\n\n{base_prompt}"
+                        prompt = f"{project_context}{preamble}\n\n{base_prompt}"
                     else:
-                        prompt = base_prompt
+                        prompt = f"{project_context}{base_prompt}"
 
                 # Start heartbeat task to prevent false-positive stale detection
                 heartbeat_task = None
@@ -1086,13 +1078,6 @@ class AgentOrchestrator:
                 for attempt in range(max_retries):
                     try:
                         async with client:
-                            # Prepare intervention config
-                            intervention_config = {
-                                "enabled": self.config.intervention.enabled,
-                                "max_retries": self.config.intervention.max_retries,
-                                "environment": "local"
-                            }
-
                             # Run session - no timeout for agent sessions
                             if is_initializer:
                                 logger.info(f"Starting initialization session")
@@ -1110,7 +1095,6 @@ class AgentOrchestrator:
                                     status, response, session_summary = await run_agent_session(
                                         client, prompt, project_path, logger=session_logger, verbose=self.verbose,
                                         session_manager=session_manager, progress_callback=progress_callback,
-                                        intervention_config=intervention_config
                                     )
                                     break  # Success, exit retry loop
 
@@ -1158,7 +1142,6 @@ class AgentOrchestrator:
                                 status, response, session_summary = await run_agent_session(
                                     client, prompt, project_path, logger=session_logger, verbose=self.verbose,
                                     session_manager=session_manager, progress_callback=progress_callback,
-                                    intervention_config=intervention_config
                                 )
                                 break
 
@@ -1505,38 +1488,12 @@ class AgentOrchestrator:
                     shutil.rmtree(project_path, onerror=handle_remove_readonly)
                     logger.info(f"Successfully deleted project directory: {project_path}")
                 except (PermissionError, OSError) as e:
-                    logger.warning(f"Permission denied deleting {project_path}, attempting Docker-based removal")
-
-                    # Second attempt: use Docker to remove files created with root permissions
-                    try:
-                        import subprocess
-                        # Use a Docker container to remove the directory with root permissions
-                        # This handles cases where node_modules or other files were created by Docker
-                        docker_cmd = [
-                            "docker", "run", "--rm",
-                            "-v", f"{project_path.absolute()}:/workspace",
-                            "alpine:latest",
-                            "sh", "-c", "rm -rf /workspace/* /workspace/.[!.]* /workspace/..?*"
-                        ]
-                        result = subprocess.run(docker_cmd, capture_output=True, text=True, timeout=30)
-
-                        if result.returncode == 0:
-                            # Docker removed the contents, now remove the empty directory
-                            # Use shutil.rmtree with ignore_errors in case some hidden files remain
-                            if project_path.exists():
-                                try:
-                                    project_path.rmdir()
-                                except OSError:
-                                    # If rmdir fails, try shutil.rmtree with ignore_errors
-                                    shutil.rmtree(project_path, ignore_errors=True)
-                            logger.info(f"Successfully deleted project directory using Docker: {project_path}")
-                        else:
-                            raise Exception(f"Docker removal failed: {result.stderr}")
-                    except Exception as docker_error:
-                        # Final fallback: delete with ignore_errors
-                        logger.error(f"Docker removal failed: {docker_error}, using ignore_errors fallback")
-                        shutil.rmtree(project_path, ignore_errors=True)
+                    logger.warning(f"Permission error deleting {project_path}, retrying with ignore_errors: {e}")
+                    shutil.rmtree(project_path, ignore_errors=True)
+                    if project_path.exists():
                         logger.warning(f"Project directory partially deleted (some files may remain): {project_path}")
+                    else:
+                        logger.info(f"Successfully deleted project directory: {project_path}")
 
             return True
 

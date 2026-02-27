@@ -216,8 +216,6 @@ class ProjectResetter:
                         UPDATE task_tests
                         SET passes = FALSE,
                             verified_at = NULL,
-                            session_id = NULL,
-                            result = '{}',
                             verification_notes = NULL
                         WHERE project_id = $1
                         """,
@@ -228,14 +226,9 @@ class ProjectResetter:
                     await conn.execute(
                         """
                         UPDATE epic_tests
-                        SET last_execution = NULL,
-                            last_result = NULL,
-                            execution_log = NULL,
-                            verification_notes = NULL,
-                            execution_count = 0,
-                            pass_count = 0,
-                            fail_count = 0,
-                            skip_count = 0
+                        SET passes = FALSE,
+                            last_execution = NULL,
+                            verification_notes = NULL
                         WHERE project_id = $1
                         """,
                         self.project_id,
@@ -259,48 +252,6 @@ class ProjectResetter:
                         UPDATE projects
                         SET completed_at = NULL
                         WHERE id = $1
-                        """,
-                        self.project_id,
-                    )
-
-                    # Delete intervention records first (foreign key to sessions)
-                    await conn.execute(
-                        """
-                        DELETE FROM epic_test_interventions
-                        WHERE epic_id IN (
-                            SELECT id FROM epics WHERE project_id = $1
-                        )
-                        """,
-                        self.project_id,
-                    )
-
-                    # Delete other session-related tables (Phase 2 - epic test failures)
-                    # Note: epic_test_failures uses epic_id, not project_id
-                    await conn.execute(
-                        """
-                        DELETE FROM epic_test_failures
-                        WHERE epic_id IN (
-                            SELECT id FROM epics WHERE project_id = $1
-                        )
-                        """,
-                        self.project_id,
-                    )
-
-                    # Delete paused session records (Production Hardening - Intervention System)
-                    await conn.execute(
-                        """
-                        DELETE FROM intervention_actions
-                        WHERE paused_session_id IN (
-                            SELECT id FROM paused_sessions WHERE project_id = $1
-                        )
-                        """,
-                        self.project_id,
-                    )
-
-                    await conn.execute(
-                        """
-                        DELETE FROM paused_sessions
-                        WHERE project_id = $1
                         """,
                         self.project_id,
                     )

@@ -10,11 +10,9 @@ import { CurrentSession } from '@/components/CurrentSession';
 import { CompletionBanner } from '@/components/CompletionBanner';
 import { QualityDashboard } from '@/components/QualityDashboard';
 import { SessionLogsViewer } from '@/components/SessionLogsViewer';
-import { ScreenshotsGallery } from '@/components/ScreenshotsGallery';
 import { ResetProjectDialog } from '@/components/ResetProjectDialog';
 import { ProjectDetailsPanel } from '@/components/ProjectDetailsPanel';
 import ConfirmDialog from '@/components/ConfirmDialog';
-import InterventionDashboard from '@/components/InterventionDashboard';
 import { useProjectWebSocket } from '@/lib/websocket';
 import { api } from '@/lib/api';
 import { truncate } from '@/lib/utils';
@@ -33,7 +31,7 @@ export default function ProjectDetailPage() {
   const [isInitializing, setIsInitializing] = useState(false);
   const [isStartingCoding, setIsStartingCoding] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
-  const [activeTab, setActiveTab] = useState<'current' | 'history' | 'quality' | 'logs' | 'screenshots' | 'interventions'>('current');
+  const [activeTab, setActiveTab] = useState<'current' | 'history' | 'quality' | 'logs' | 'settings'>('current');
   const [isStopping, setIsStopping] = useState(false);
   const [isStoppingAfterCurrent, setIsStoppingAfterCurrent] = useState(false);
   const [isRefreshingSessions, setIsRefreshingSessions] = useState(false);
@@ -46,9 +44,7 @@ export default function ProjectDetailPage() {
   const [showDeleteProjectDialog, setShowDeleteProjectDialog] = useState(false);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
 
-  // Panel State: 'session' or 'project' (shows Session Details by default)
-  const [activePanel, setActivePanel] = useState<'session' | 'project'>('session');
-  const [detailsModalTab, setDetailsModalTab] = useState<'settings' | 'environment' | 'epics'>('settings');
+  const [detailsTab, setDetailsTab] = useState<'settings' | 'environment'>('settings');
 
   // WebSocket for real-time updates
   const {
@@ -484,35 +480,10 @@ export default function ProjectDetailPage() {
               Roadmap
             </Link>
           )}
-          <button
-            onClick={() => {
-              if (activePanel === 'session') {
-                // Switching to Project Details
-                setDetailsModalTab('settings');
-                setActivePanel('project');
-              } else {
-                // Switching to Session Details
-                setActivePanel('session');
-              }
-            }}
-            className={`px-4 py-2 rounded-lg transition-colors font-medium flex items-center gap-2 ${
-              activePanel === 'project'
-                ? 'bg-blue-600 hover:bg-blue-700 text-white'
-                : 'bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100'
-            }`}
-            title={activePanel === 'session' ? 'View Settings, Environment, and Project Roadmap' : 'View Session Details'}
-          >
-            <Settings className="w-4 h-4" />
-            {activePanel === 'session' ? 'Project Details' : 'Session Details'}
-            {activePanel === 'session' && project.needs_env_config && (
-              <span className="ml-1 w-2 h-2 bg-amber-400 rounded-full animate-pulse"></span>
-            )}
-          </button>
           {/* Conditional buttons based on initialization state */}
           {!is_initialized && !runningInitSession && (
             <button
               onClick={() => {
-                setActivePanel('session');
                 handleInitializeProject();
               }}
               disabled={isInitializing}
@@ -537,7 +508,6 @@ export default function ProjectDetailPage() {
           {is_initialized && !runningCodingSession && !isComplete && (
             <button
               onClick={() => {
-                setActivePanel('session');
                 handleStartCodingSessions();
               }}
               disabled={isStartingCoding}
@@ -627,8 +597,8 @@ export default function ProjectDetailPage() {
               </p>
               <button
                 onClick={() => {
-                  setDetailsModalTab('environment');
-                  setActivePanel('project');
+                  setDetailsTab('environment');
+                  setActiveTab('settings');
                 }}
                 className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-colors font-medium text-sm flex items-center gap-2"
               >
@@ -705,9 +675,8 @@ export default function ProjectDetailPage() {
         </div>
       </div>
 
-      {/* Session Details Panel (shown by default) */}
-      {activePanel === 'session' && (
-        <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
+      {/* Main Content Tabs */}
+      <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
           {/* Tab Headers */}
           <div className="flex border-b border-gray-800">
             <button
@@ -757,26 +726,18 @@ export default function ProjectDetailPage() {
               <span className="ml-2 text-sm">📄</span>
             </button>
             <button
-              onClick={() => setActiveTab('screenshots')}
+              onClick={() => setActiveTab('settings')}
               className={`flex-1 px-6 py-4 font-medium transition-colors ${
-                activeTab === 'screenshots'
+                activeTab === 'settings'
                   ? 'bg-gray-800 text-blue-400 border-b-2 border-blue-500'
                   : 'text-gray-400 hover:text-gray-300 hover:bg-gray-800/50'
               }`}
             >
-              Screenshots
-              <span className="ml-2 text-sm">📸</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('interventions')}
-              className={`flex-1 px-6 py-4 font-medium transition-colors ${
-                activeTab === 'interventions'
-                  ? 'text-blue-400 border-b-2 border-blue-400 bg-gray-800/50'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-800/30'
-              }`}
-            >
-              Interventions
-              <span className="ml-2 text-sm">🚨</span>
+              Settings
+              {project.needs_env_config && (
+                <span className="ml-2 w-2 h-2 bg-amber-400 rounded-full inline-block animate-pulse"></span>
+              )}
+              <span className="ml-2 text-sm">⚙️</span>
             </button>
           </div>
 
@@ -819,31 +780,22 @@ export default function ProjectDetailPage() {
               <SessionLogsViewer projectId={projectId} />
             )}
 
-            {activeTab === 'screenshots' && (
-              <ScreenshotsGallery projectId={projectId} />
+            {activeTab === 'settings' && (
+              <ProjectDetailsPanel
+                projectId={projectId}
+                project={project}
+                isOpen={true}
+                activeTab={detailsTab}
+                onTabChange={setDetailsTab}
+                onProjectUpdated={() => {
+                  loadProject();
+                  loadSettings();
+                }}
+              />
             )}
 
-            {activeTab === 'interventions' && (
-              <InterventionDashboard projectId={projectId} />
-            )}
           </div>
         </div>
-      )}
-
-      {/* Project Details Panel */}
-      {activePanel === 'project' && (
-        <ProjectDetailsPanel
-          projectId={projectId}
-          project={project}
-          isOpen={true}
-          activeTab={detailsModalTab}
-          onTabChange={setDetailsModalTab}
-          onProjectUpdated={() => {
-            loadProject();
-            loadSettings();
-          }}
-        />
-      )}
 
       {/* Reset Project Dialog */}
       {showResetDialog && (

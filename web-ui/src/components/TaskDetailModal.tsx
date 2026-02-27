@@ -12,8 +12,9 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { X, CheckCircle, XCircle, Circle, Clock, FileText } from 'lucide-react';
+import { X, CheckCircle, XCircle, Circle, Clock, FileText, Timer } from 'lucide-react';
 import { api } from '@/lib/api';
+import { formatExecutionTime } from '@/lib/utils';
 import type { TaskWithTests, Test } from '@/lib/types';
 
 interface TaskDetailModalProps {
@@ -233,12 +234,13 @@ function TestItem({ test, getCategoryColor }: { test: Test; getCategoryColor: (c
   const steps = typeof test.steps === 'string' ? JSON.parse(test.steps || '[]') : test.steps || [];
   const hasSteps = Array.isArray(steps) && steps.length > 0;
   const hasRequirements = (test.requirements && test.requirements.trim().length > 0) || (test.success_criteria && test.success_criteria.trim().length > 0);
+  const hasExpandableContent = hasSteps;
 
   return (
     <div className="bg-gray-800/50 rounded-lg border border-gray-700/50 overflow-hidden">
       <div
-        className={`p-4 ${hasSteps ? 'cursor-pointer hover:bg-gray-800/80' : ''}`}
-        onClick={() => hasSteps && setExpanded(!expanded)}
+        className={`p-4 ${hasExpandableContent ? 'cursor-pointer hover:bg-gray-800/80' : ''}`}
+        onClick={() => hasExpandableContent && setExpanded(!expanded)}
       >
         <div className="flex items-start gap-3">
           {/* Status Icon */}
@@ -277,25 +279,21 @@ function TestItem({ test, getCategoryColor }: { test: Test; getCategoryColor: (c
               {test.passes === false && (
                 <span className="text-xs text-red-400 font-medium">Failed</span>
               )}
-              {test.passes === null && test.last_result && (
-                <span className={`text-xs font-medium ${
-                  test.last_result === 'passed' ? 'text-green-400' :
-                  test.last_result === 'failed' ? 'text-red-400' :
-                  test.last_result === 'skipped' ? 'text-yellow-400' :
-                  'text-gray-500'
-                }`}>
-                  {test.last_result.charAt(0).toUpperCase() + test.last_result.slice(1)}
-                </span>
-              )}
-              {test.passes === null && !test.last_result && (
+              {test.passes === null && (
                 <span className="text-xs text-gray-500 font-medium">Not Run</span>
+              )}
+              {test.execution_time_ms != null && (
+                <span className="text-xs text-gray-500 flex items-center gap-1">
+                  <Timer className="w-3 h-3" />
+                  {formatExecutionTime(test.execution_time_ms)}
+                </span>
               )}
             </div>
             <p className="text-sm text-gray-200">{test.description}</p>
             <div className="flex items-center gap-4 mt-2">
-              {hasSteps && (
+              {hasExpandableContent && (
                 <p className="text-xs text-gray-500">
-                  {expanded ? '▼' : '▶'} {steps.length} step{steps.length !== 1 ? 's' : ''} {expanded ? '(click to collapse)' : '(click to expand)'}
+                  {expanded ? '▼' : '▶'} {hasSteps ? `${steps.length} step${steps.length !== 1 ? 's' : ''}` : 'Details'} {expanded ? '(click to collapse)' : '(click to expand)'}
                 </p>
               )}
               {hasRequirements && (
@@ -313,17 +311,21 @@ function TestItem({ test, getCategoryColor }: { test: Test; getCategoryColor: (c
           </div>
         </div>
 
-        {/* Expanded Steps */}
-        {expanded && hasSteps && (
-          <div className="mt-4 pt-4 border-t border-gray-700">
-            <h4 className="text-xs font-medium text-gray-400 mb-2">Test Steps:</h4>
-            <ol className="space-y-2 list-decimal list-inside">
-              {steps.map((step: string, idx: number) => (
-                <li key={idx} className="text-sm text-gray-300">
-                  {step}
-                </li>
-              ))}
-            </ol>
+        {/* Expanded Content */}
+        {expanded && (
+          <div className="mt-4 pt-4 border-t border-gray-700 space-y-4">
+            {hasSteps && (
+              <div>
+                <h4 className="text-xs font-medium text-gray-400 mb-2">Test Steps:</h4>
+                <ol className="space-y-2 list-decimal list-inside">
+                  {steps.map((step: string, idx: number) => (
+                    <li key={idx} className="text-sm text-gray-300">
+                      {step}
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            )}
           </div>
         )}
 
@@ -340,14 +342,6 @@ function TestItem({ test, getCategoryColor }: { test: Test; getCategoryColor: (c
               <div className="mb-3">
                 <h4 className="text-xs font-medium text-gray-400 mb-2">Success Criteria:</h4>
                 <p className="text-sm text-gray-300 whitespace-pre-wrap">{test.success_criteria}</p>
-              </div>
-            )}
-            {test.execution_log && (
-              <div className="mt-3">
-                <h4 className="text-xs font-medium text-gray-400 mb-2">Last Execution Log:</h4>
-                <pre className="bg-gray-950/50 rounded p-3 text-xs text-gray-400 overflow-x-auto max-h-32 overflow-y-auto">
-                  <code>{test.execution_log}</code>
-                </pre>
               </div>
             )}
           </div>

@@ -15,6 +15,9 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { api } from '@/lib/api';
 import { TestCoverageReport } from './TestCoverageReport';
+import { TestHealthDashboard } from './TestHealthDashboard';
+import { CompletionReviewDashboard } from './CompletionReviewDashboard';
+import { ScreenshotsGallery } from './ScreenshotsGallery';
 import { Download, AlertTriangle } from 'lucide-react';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8010';
@@ -45,7 +48,7 @@ export function QualityDashboard({ projectId }: QualityDashboardProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedSession, setExpandedSession] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'test-coverage' | 'deep-reviews'>('test-coverage');
+  const [activeTab, setActiveTab] = useState<'test-coverage' | 'test-health' | 'session-reviews' | 'completion-review' | 'screenshots'>('test-coverage');
 
   useEffect(() => {
     loadQualityData();
@@ -120,20 +123,59 @@ export function QualityDashboard({ projectId }: QualityDashboardProps) {
           )}
         </button>
         <button
-          onClick={() => setActiveTab('deep-reviews')}
+          onClick={() => setActiveTab('test-health')}
           className={`px-4 py-2 text-sm font-medium transition-colors relative ${
-            activeTab === 'deep-reviews'
+            activeTab === 'test-health'
               ? 'text-blue-400'
               : 'text-gray-400 hover:text-gray-300'
           }`}
         >
-          Deep Reviews
+          Test Health
+          {activeTab === 'test-health' && (
+            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-400"></div>
+          )}
+        </button>
+        <button
+          onClick={() => setActiveTab('session-reviews')}
+          className={`px-4 py-2 text-sm font-medium transition-colors relative ${
+            activeTab === 'session-reviews'
+              ? 'text-blue-400'
+              : 'text-gray-400 hover:text-gray-300'
+          }`}
+        >
+          Session Reviews
           {deepReviews.length > 0 && (
             <span className="ml-1.5 px-1.5 py-0.5 text-xs bg-blue-500/20 text-blue-300 rounded">
               {deepReviews.length}
             </span>
           )}
-          {activeTab === 'deep-reviews' && (
+          {activeTab === 'session-reviews' && (
+            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-400"></div>
+          )}
+        </button>
+        <button
+          onClick={() => setActiveTab('completion-review')}
+          className={`px-4 py-2 text-sm font-medium transition-colors relative ${
+            activeTab === 'completion-review'
+              ? 'text-blue-400'
+              : 'text-gray-400 hover:text-gray-300'
+          }`}
+        >
+          Completion Review
+          {activeTab === 'completion-review' && (
+            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-400"></div>
+          )}
+        </button>
+        <button
+          onClick={() => setActiveTab('screenshots')}
+          className={`px-4 py-2 text-sm font-medium transition-colors relative ${
+            activeTab === 'screenshots'
+              ? 'text-blue-400'
+              : 'text-gray-400 hover:text-gray-300'
+          }`}
+        >
+          Screenshots
+          {activeTab === 'screenshots' && (
             <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-400"></div>
           )}
         </button>
@@ -146,15 +188,22 @@ export function QualityDashboard({ projectId }: QualityDashboardProps) {
         </div>
       )}
 
+      {/* Test Health Tab */}
+      {activeTab === 'test-health' && (
+        <div className="animate-fadeIn">
+          <TestHealthDashboard projectId={projectId} />
+        </div>
+      )}
+
       {/* Deep Reviews Tab */}
-      {activeTab === 'deep-reviews' && (
+      {activeTab === 'session-reviews' && (
         <div className="animate-fadeIn space-y-6">
           {deepReviews.length === 0 ? (
             <div className="text-center py-12">
               <div className="text-gray-500 text-4xl mb-3">🔍</div>
-              <p className="text-gray-600 dark:text-gray-400">No deep reviews available yet</p>
+              <p className="text-gray-600 dark:text-gray-400">No session reviews available yet</p>
               <p className="text-sm text-gray-500 mt-2">
-                Deep reviews are AI-powered comprehensive analyses of coding sessions
+                Session reviews are AI-powered analyses of coding sessions
               </p>
             </div>
           ) : (
@@ -263,6 +312,20 @@ export function QualityDashboard({ projectId }: QualityDashboardProps) {
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Completion Review Tab */}
+      {activeTab === 'completion-review' && (
+        <div className="animate-fadeIn">
+          <CompletionReviewDashboard projectId={projectId} />
+        </div>
+      )}
+
+      {/* Screenshots Tab */}
+      {activeTab === 'screenshots' && (
+        <div className="animate-fadeIn">
+          <ScreenshotsGallery projectId={projectId} />
         </div>
       )}
     </div>

@@ -20,7 +20,6 @@ from server.api.validation import (
     SecurityConfigValidator,
     DatabaseConfigValidator,
     ProjectConfigValidator,
-    InterventionConfigValidator,
     VerificationConfigValidator,
     ConfigValidator,
     # Spec validator

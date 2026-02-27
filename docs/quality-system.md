@@ -41,49 +41,22 @@ YokeFlow's quality system provides comprehensive session monitoring, automatic q
 
 ### 🚧 Partially Implemented
 
-1. **Epic Test Modes**
-   - Strict/autonomous modes defined but intervention UI issues
-   - Blocking works but interventions don't show in UI
-
-2. **Test Execution Tracking**
+1. **Test Execution Tracking**
    - Basic pass/fail recorded but no error details
    - No retry tracking or execution time recording
 
 ### ✅ Recently Completed (February 2026)
 
 **Phase 1: Test Execution Tracking** (January 31, 2026)
-- Database schema with error tracking fields (`last_error_message`, `execution_time_ms`, `retry_count`)
-- MCP tools enhanced to capture error details
-- Automatic retry count incrementation on failures
-- Performance indexes for slow/flaky test detection
-
-**Phase 2: Epic Test Failure Tracking** (February 1, 2026)
-- Complete failure history in `epic_test_failures` table (22 fields, 9 indexes)
-- 5 analysis views for quality, reliability, patterns, flaky tests, and retry behavior
-- Auto-detection of flaky tests (passed before, failing now)
-- Classification: test quality vs implementation gaps
-- Agent retry behavior tracking
-
-**Phase 3: Epic Test Blocking** (February 2, 2026)
-- Configuration in `.yokeflow.yaml` (strict/autonomous modes)
-- MCP tool integration with mode checking
-- Orchestrator handles blocked sessions gracefully
-- Blocker info written to `yokeflow/agent-progress.md`
-- 5 passing tests for blocking behavior
+- Both `task_tests` and `epic_tests` use `passes` (boolean) for consistent pass/fail tracking
+- `execution_time_ms` for performance monitoring
+- MCP tools: `update_task_test_result` and `update_epic_test_result`
 
 **Phase 4.1: Test Viewer UI** (February 2, 2026)
 - Epic and task tests visible with requirements in Web UI
 - Show pass/fail status with verification notes
 - Fixed database queries for requirements-based testing
 - Tested and verified with browser automation
-
-**Phase 5: Epic Re-testing** (February 2, 2026)
-- Smart epic selection with priority tiers (foundation, high-dependency, standard)
-- Automatic regression detection comparing new vs previous results
-- Stability scoring (0.00-1.00 scale) and analytics
-- 3 MCP tools: `trigger_epic_retest`, `record_epic_retest_result`, `get_epic_stability_metrics`
-- Database schema (2 tables, 4 views, 8 indexes)
-- Catches regressions within 2 epics of breaking change
 
 **Phase 6: Enhanced Review Triggers** (February 2, 2026)
 - Removed periodic 5-session interval trigger
@@ -207,19 +180,8 @@ tasks                         -- Task definitions
 task_tests                    -- Test requirements (not code)
 epic_tests                    -- Epic-level test requirements
 
--- Quality tables (Phases 1-2)
-session_quality_checks        -- Quick quality scores
+-- Quality tables
 session_deep_reviews          -- AI review results
-epic_test_failures            -- Epic test failure history (Phase 2)
-
--- Epic re-testing tables (Phase 5)
-epic_retest_runs              -- All epic re-test runs
-epic_stability_metrics        -- Epic stability tracking
-
--- Intervention tables (Phase 3)
-paused_sessions              -- Sessions waiting for intervention
-intervention_actions         -- User actions on interventions
-epic_test_interventions      -- Epic test specific interventions
 
 -- Completion review tables (Phase 7)
 project_completion_reviews   -- Project completion verification
@@ -239,7 +201,7 @@ prompt_proposals             -- Consolidated improvement proposals
 - Duplicate generated_tests tables
 - 18 unused views with zero references
 
-**Current schema**: 21 tables, 19 views (clean foundation)
+**Current schema**: 16 tables (clean foundation)
 
 ## Quality Scoring Formula
 
@@ -295,11 +257,6 @@ def calculate_quality_score(metrics: Dict) -> int:
 - `update_test_result` - Updates test with pass/fail, verification notes, error details (Phase 1)
 - `update_epic_test_result` - Updates epic test results, records failures automatically (Phase 2)
 
-### Epic Re-testing Tools (Phase 5)
-- `trigger_epic_retest` - Smart selection of epics to re-test based on priority tiers
-- `record_epic_retest_result` - Record re-test result with regression detection
-- `get_epic_stability_metrics` - Query stability scores and analytics
-
 ### Quality Tools (Internal)
 - `task_status` - Includes quality metrics in response
 - Session events automatically trigger metrics collection
@@ -313,14 +270,11 @@ DEFAULT_REVIEW_MODEL=claude-4-6
 REVIEW_TRIGGER_INTERVAL=5  # Sessions between reviews
 REVIEW_QUALITY_THRESHOLD=7  # Trigger if quality < this
 
-# Test modes
-EPIC_TESTING_MODE=autonomous  # or 'strict'
 ```
 
 ### Project Settings
 ```sql
 -- In projects table
-epic_testing_mode: 'strict' | 'autonomous'
 quality_gates_enabled: boolean
 auto_review_enabled: boolean
 ```
@@ -335,10 +289,6 @@ auto_review_enabled: boolean
 - `POST /api/sessions/{id}/review` - Trigger deep review
 - `GET /api/sessions/{id}/reviews` - Get review history
 - `GET /api/projects/{id}/quality-trends` - Quality over time
-
-### Interventions
-- `GET /api/projects/{id}/interventions` - Active interventions
-- `POST /api/interventions/{id}/resolve` - Resolve intervention
 
 ### Completion Reviews (Phase 7)
 - `GET /api/projects/{id}/completion-review` - Get latest completion review
@@ -356,8 +306,7 @@ See [YOKEFLOW_FUTURE_PLAN.md](../YOKEFLOW_FUTURE_PLAN.md) for planned enhancemen
 2. **Epic Test Failure UI**: Failure history dashboards, pattern visualization
 3. **Notification Integration**: Webhooks, email, SMS for test failures
 4. **Test Editor**: Edit test requirements and coverage analysis display
-5. **Re-test History UI**: Display epic re-test trends and regression timelines
-6. **Completion Review Enhancements**: Continuous tracking, spec evolution, AI-powered rework
+5. **Completion Review Enhancements**: Continuous tracking, spec evolution, AI-powered rework
 
 **Phase 7 Future Enhancements**:
 1. **Phase 7.1**: Continuous requirement tracking during development (8-10h)
@@ -371,11 +320,6 @@ See [YOKEFLOW_FUTURE_PLAN.md](../YOKEFLOW_FUTURE_PLAN.md) for planned enhancemen
 ## Troubleshooting
 
 ### Common Issues
-
-**Interventions not showing in UI**
-- Check `paused_sessions` table has records
-- Verify API returns intervention data
-- Check WebSocket connection for updates
 
 **Quality scores seem wrong**
 - Check `metrics_version` in stored metrics

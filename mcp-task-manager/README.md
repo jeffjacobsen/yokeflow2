@@ -11,9 +11,6 @@ This MCP server provides structured task management capabilities through a **Pos
 - Create and expand epics into tasks
 - Update task completion status
 - Track test results with error details, execution time, and retry counts ⭐ NEW v2.1
-- Trigger automated epic re-testing for regression detection ⭐ NEW v2.1
-- Query stability metrics and analytics ⭐ NEW v2.1
-- Log session history
 
 **Architecture:** TypeScript MCP server with `pg` (node-postgres) for database operations and connection pooling.
 
@@ -27,17 +24,11 @@ This MCP server provides structured task management capabilities through a **Pos
 - Automatic retry count incrementation
 - Performance indexes for detecting slow/flaky tests
 
-**Epic Re-testing** (Phase 5):
-- Smart epic selection (foundation, high-dependency, standard)
-- Automatic regression detection
-- Stability scoring (0.00-1.00 scale)
-- 3 new MCP tools for re-testing workflow
-
-**Total Tool Count**: 15 tools (v2.0) → 20+ tools (v2.1)
+**Total Tool Count**: 17 tools
 
 ## Features
 
-### 20+ MCP Tools for Task Management
+### MCP Tools for Task Management
 
 **Query Tools** (read-only):
 - `task_status` - Overall project progress statistics
@@ -48,7 +39,6 @@ This MCP server provides structured task management capabilities through a **Pos
 - `get_task` - Task details including all tests
 - `list_tests` - All tests for a specific task
 - `get_session_history` - Recent work session log
-- `get_epic_stability_metrics` - Stability scores and re-test analytics ⭐ NEW v2.1
 
 **Mutation Tools** (write operations):
 - `create_epic` - Create new high-level feature area
@@ -60,11 +50,6 @@ This MCP server provides structured task management capabilities through a **Pos
 - `update_task_test_result` - Mark task test pass/fail with error details ⭐ NEW v2.1
 - `update_epic_test_result` - Mark epic test pass/fail with error details ⭐ NEW v2.1
 - `expand_epic` - Break epic into multiple tasks (bulk create)
-- `log_session` - Log session completion with metadata
-
-**Quality System Tools** ⭐ NEW v2.1:
-- `trigger_epic_retest` - Trigger smart epic re-testing (Phase 5)
-- `record_epic_retest_result` - Record re-test with regression detection (Phase 5)
 
 **All tools are project-scoped** - Operations automatically filtered by `PROJECT_ID` environment variable.
 
@@ -169,7 +154,6 @@ When writing agent prompts (e.g., `prompts/coding_prompt.md`), reference MCP too
 **Complete Session:**
 6. `mcp__task-manager__update_task_status` - Mark task complete (if all tests pass)
 7. Commit to git
-8. `mcp__task-manager__log_session` - Log session completion
 ```
 
 ### Tool Call Format
@@ -206,7 +190,6 @@ The MCP server interacts with the following PostgreSQL tables:
 
 **Views:**
 - `v_progress` - Aggregate statistics (completion percentages)
-- `v_next_task` - Next task to work on (ordered by priority)
 - `v_epic_progress` - Per-epic completion rates
 
 **Key Features:**
@@ -270,11 +253,12 @@ psql $DATABASE_URL -c "
   WHERE project_id = '550e8400-e29b-41d4-a716-446655440000';
 "
 
-# Get next task
+# Get next task (uses get_next_task MCP tool)
 psql $DATABASE_URL -c "
-  SELECT * FROM v_next_task
-  WHERE project_id = '550e8400-e29b-41d4-a716-446655440000'
-  LIMIT 1;
+  SELECT t.*, e.name as epic_name
+  FROM tasks t JOIN epics e ON t.epic_id = e.id
+  WHERE t.project_id = '550e8400-e29b-41d4-a716-446655440000' AND t.done = FALSE
+  ORDER BY e.priority, t.priority LIMIT 1;
 "
 ```
 
@@ -363,11 +347,7 @@ mcp__task-manager__update_task_status(task_id=42, completed=True)
 
 **v2.1.0** (February 2026)
 - ✅ Test execution tracking (error messages, execution time, retry counts)
-- ✅ Epic re-testing system (3 new tools)
-- ✅ Stability scoring and analytics
-- ✅ Automatic regression detection
 - ✅ Performance indexes for test analysis
-- ✅ 20+ MCP tools total
 
 **v2.0.0** (December 2025)
 - ✅ PostgreSQL migration complete

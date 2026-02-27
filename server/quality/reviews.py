@@ -587,15 +587,15 @@ def _extract_executive_summary(review_text: str) -> Dict[str, Any]:
     """
     import re
 
-    # Find the Executive Summary section
+    # Find the Executive Summary section (rating may be integer or decimal like 8.5)
     summary_match = re.search(
-        r'## Executive Summary\s*\n\*\*Session Rating: (\d+)/10\*\* - (.+?)\n\n(.+?)(?=\n##|\Z)',
+        r'## Executive Summary\s*\n\*\*Session Rating: (\d+(?:\.\d+)?)/10\*\* - (.+?)\n\n(.+?)(?=\n##|\Z)',
         review_text,
         re.DOTALL
     )
 
     if summary_match:
-        rating = int(summary_match.group(1))
+        rating = round(float(summary_match.group(1)))
         one_line = summary_match.group(2).strip()
         summary_text = summary_match.group(3).strip()
 
@@ -616,18 +616,18 @@ def _extract_rating_from_review(review_text: str) -> Optional[int]:
     """
     import re
 
-    # Common patterns
+    # Common patterns (support decimal ratings like 8.5/10)
     patterns = [
-        r'Rating:\s*(\d+)/10',
-        r'Quality:\s*(\d+)/10',
-        r'Overall Rating:\s*(\d+)/10',
-        r'Session Quality Rating:\s*(\d+)/10'
+        r'Rating:\s*(\d+(?:\.\d+)?)/10',
+        r'Quality:\s*(\d+(?:\.\d+)?)/10',
+        r'Overall Rating:\s*(\d+(?:\.\d+)?)/10',
+        r'Session Quality Rating:\s*(\d+(?:\.\d+)?)/10'
     ]
 
     for pattern in patterns:
         match = re.search(pattern, review_text, re.IGNORECASE)
         if match:
-            rating = int(match.group(1))
+            rating = round(float(match.group(1)))
             if 1 <= rating <= 10:
                 return rating
 

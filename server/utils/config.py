@@ -83,13 +83,6 @@ class ReviewConfig:
 
 
 @dataclass
-class InterventionConfig:
-    """Configuration for intervention and retry management."""
-    enabled: bool = False  # Enable/disable intervention system
-    max_retries: int = 3  # Maximum retry attempts before blocking
-
-
-@dataclass
 class VerificationConfig:
     """Configuration for task verification system."""
     enabled: bool = True  # Enable/disable task verification
@@ -117,47 +110,6 @@ class VerificationConfig:
     detect_infrastructure_errors: bool = True  # Pause on Redis/DB/Prisma errors
 
 
-@dataclass
-class EpicTestingConfig:
-    """Configuration for epic testing policies."""
-    mode: str = 'autonomous'  # 'strict' or 'autonomous'
-
-    # Strict mode settings
-    strict_block_on_failure: bool = True
-    strict_require_all_pass: bool = True
-    strict_notify_on_block: bool = True
-    strict_max_fix_attempts: int = 2
-
-    # Autonomous mode settings
-    auto_block_on_critical: bool = True
-    auto_failure_tolerance: int = 3
-    auto_continue_on_failure: bool = True
-    auto_create_fix_tasks: bool = True
-
-    # Critical epic patterns (substring match)
-    critical_epics: List[str] = field(default_factory=lambda: [
-        'Authentication', 'Database', 'Payment', 'Security', 'Core API'
-    ])
-
-    # Regression testing
-    regression_enabled: bool = False  # Disabled by default for now
-    regression_frequency: int = 10
-    regression_random_chance: float = 0.1
-    regression_skip_screenshots: bool = True
-
-    def is_critical_epic(self, epic_name: str) -> bool:
-        """Check if an epic is considered critical."""
-        epic_lower = epic_name.lower()
-        return any(critical.lower() in epic_lower for critical in self.critical_epics)
-
-    def should_block(self, epic_name: str, failure_count: int) -> bool:
-        """Determine if epic should be blocked based on mode and failures."""
-        if self.mode == 'strict':
-            return self.strict_block_on_failure and failure_count > 0
-        else:  # autonomous
-            is_critical = self.is_critical_epic(epic_name)
-            exceeds_tolerance = failure_count > self.auto_failure_tolerance
-            return (is_critical and self.auto_block_on_critical) or exceeds_tolerance
 
 
 @dataclass
@@ -176,14 +128,6 @@ class SpecAnalysisConfig:
 
 
 @dataclass
-class ParallelConfig:
-    """Configuration for parallel agent execution."""
-    enabled: bool = False           # Opt-in, disabled by default
-    max_workers: int = 2            # Default 2 concurrent workers, hard cap at 4
-    max_tasks_per_worker: Optional[int] = None  # None = unlimited (worker loops until no tasks)
-
-
-@dataclass
 class Config:
     """Main configuration class."""
     models: ModelConfig = field(default_factory=ModelConfig)
@@ -192,12 +136,9 @@ class Config:
     database: DatabaseConfig = field(default_factory=DatabaseConfig)
     project: ProjectConfig = field(default_factory=ProjectConfig)
     review: ReviewConfig = field(default_factory=ReviewConfig)
-    intervention: InterventionConfig = field(default_factory=InterventionConfig)
     verification: VerificationConfig = field(default_factory=VerificationConfig)
-    epic_testing: EpicTestingConfig = field(default_factory=EpicTestingConfig)
     brownfield: BrownfieldConfig = field(default_factory=BrownfieldConfig)
     spec_analysis: SpecAnalysisConfig = field(default_factory=SpecAnalysisConfig)
-    parallel: ParallelConfig = field(default_factory=ParallelConfig)
 
     @classmethod
     def load_from_file(cls, config_path: Path) -> 'Config':
@@ -261,19 +202,6 @@ class Config:
             if 'min_reviews_for_analysis' in data['review']:
                 config.review.min_reviews_for_analysis = data['review']['min_reviews_for_analysis']
 
-        # Override epic_testing settings
-        if 'epic_testing' in data:
-            if 'mode' in data['epic_testing']:
-                config.epic_testing.mode = data['epic_testing']['mode']
-            if 'critical_epics' in data['epic_testing']:
-                config.epic_testing.critical_epics = data['epic_testing']['critical_epics']
-            if 'auto_failure_tolerance' in data['epic_testing']:
-                config.epic_testing.auto_failure_tolerance = data['epic_testing']['auto_failure_tolerance']
-            if 'auto_create_fix_tasks' in data['epic_testing']:
-                config.epic_testing.auto_create_fix_tasks = data['epic_testing']['auto_create_fix_tasks']
-            if 'strict_notify_on_block' in data['epic_testing']:
-                config.epic_testing.strict_notify_on_block = data['epic_testing']['strict_notify_on_block']
-
         # Override brownfield settings
         if 'brownfield' in data:
             if 'default_feature_branch_prefix' in data['brownfield']:
@@ -289,16 +217,6 @@ class Config:
                 config.spec_analysis.enabled = data['spec_analysis']['enabled']
             if 'model' in data['spec_analysis']:
                 config.spec_analysis.model = data['spec_analysis']['model']
-
-        # Override parallel settings
-        if 'parallel' in data:
-            if 'enabled' in data['parallel']:
-                config.parallel.enabled = data['parallel']['enabled']
-            if 'max_workers' in data['parallel']:
-                config.parallel.max_workers = min(int(data['parallel']['max_workers']), 4)  # Hard cap at 4
-            if 'max_tasks_per_worker' in data['parallel']:
-                val = data['parallel']['max_tasks_per_worker']
-                config.parallel.max_tasks_per_worker = int(val) if val is not None else None
 
         return config
 

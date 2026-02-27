@@ -125,7 +125,17 @@ agent-browser click @e1              # Use new refs
 
 Use `eval` for JavaScript in the browser.
 
-**IMPORTANT: Shell quoting corrupts complex JS expressions.** Follow these rules:
+**🚨 `eval` already runs inside `page.evaluate()` — do NOT wrap your code in `page.evaluate()` yourself.** This is the most common eval error. Writing `agent-browser eval 'page.evaluate(() => document.title)'` double-wraps and causes "Illegal return statement" or "Invalid or unexpected token" errors.
+
+```bash
+# ✅ CORRECT — eval handles page.evaluate internally
+agent-browser eval 'document.title'
+
+# ❌ WRONG — double-wraps in page.evaluate, causes SyntaxError
+agent-browser eval 'page.evaluate(() => document.title)'
+```
+
+**Shell quoting rules:**
 - **Single property**: Use single quotes — `agent-browser eval 'document.title'`
 - **Multiple properties**: Run separate eval commands, one per value
 - **Complex JS** (nested quotes, template literals, arrow functions): Use `--stdin` with heredoc
@@ -149,6 +159,39 @@ JSON.stringify(
     .map(i => ({ src: i.src.split("/").pop(), width: i.width }))
 )
 EVALEOF
+```
+
+### Tailwind Slash Classes in Selectors
+
+Tailwind classes with `/` (e.g., `border-red-500/20`, `bg-black/50`) break `querySelector` because `/` is a CSS selector special character.
+
+```bash
+# ❌ SyntaxError: not a valid selector
+agent-browser eval 'document.querySelector(".border-red-500/20")'
+
+# ✅ Escape the slash
+agent-browser eval 'document.querySelector(".border-red-500\\/20")'
+
+# ✅ Or use attribute contains selector
+agent-browser eval 'document.querySelector("[class*=\"border-red-500\"]")'
+```
+
+### Console Error Checking
+
+Check for JavaScript errors after navigation or interaction:
+
+```bash
+# Check for console errors (returns array of error messages)
+agent-browser eval --stdin <<'EVALEOF'
+JSON.stringify(
+  performance.getEntriesByType("resource")
+    .filter(r => r.responseStatus >= 400)
+    .map(r => r.name + " → " + r.responseStatus)
+)
+EVALEOF
+
+# Quick DOM error check — look for React error boundaries or error text
+agent-browser eval 'document.querySelector("[data-error], .error, #error")?.textContent || "no errors"'
 ```
 
 ## Timeouts and Slow Pages
